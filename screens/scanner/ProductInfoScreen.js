@@ -3,13 +3,17 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Image,
+  Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { StatusBar } from "expo-status-bar";
+import { SafeAreaView } from "react-native-safe-area-context";
+
 import { openExternalUrl } from "@/utils/openExternalUrl";
 import { ROUTES } from "@/navigation/ROUTES";
 
@@ -39,6 +43,9 @@ export default function ProductInfoScreen({ route, navigation }) {
   const hasAutoOpenedRef = useRef(false);
 
   const imageUri = safeProduct.imageUrl || safeProduct.thumbnailUri || "";
+  const displayName = safeProduct.name || "Producto sin nombre";
+  const displayBrand = safeProduct.brand || "Marca no indicada";
+  const engineLabel = getProductSearchEngineLabel(selectedProductEngine);
 
   useEffect(() => {
     let mounted = true;
@@ -93,6 +100,7 @@ export default function ProductInfoScreen({ route, navigation }) {
 
     try {
       const result = await openExternalUrl(url);
+
       if (!result.ok) {
         console.log("Error opening product search URL");
       }
@@ -118,8 +126,12 @@ export default function ProductInfoScreen({ route, navigation }) {
 
   if (!safeProduct?.barcode) {
     return (
-      <View style={styles.centerContainer}>
-        <Ionicons name="alert-circle-outline" size={52} color="#E53935" />
+      <SafeAreaView style={styles.centerContainer}>
+        <StatusBar style="dark" />
+
+        <View style={styles.emptyIconWrap}>
+          <Ionicons name="alert-circle-outline" size={44} color="#DC2626" />
+        </View>
 
         <Text style={styles.errorTitle}>Sin información</Text>
 
@@ -127,132 +139,204 @@ export default function ProductInfoScreen({ route, navigation }) {
           No se recibió información del producto ni código de barras.
         </Text>
 
-        <TouchableOpacity
-          style={styles.backButton}
+        <Pressable
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed && styles.pressedDark,
+          ]}
           onPress={() => navigation.goBack()}
         >
+          <Ionicons name="arrow-back-outline" size={18} color="#FFFFFF" />
           <Text style={styles.backButtonText}>Volver</Text>
-        </TouchableOpacity>
-      </View>
+        </Pressable>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.card}>
-        {imageUri ? (
-          <Image source={{ uri: imageUri }} style={styles.productImage} />
-        ) : (
-          <View style={styles.noImageBox}>
-            <Ionicons name="image-outline" size={52} color="#9CA3AF" />
-            <Text style={styles.noImageText}>Sin imagen</Text>
+    <SafeAreaView style={styles.screen} edges={["left", "right"]}>
+      <StatusBar style="dark" />
+
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.heroCard}>
+          <View style={styles.heroTop}>
+            {imageUri ? (
+              <Image source={{ uri: imageUri }} style={styles.productImage} />
+            ) : (
+              <View style={styles.noImageBox}>
+                <Ionicons name="image-outline" size={34} color="#9CA3AF" />
+                <Text style={styles.noImageText}>Sin imagen</Text>
+              </View>
+            )}
+
+            <View style={styles.heroInfo}>
+              <Text style={styles.heroEyebrow}>Ficha del producto</Text>
+
+              <Text style={styles.productName} numberOfLines={3}>
+                {displayName}
+              </Text>
+
+              <Text style={styles.brand} numberOfLines={1}>
+                {displayBrand}
+              </Text>
+            </View>
           </View>
-        )}
 
-        <Text style={styles.productName}>
-          {safeProduct.name || "Producto sin nombre"}
-        </Text>
+          <View style={styles.barcodePanel}>
+            <View style={styles.barcodeHeader}>
+              <Ionicons name="barcode-outline" size={18} color="#2563EB" />
+              <Text style={styles.barcodeLabel}>Código de barras</Text>
+            </View>
 
-        {!!safeProduct.brand && (
-          <Text style={styles.brand}>{safeProduct.brand}</Text>
-        )}
+            <Text style={styles.barcodeText}>{safeProduct.barcode}</Text>
+          </View>
 
-        <View style={styles.barcodeBox}>
-          <Ionicons name="barcode-outline" size={20} color="#374151" />
-          <Text style={styles.barcodeText}>{safeProduct.barcode}</Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.searchButton,
+              pressed && styles.pressedLight,
+            ]}
+            onPress={handleOpenSelectedProductEngine}
+          >
+            <Ionicons name="search-outline" size={20} color="#2563EB" />
+            <Text style={styles.searchButtonText}>Buscar en {engineLabel}</Text>
+          </Pressable>
         </View>
-      </View>
 
-      <TouchableOpacity
-        style={styles.searchButton}
-        onPress={handleOpenSelectedProductEngine}
-      >
-        <Ionicons name="search-outline" size={21} color="#2563EB" />
-        <Text style={styles.searchButtonText}>
-          Buscar en {getProductSearchEngineLabel(selectedProductEngine)}
-        </Text>
-      </TouchableOpacity>
-
-      <InfoSection title="Datos principales">
-        <InfoRow label="Código de barras" value={safeProduct.barcode} />
-        <InfoRow label="Nombre" value={safeProduct.name} />
-        <InfoRow label="Marca" value={safeProduct.brand} />
-        <InfoRow label="Fuente" value={safeProduct.lookupSource} />
-        <InfoRow label="Origen" value={safeProduct.source} />
-      </InfoSection>
-
-      <InfoSection title="Imagen">
-        <InfoRow label="Imagen remota" value={safeProduct.imageUrl} />
-        <InfoRow label="Miniatura local" value={safeProduct.thumbnailUri} />
-      </InfoSection>
-
-      <InfoSection title="Notas">
-        <Text style={styles.longText}>
-          {safeProduct.notes || "No hay notas para este producto."}
-        </Text>
-      </InfoSection>
-
-      <InfoSection title="Fechas">
-        <InfoRow label="Escaneado" value={formatDate(safeProduct.scannedAt)} />
-        <InfoRow
-          label="Actualizado"
-          value={formatDate(safeProduct.updatedAt)}
-        />
-      </InfoSection>
-
-      {!!safeProduct.url && (
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={handleOpenProductUrl}
+        <InfoSection
+          icon="information-circle-outline"
+          title="Datos principales"
+          subtitle="Información obtenida desde el escaneo o desde el buscador."
         >
-          <Ionicons name="open-outline" size={21} color="#2563EB" />
-          <Text style={styles.linkButtonText}>Abrir ficha del producto</Text>
-        </TouchableOpacity>
-      )}
+          <InfoRow label="Código de barras" value={safeProduct.barcode} />
+          <InfoRow label="Nombre" value={safeProduct.name} />
+          <InfoRow label="Marca" value={safeProduct.brand} />
+          <InfoRow label="Fuente" value={safeProduct.lookupSource} />
+          <InfoRow label="Origen" value={safeProduct.source} isLast />
+        </InfoSection>
 
-      <TouchableOpacity
-        style={styles.primaryButton}
-        onPress={handleEditProduct}
-      >
-        <Ionicons name="create-outline" size={22} color="#FFFFFF" />
-        <Text style={styles.primaryButtonText}>Editar producto</Text>
-      </TouchableOpacity>
+        <InfoSection
+          icon="image-outline"
+          title="Imagen"
+          subtitle="Enlaces asociados a la imagen del producto."
+        >
+          <InfoRow label="Imagen remota" value={safeProduct.imageUrl} />
+          <InfoRow
+            label="Miniatura local"
+            value={safeProduct.thumbnailUri}
+            isLast
+          />
+        </InfoSection>
 
-      <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={handleGoToHistory}
-      >
-        <Ionicons name="time-outline" size={21} color="#111827" />
-        <Text style={styles.secondaryButtonText}>Ver historial</Text>
-      </TouchableOpacity>
+        <InfoSection
+          icon="document-text-outline"
+          title="Notas"
+          subtitle="Notas guardadas manualmente para este producto."
+        >
+          <Text style={styles.longText}>
+            {safeProduct.notes || "No hay notas para este producto."}
+          </Text>
+        </InfoSection>
 
-      <TouchableOpacity
-        style={styles.ghostButton}
-        onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.ghostButtonText}>Volver</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <InfoSection
+          icon="calendar-outline"
+          title="Fechas"
+          subtitle="Registro temporal del escaneo."
+        >
+          <InfoRow
+            label="Escaneado"
+            value={formatDate(safeProduct.scannedAt)}
+          />
+          <InfoRow
+            label="Actualizado"
+            value={formatDate(safeProduct.updatedAt)}
+            isLast
+          />
+        </InfoSection>
+
+        {!!safeProduct.url && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.linkButton,
+              pressed && styles.pressedLight,
+            ]}
+            onPress={handleOpenProductUrl}
+          >
+            <Ionicons name="open-outline" size={20} color="#2563EB" />
+            <Text style={styles.linkButtonText}>Abrir ficha del producto</Text>
+          </Pressable>
+        )}
+
+        <View style={styles.actionsCard}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && styles.pressedSave,
+            ]}
+            onPress={handleEditProduct}
+          >
+            <Ionicons name="create-outline" size={21} color="#FFFFFF" />
+            <Text style={styles.primaryButtonText}>Editar producto</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              pressed && styles.pressedLight,
+            ]}
+            onPress={handleGoToHistory}
+          >
+            <Ionicons name="time-outline" size={20} color="#111827" />
+            <Text style={styles.secondaryButtonText}>Ver historial</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.ghostButton,
+              pressed && styles.pressedLight,
+            ]}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back-outline" size={18} color="#6B7280" />
+            <Text style={styles.ghostButtonText}>Volver</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-function InfoSection({ title, children }) {
+function InfoSection({ icon, title, subtitle, children }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {children}
+      <View style={styles.sectionHeader}>
+        <View style={styles.sectionIcon}>
+          <Ionicons name={icon} size={18} color="#2563EB" />
+        </View>
+
+        <View style={styles.sectionHeaderText}>
+          <Text style={styles.sectionTitle}>{title}</Text>
+          {!!subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
+        </View>
+      </View>
+
+      <View style={styles.sectionBody}>{children}</View>
     </View>
   );
 }
 
-function InfoRow({ label, value }) {
+function InfoRow({ label, value, isLast = false }) {
   const safeValue =
     value === null || value === undefined || value === ""
       ? "No disponible"
       : String(value);
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, isLast && styles.rowLast]}>
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowValue}>{safeValue}</Text>
     </View>
@@ -277,46 +361,81 @@ function formatDate(value) {
   });
 }
 
+const SCREEN_BACKGROUND = "#F3F4F6";
+const CARD_BACKGROUND = "#FFFFFF";
+const TEXT_PRIMARY = "#111827";
+const TEXT_SECONDARY = "#374151";
+const TEXT_MUTED = "#6B7280";
+const BORDER_COLOR = "#E5E7EB";
+const BLUE = "#2563EB";
+const BLUE_SOFT = "#EFF6FF";
+const SAVE = "#16A34A";
+
+const SHADOW = {
+  shadowColor: "#111827",
+  shadowOpacity: 0.08,
+  shadowRadius: 14,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 3,
+};
+
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: SCREEN_BACKGROUND,
   },
 
   content: {
     padding: 16,
-    paddingBottom: 36,
+    paddingBottom: 42,
+    gap: 14,
   },
 
   centerContainer: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: SCREEN_BACKGROUND,
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
   },
 
+  emptyIconWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 24,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   errorTitle: {
-    marginTop: 12,
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#111827",
+    marginTop: 16,
+    fontSize: 22,
+    fontWeight: "900",
+    color: TEXT_PRIMARY,
   },
 
   errorText: {
     marginTop: 8,
+    maxWidth: 320,
     fontSize: 15,
-    color: "#6B7280",
+    color: TEXT_MUTED,
     textAlign: "center",
-    lineHeight: 21,
+    lineHeight: 22,
   },
 
   backButton: {
     marginTop: 24,
-    backgroundColor: "#111827",
-    paddingHorizontal: 22,
+    minHeight: 48,
+    backgroundColor: TEXT_PRIMARY,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 
   backButtonText: {
@@ -325,197 +444,303 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 22,
-    padding: 18,
-    alignItems: "center",
-    marginBottom: 16,
+  heroCard: {
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
+    ...SHADOW,
+  },
 
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+  heroTop: {
+    flexDirection: "row",
+    gap: 14,
+    alignItems: "center",
   },
 
   productImage: {
-    width: 190,
-    height: 190,
+    width: 104,
+    height: 104,
+    borderRadius: 22,
     resizeMode: "contain",
-    marginBottom: 16,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
   },
 
   noImageBox: {
-    width: 190,
-    height: 190,
-    borderRadius: 20,
-    backgroundColor: "#F3F4F6",
+    width: 104,
+    height: 104,
+    borderRadius: 22,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
   },
 
   noImageText: {
-    marginTop: 8,
+    marginTop: 6,
     color: "#9CA3AF",
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  heroInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  heroEyebrow: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: BLUE,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
 
   productName: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#111827",
-    textAlign: "center",
+    marginTop: 5,
+    fontSize: 21,
+    lineHeight: 26,
+    fontWeight: "900",
+    color: TEXT_PRIMARY,
   },
 
   brand: {
     marginTop: 6,
-    fontSize: 16,
-    color: "#6B7280",
-    textAlign: "center",
-    fontWeight: "600",
-  },
-
-  barcodeBox: {
-    marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    gap: 8,
-  },
-
-  barcodeText: {
     fontSize: 14,
-    color: "#374151",
+    color: TEXT_MUTED,
     fontWeight: "800",
   },
 
+  barcodePanel: {
+    marginTop: 16,
+    padding: 13,
+    borderRadius: 18,
+    backgroundColor: BLUE_SOFT,
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+  },
+
+  barcodeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    marginBottom: 7,
+  },
+
+  barcodeLabel: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: TEXT_SECONDARY,
+  },
+
+  barcodeText: {
+    fontSize: 16,
+    color: TEXT_PRIMARY,
+    fontWeight: "900",
+    letterSpacing: 0.4,
+  },
+
   searchButton: {
-    height: 50,
-    borderRadius: 16,
-    backgroundColor: "#EFF6FF",
+    marginTop: 14,
+    minHeight: 52,
+    borderRadius: 17,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
-    marginBottom: 14,
+    paddingHorizontal: 14,
   },
 
   searchButtonText: {
-    color: "#2563EB",
+    color: BLUE,
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   section: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 22,
     padding: 16,
-    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
+  },
+
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 11,
+    marginBottom: 12,
+  },
+
+  sectionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: BLUE_SOFT,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  sectionHeaderText: {
+    flex: 1,
+    minWidth: 0,
   },
 
   sectionTitle: {
     fontSize: 17,
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: 12,
+    fontWeight: "900",
+    color: TEXT_PRIMARY,
+  },
+
+  sectionSubtitle: {
+    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 18,
+    color: TEXT_MUTED,
+  },
+
+  sectionBody: {
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
   },
 
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: "#E5E7EB",
+  },
+
+  rowLast: {
+    borderBottomWidth: 0,
   },
 
   rowLabel: {
     flex: 1,
     fontSize: 14,
-    color: "#6B7280",
-    fontWeight: "700",
+    color: TEXT_MUTED,
+    fontWeight: "800",
   },
 
   rowValue: {
     flex: 1.6,
     fontSize: 14,
-    color: "#111827",
+    color: TEXT_PRIMARY,
     textAlign: "right",
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   longText: {
+    padding: 12,
     fontSize: 14,
-    color: "#374151",
+    color: TEXT_SECONDARY,
     lineHeight: 21,
+    fontWeight: "600",
   },
 
   linkButton: {
-    height: 50,
-    borderRadius: 16,
-    backgroundColor: "#EFF6FF",
+    minHeight: 52,
+    borderRadius: 17,
+    backgroundColor: BLUE_SOFT,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
-    marginBottom: 12,
+    paddingHorizontal: 14,
   },
 
   linkButtonText: {
-    color: "#2563EB",
+    color: BLUE,
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
+  },
+
+  actionsCard: {
+    backgroundColor: CARD_BACKGROUND,
+    borderRadius: 22,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
+    gap: 10,
   },
 
   primaryButton: {
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: "#16A34A",
+    height: 54,
+    borderRadius: 17,
+    backgroundColor: SAVE,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
-    marginBottom: 12,
+    ...SHADOW,
   },
 
   primaryButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "900",
   },
 
   secondaryButton: {
-    height: 50,
-    borderRadius: 16,
-    backgroundColor: "#FFFFFF",
+    height: 52,
+    borderRadius: 17,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
-    marginBottom: 12,
   },
 
   secondaryButtonText: {
-    color: "#111827",
+    color: TEXT_PRIMARY,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  ghostButton: {
+    height: 48,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 7,
+  },
+
+  ghostButtonText: {
+    color: TEXT_MUTED,
     fontSize: 15,
     fontWeight: "800",
   },
 
-  ghostButton: {
-    height: 46,
-    alignItems: "center",
-    justifyContent: "center",
+  pressedLight: {
+    opacity: 0.76,
+    transform: [{ scale: 0.99 }],
   },
 
-  ghostButtonText: {
-    color: "#6B7280",
-    fontSize: 15,
-    fontWeight: "700",
+  pressedDark: {
+    opacity: 0.86,
+    transform: [{ scale: 0.99 }],
+  },
+
+  pressedSave: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
   },
 });
