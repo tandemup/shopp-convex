@@ -18,7 +18,7 @@ import ScannedHistoryScreen from "@/screens/scanner/ScannedHistoryScreen";
 import EditScannedItemScreen from "@/screens/scanner/EditScannedItemScreen";
 import StoreMapScreen from "@/screens/stores/StoreMapScreen";
 import MenuScreen from "@/screens/settings/MenuScreen";
-import ChatScreen from "@/screens/chat/ChatScreen";
+import ChatScreenConvex from "@/screens/chat/ChatScreenConvex";
 
 const Stack = createNativeStackNavigator();
 export default function ShoppingStack() {
@@ -44,7 +44,7 @@ export default function ShoppingStack() {
       />
       <Stack.Screen
         name={ROUTES.CHAT}
-        component={ChatScreen}
+        component={ChatScreenConvex}
         options={{ title: "Chat" }}
       />
       <Stack.Screen name={ROUTES.ITEM_DETAIL} component={ItemDetailScreen} />

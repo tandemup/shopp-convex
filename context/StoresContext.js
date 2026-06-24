@@ -1,16 +1,19 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { storage } from "@/src/storage/storage";
-import { STORAGE_KEYS } from "@/src/storage/storageKeys";
+import React, {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  useEffect,
+} from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
-// 👉 Seed
-import STORES_SEED from "@/data/stores.json";
-import { clearStoresData } from "@/src/storage";
+import { storage } from "@/src/storage/storage";
 
 const StoresContext = createContext();
 
-/* -------------------------------------------------
-   Normalización
--------------------------------------------------- */
+const FAVORITE_STORE_IDS_KEY = "favorite_store_ids";
+
 const normalizeStores = (stores) => {
   if (!Array.isArray(stores)) return [];
 
@@ -19,78 +22,81 @@ const normalizeStores = (stores) => {
       typeof s?.id === "string" &&
       s.id.length >= 8 &&
       typeof s.name === "string" &&
-      typeof s.address === "string",
+      typeof s.address === "string" &&
+      s.location &&
+      typeof s.location.lat === "number" &&
+      typeof s.location.lng === "number",
   );
 };
 
 export const StoresProvider = ({ children }) => {
-  const [stores, setStores] = useState([]);
-  const [ready, setReady] = useState(false);
+  const convexStores = useQuery(api.stores.listStores);
 
-  /* -------------------------------------------------
-     Carga inicial
-  -------------------------------------------------- */
+  const [favoriteStoreIds, setFavoriteStoreIds] = useState([]);
+  const [favoritesReady, setFavoritesReady] = useState(false);
+
   useEffect(() => {
-    const load = async () => {
+    const loadFavorites = async () => {
       try {
-        const stored = await storage.getJSON(STORAGE_KEYS.STORES, null);
+        const stored = await storage.getJSON(FAVORITE_STORE_IDS_KEY, []);
 
-        if (stored) {
-          const normalized = normalizeStores(stored);
-
-          if (normalized.length > 0) {
-            setStores(normalized);
-            return;
-          }
+        if (Array.isArray(stored)) {
+          setFavoriteStoreIds(stored.filter((id) => typeof id === "string"));
         }
-
-        // fallback → seed
-        setStores(STORES_SEED);
-      } catch (e) {
-        console.warn("Error loading stores", e);
-        setStores(STORES_SEED);
+      } catch (error) {
+        console.warn("Error loading favorite stores", error);
       } finally {
-        setReady(true);
+        setFavoritesReady(true);
       }
     };
 
-    load();
+    loadFavorites();
   }, []);
 
-  /* -------------------------------------------------
-     Persistencia
-  -------------------------------------------------- */
   useEffect(() => {
-    if (!ready || stores.length === 0) return;
+    if (!favoritesReady) return;
 
-    storage.setJSON(STORAGE_KEYS.STORES, stores);
-  }, [stores, ready]);
+    storage.setJSON(FAVORITE_STORE_IDS_KEY, favoriteStoreIds);
+  }, [favoriteStoreIds, favoritesReady]);
 
-  /* -------------------------------------------------
-     Favoritos
-  -------------------------------------------------- */
+  const stores = useMemo(() => {
+    const normalized = normalizeStores(convexStores);
+
+    return normalized.map((store) => ({
+      ...store,
+      favorite: favoriteStoreIds.includes(store.id),
+    }));
+  }, [convexStores, favoriteStoreIds]);
+
+  const ready = convexStores !== undefined && favoritesReady;
+
   const toggleFavorite = (storeId) => {
-    setStores((prev) =>
-      prev.map((s) => (s.id === storeId ? { ...s, favorite: !s.favorite } : s)),
-    );
+    if (!storeId) return;
+
+    setFavoriteStoreIds((prev) => {
+      if (prev.includes(storeId)) {
+        return prev.filter((id) => id !== storeId);
+      }
+
+      return [...prev, storeId];
+    });
   };
 
   const toggleFavoriteStore = toggleFavorite;
 
-  /* -------------------------------------------------
-     Selectores
-  -------------------------------------------------- */
   const getStoreById = (storeId) =>
-    stores.find((s) => s.id === storeId) || null;
+    stores.find((store) => store.id === storeId) || null;
 
-  const favoriteStores = stores.filter((s) => s.favorite);
-  const favoriteStoreIds = favoriteStores.map((s) => s.id);
+  const favoriteStores = stores.filter((store) =>
+    favoriteStoreIds.includes(store.id),
+  );
 
   const isFavoriteStore = (storeId) => favoriteStoreIds.includes(storeId);
 
   const reloadStoresFromSeed = async () => {
-    await clearStoresData();
-    setStores(STORES_SEED);
+    console.warn(
+      "reloadStoresFromSeed ya no se usa: las tiendas se cargan desde Convex.",
+    );
   };
 
   return (
@@ -114,8 +120,10 @@ export const StoresProvider = ({ children }) => {
 
 export const useStores = () => {
   const ctx = useContext(StoresContext);
+
   if (!ctx) {
     throw new Error("useStores must be used within StoresProvider");
   }
+
   return ctx;
 };

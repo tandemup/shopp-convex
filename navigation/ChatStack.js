@@ -1,7 +1,7 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ROUTES } from "./ROUTES";
-import ChatScreen from "@/screens/chat/ChatScreen";
+import ChatScreenConvex from "@/screens/chat/ChatScreenConvex";
 
 const Stack = createNativeStackNavigator();
 
@@ -16,7 +16,7 @@ export default function HistoryStack() {
     >
       <Stack.Screen
         name={ROUTES.CHAT}
-        component={ChatScreen}
+        component={ChatScreenConvex}
         options={{
           title: "Chat",
         }}

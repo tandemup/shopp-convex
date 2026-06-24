@@ -1,6 +1,8 @@
 import React from "react";
 import { Platform } from "react-native";
 
+import { ConvexProvider, ConvexReactClient } from "convex/react";
+
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -29,40 +31,52 @@ import MainTabs from "./navigation/MainTabs";
 ------------------------------ */
 import DialogHost from "./components/ui/alert/DialogHost";
 
+const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
+
+if (!convexUrl) {
+  console.warn("Falta EXPO_PUBLIC_CONVEX_URL en el .env");
+}
+
+const convex = new ConvexReactClient(convexUrl || "");
+
 const RootStack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <StoresProvider>
-        <ListsProvider>
-          <PurchasesProvider>
-            <LocationProvider>
-              <ProductLearningProvider>
-                <ProductSuggestionsProvider>
-                  <NavigationContainer>
-                    <StatusBar
-                      style="light"
-                      translucent={false}
-                      backgroundColor={
-                        Platform.OS === "android" ? "#2563EB" : undefined
-                      }
-                    />
-                    <RootStack.Navigator screenOptions={{ headerShown: false }}>
-                      <RootStack.Screen
-                        name="Splash"
-                        component={SplashScreen}
+    <ConvexProvider client={convex}>
+      <SafeAreaProvider>
+        <StoresProvider>
+          <ListsProvider>
+            <PurchasesProvider>
+              <LocationProvider>
+                <ProductLearningProvider>
+                  <ProductSuggestionsProvider>
+                    <NavigationContainer>
+                      <StatusBar
+                        style="light"
+                        translucent={false}
+                        backgroundColor={
+                          Platform.OS === "android" ? "#2563EB" : undefined
+                        }
                       />
-                      <RootStack.Screen name="Main" component={MainTabs} />
-                    </RootStack.Navigator>
-                    <DialogHost />
-                  </NavigationContainer>
-                </ProductSuggestionsProvider>
-              </ProductLearningProvider>
-            </LocationProvider>
-          </PurchasesProvider>
-        </ListsProvider>
-      </StoresProvider>
-    </SafeAreaProvider>
+                      <RootStack.Navigator
+                        screenOptions={{ headerShown: false }}
+                      >
+                        <RootStack.Screen
+                          name="Splash"
+                          component={SplashScreen}
+                        />
+                        <RootStack.Screen name="Main" component={MainTabs} />
+                      </RootStack.Navigator>
+                      <DialogHost />
+                    </NavigationContainer>
+                  </ProductSuggestionsProvider>
+                </ProductLearningProvider>
+              </LocationProvider>
+            </PurchasesProvider>
+          </ListsProvider>
+        </StoresProvider>
+      </SafeAreaProvider>
+    </ConvexProvider>
   );
 }
