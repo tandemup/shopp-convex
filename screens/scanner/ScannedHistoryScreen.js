@@ -115,7 +115,11 @@ export default function ScannedHistoryScreen({ navigation, route }) {
   };
 
   const openItem = (item) => {
-    navigation.navigate(ROUTES.EDIT_SCANNED_ITEM, { item });
+    navigation.navigate(ROUTES.EDIT_SCANNED_ITEM, {
+      item,
+      product: item,
+      barcode: item.barcode,
+    });
   };
 
   const renderItem = ({ item }) => {

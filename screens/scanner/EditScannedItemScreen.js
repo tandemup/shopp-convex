@@ -22,6 +22,10 @@ import {
   getProductImageUrl,
   getProductUrl,
 } from "@/services/productLookup";
+import {
+  removeScannedItem,
+  updateScannedEntry,
+} from "@/services/scannerHistory";
 
 function normalizeBarcode(value) {
   return String(value || "").trim();
@@ -34,11 +38,17 @@ function normalizeString(value) {
 export default function EditScannedItemScreen({ route, navigation }) {
   const params = route?.params || {};
 
-  const barcode = normalizeBarcode(
-    params.barcode || params.scannedBarcode || params.code || params.data,
-  );
+  const historyItem = params.item ?? null;
 
-  const initialProduct = params.product || null;
+  const initialProduct = params.product ?? historyItem ?? null;
+
+  const barcode = normalizeBarcode(
+    params.barcode ||
+      historyItem?.barcode ||
+      params.scannedBarcode ||
+      params.code ||
+      params.data,
+  );
 
   const { loading, error, lookupWithCache } = useProductLookupWithCache();
 
@@ -46,6 +56,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
 
   const [product, setProduct] = useState(initialProduct);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [localError, setLocalError] = useState(null);
 
   const [name, setName] = useState("");
@@ -57,8 +68,8 @@ export default function EditScannedItemScreen({ route, navigation }) {
   const visibleError = localError || error;
 
   const resolvedName = useMemo(
-    () => getProductDisplayName(product, barcode),
-    [product, barcode],
+    () => getProductDisplayName(product, barcode) || name || "Producto",
+    [product, barcode, name],
   );
 
   const fillFormFromProduct = useCallback(
@@ -128,22 +139,32 @@ export default function EditScannedItemScreen({ route, navigation }) {
     setLocalError(null);
 
     try {
-      await saveManualProduct({
-        barcode: normalizedBarcode,
+      const patch = {
         name: normalizedName,
         brand: normalizeString(brand),
         category: normalizeString(category),
         imageUrl: normalizeString(imageUrl),
+        url: normalizeString(productUrl),
         productUrl: normalizeString(productUrl),
+        source: "scanner",
+      };
+
+      await saveManualProduct({
+        barcode: normalizedBarcode,
+        name: patch.name,
+        brand: patch.brand,
+        category: patch.category,
+        imageUrl: patch.imageUrl,
+        productUrl: patch.productUrl,
         source: "manual",
       });
+
+      await updateScannedEntry(normalizedBarcode, patch);
 
       navigation.goBack();
     } catch (err) {
       console.error("EditScannedItemScreen save error:", err);
-      setLocalError(
-        err?.message || "No se pudo guardar el producto en Convex.",
-      );
+      setLocalError(err?.message || "No se pudo guardar el producto.");
     } finally {
       setSaving(false);
     }
@@ -157,6 +178,28 @@ export default function EditScannedItemScreen({ route, navigation }) {
     saveManualProduct,
     navigation,
   ]);
+
+  const handleDelete = useCallback(async () => {
+    const normalizedBarcode = normalizeBarcode(barcode);
+
+    if (!normalizedBarcode) {
+      navigation.goBack();
+      return;
+    }
+
+    setDeleting(true);
+    setLocalError(null);
+
+    try {
+      await removeScannedItem(normalizedBarcode);
+      navigation.goBack();
+    } catch (err) {
+      console.error("EditScannedItemScreen delete error:", err);
+      setLocalError("No se pudo borrar el producto del historial.");
+    } finally {
+      setDeleting(false);
+    }
+  }, [barcode, navigation]);
 
   const handleCancel = useCallback(() => {
     navigation.goBack();
@@ -261,20 +304,33 @@ export default function EditScannedItemScreen({ route, navigation }) {
               saving ? styles.disabledButton : null,
             ]}
             onPress={handleSave}
-            disabled={saving}
+            disabled={saving || deleting}
           >
             <Text style={styles.primaryButtonText}>
-              {saving ? "Guardando..." : "Guardar en Convex"}
+              {saving ? "Guardando..." : "Guardar"}
             </Text>
           </Pressable>
 
           <Pressable
             style={styles.secondaryButton}
             onPress={handleLookup}
-            disabled={loading}
+            disabled={loading || saving || deleting}
           >
             <Text style={styles.secondaryButtonText}>
               Buscar de nuevo en internet
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.deleteButton,
+              deleting ? styles.disabledButton : null,
+            ]}
+            onPress={handleDelete}
+            disabled={saving || deleting}
+          >
+            <Text style={styles.deleteButtonText}>
+              {deleting ? "Borrando..." : "Borrar producto"}
             </Text>
           </Pressable>
 
@@ -425,6 +481,19 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontSize: 15,
     fontWeight: "800",
+  },
+  deleteButton: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  deleteButtonText: {
+    color: "#B91C1C",
+    fontSize: 15,
+    fontWeight: "900",
   },
   cancelButton: {
     paddingVertical: 12,
