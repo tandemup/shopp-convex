@@ -1,9 +1,5 @@
 // services/productLookup.js
 
-/* -------------------------------------------------
-   Open Food Facts configuration
--------------------------------------------------- */
-
 const OPEN_FOOD_FACTS_API_BASE_URL =
   "https://world.openfoodfacts.org/api/v2/product";
 
@@ -12,31 +8,24 @@ const OPEN_FOOD_FACTS_PRODUCT_BASE_URL =
 
 const REQUEST_TIMEOUT_MS = 10000;
 
-/* -------------------------------------------------
-   Helpers
--------------------------------------------------- */
-
-/*
- * Los códigos utilizados por supermercados son numéricos.
- * Eliminamos espacios, guiones y otros caracteres accidentales.
- */
 function normalizeBarcode(code) {
   return String(code || "")
     .replace(/\D/g, "")
     .trim();
 }
 
-/*
- * Permitimos EAN-8, UPC-A y EAN-13.
- */
+function normalizeOptionalString(value) {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
 function isSupportedBarcode(barcode) {
   return barcode.length === 8 || barcode.length === 12 || barcode.length === 13;
 }
 
-/*
- * Recupera la mejor imagen disponible.
- * Se prioriza la imagen frontal del producto.
- */
 function getBestImage(product) {
   return (
     product?.image_front_url ||
@@ -49,10 +38,6 @@ function getBestImage(product) {
   );
 }
 
-/*
- * Recupera el mejor nombre posible.
- * Se prioriza el nombre en español.
- */
 function getBestProductName(product) {
   return (
     product?.product_name_es ||
@@ -63,20 +48,10 @@ function getBestProductName(product) {
   ).trim();
 }
 
-/*
- * Recupera la URL pública del producto.
- */
-function getProductUrl(product, barcode) {
+function getOpenFoodFactsProductUrl(product, barcode) {
   return product?.url || `${OPEN_FOOD_FACTS_PRODUCT_BASE_URL}/${barcode}`;
 }
 
-/*
- * Fetch con límite de tiempo.
- *
- * AbortController funciona en navegadores modernos y en entornos
- * compatibles con fetch. Si no estuviera disponible, la petición
- * sigue funcionando sin cancelación automática.
- */
 async function fetchWithTimeout(url, options = {}) {
   if (typeof AbortController === "undefined") {
     return fetch(url, options);
@@ -98,10 +73,6 @@ async function fetchWithTimeout(url, options = {}) {
   }
 }
 
-/* -------------------------------------------------
-   Lookup product by barcode
--------------------------------------------------- */
-
 export async function lookupProductByBarcode(barcode) {
   const cleanBarcode = normalizeBarcode(barcode);
 
@@ -114,10 +85,6 @@ export async function lookupProductByBarcode(barcode) {
   }
 
   try {
-    /*
-     * Solicitamos únicamente los campos necesarios.
-     * Esto reduce el tamaño de la respuesta.
-     */
     const fields = [
       "code",
       "product_name",
@@ -125,6 +92,7 @@ export async function lookupProductByBarcode(barcode) {
       "generic_name",
       "generic_name_es",
       "brands",
+      "categories",
       "image_url",
       "image_front_url",
       "selected_images",
@@ -165,18 +133,22 @@ export async function lookupProductByBarcode(barcode) {
 
     return {
       found: true,
-
       product: {
         barcode: cleanBarcode,
 
         name: getBestProductName(product),
-        brand: String(product?.brands || "").trim(),
+        brand: normalizeOptionalString(product?.brands),
+        category: normalizeOptionalString(product?.categories),
 
         imageUrl: getBestImage(product),
 
-        url: getProductUrl(product, cleanBarcode),
+        url: getOpenFoodFactsProductUrl(product, cleanBarcode),
+        productUrl: getOpenFoodFactsProductUrl(product, cleanBarcode),
 
+        source: "openfoodfacts",
         lookupSource: "openfoodfacts",
+
+        rawData: data,
       },
     };
   } catch (error) {
@@ -195,4 +167,53 @@ export async function lookupProductByBarcode(barcode) {
       reason: isAbortError ? "timeout" : "network_error",
     };
   }
+}
+
+export function getProductDisplayName(product, fallbackBarcode = "") {
+  return (
+    normalizeOptionalString(product?.name) ||
+    normalizeOptionalString(product?.product_name) ||
+    normalizeOptionalString(product?.title) ||
+    normalizeOptionalString(product?.rawData?.product?.product_name_es) ||
+    normalizeOptionalString(product?.rawData?.product?.product_name) ||
+    `Producto ${fallbackBarcode}`
+  );
+}
+
+export function getProductBrand(product) {
+  return (
+    normalizeOptionalString(product?.brand) ||
+    normalizeOptionalString(product?.brands) ||
+    normalizeOptionalString(product?.rawData?.product?.brands)
+  );
+}
+
+export function getProductImageUrl(product) {
+  return (
+    normalizeOptionalString(product?.imageUrl) ||
+    normalizeOptionalString(product?.image_url) ||
+    normalizeOptionalString(product?.image) ||
+    normalizeOptionalString(product?.rawData?.product?.image_front_url) ||
+    normalizeOptionalString(product?.rawData?.product?.image_url)
+  );
+}
+
+export function getProductCategory(product) {
+  return (
+    normalizeOptionalString(product?.category) ||
+    normalizeOptionalString(product?.categories) ||
+    normalizeOptionalString(product?.rawData?.product?.categories)
+  );
+}
+
+export function getProductUrl(product, barcode = "") {
+  return (
+    normalizeOptionalString(product?.productUrl) ||
+    normalizeOptionalString(product?.url) ||
+    normalizeOptionalString(product?.link) ||
+    normalizeOptionalString(product?.rawData?.product?.url) ||
+    (barcode
+      ? `${OPEN_FOOD_FACTS_PRODUCT_BASE_URL}/${encodeURIComponent(barcode)}`
+      : "")
+  );
 }
