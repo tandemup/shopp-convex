@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Audio } from "expo-av";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { api } from "@/convex/_generated/api";
 
 const DEFAULT_ROOM = "general";
 const DEFAULT_USERNAME = "anonymous";

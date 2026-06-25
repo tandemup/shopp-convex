@@ -4,14 +4,16 @@ import { api } from "@/convex/_generated/api";
 const DEFAULT_USERNAME = "anonymous";
 
 export function useScanHistoryConvex(username = DEFAULT_USERNAME) {
-  const scanHistory = useQuery(api.scans.listScanHistory, {
+  const scanHistory = useQuery(api.scanHistory.listScanHistory, {
     username,
     limit: 100,
   });
 
-  const addScanMutation = useMutation(api.scans.addScan);
-  const deleteScanMutation = useMutation(api.scans.deleteScan);
-  const clearScanHistoryMutation = useMutation(api.scans.clearScanHistory);
+  const addScanMutation = useMutation(api.scanHistory.addScan);
+  const deleteScanMutation = useMutation(api.scanHistory.deleteScan);
+  const clearScanHistoryMutation = useMutation(
+    api.scanHistory.clearScanHistory,
+  );
 
   const loading = scanHistory === undefined;
 

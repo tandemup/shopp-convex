@@ -26,7 +26,7 @@ function readProductField(product, fields) {
   return undefined;
 }
 
-export const getLatestByBarcode = query({
+export const getByBarcode = query({
   args: {
     barcode: v.string(),
   },
@@ -45,59 +45,10 @@ export const getLatestByBarcode = query({
   },
 });
 
-export const listRecentByUsername = query({
-  args: {
-    username: v.string(),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const username = normalizeOptionalString(args.username);
-
-    if (!username) {
-      return [];
-    }
-
-    return await ctx.db
-      .query("scanHistory")
-      .withIndex("by_username_scannedAt", (q) => q.eq("username", username))
-      .order("desc")
-      .take(args.limit ?? 30);
-  },
-});
-
-export const listRecentByDeviceId = query({
-  args: {
-    deviceId: v.string(),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const deviceId = normalizeOptionalString(args.deviceId);
-
-    if (!deviceId) {
-      return [];
-    }
-
-    return await ctx.db
-      .query("scanHistory")
-      .withIndex("by_deviceId_scannedAt", (q) => q.eq("deviceId", deviceId))
-      .order("desc")
-      .take(args.limit ?? 30);
-  },
-});
-
-export const saveScanFromLookup = mutation({
+export const saveProductFromLookup = mutation({
   args: {
     barcode: v.string(),
-    format: v.optional(v.string()),
-
     product: v.optional(v.any()),
-
-    username: v.optional(v.string()),
-    deviceId: v.optional(v.string()),
-
-    storeId: v.optional(v.string()),
-    storeName: v.optional(v.string()),
-
     source: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -112,8 +63,7 @@ export const saveScanFromLookup = mutation({
 
     const existing = await ctx.db
       .query("scanHistory")
-      .withIndex("by_barcode_updatedAt", (q) => q.eq("barcode", barcode))
-      .order("desc")
+      .withIndex("by_barcode", (q) => q.eq("barcode", barcode))
       .first();
 
     const name = readProductField(product, [
@@ -134,11 +84,6 @@ export const saveScanFromLookup = mutation({
 
     const category = readProductField(product, ["category", "categories"]);
 
-    const subcategory = readProductField(product, [
-      "subcategory",
-      "subcategories",
-    ]);
-
     const productUrl = readProductField(product, ["productUrl", "url", "link"]);
 
     const source =
@@ -146,15 +91,13 @@ export const saveScanFromLookup = mutation({
       normalizeOptionalString(product.source) ||
       "internet";
 
-    const productData = {
+    const data = {
       barcode,
-      format: normalizeOptionalString(args.format),
 
       name,
       brand,
       imageUrl,
       category,
-      subcategory,
       productUrl,
 
       source,
@@ -164,10 +107,7 @@ export const saveScanFromLookup = mutation({
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        ...productData,
-        scannedAt: now,
-      });
+      await ctx.db.patch(existing._id, data);
 
       return {
         action: "updated",
@@ -176,15 +116,7 @@ export const saveScanFromLookup = mutation({
     }
 
     const id = await ctx.db.insert("scanHistory", {
-      ...productData,
-
-      username: normalizeOptionalString(args.username) || "anonymous",
-      deviceId: normalizeOptionalString(args.deviceId),
-
-      storeId: normalizeOptionalString(args.storeId),
-      storeName: normalizeOptionalString(args.storeName),
-
-      scannedAt: now,
+      ...data,
       createdAt: now,
     });
 
@@ -195,17 +127,15 @@ export const saveScanFromLookup = mutation({
   },
 });
 
-export const saveManualScan = mutation({
+export const saveManualProduct = mutation({
   args: {
     barcode: v.string(),
-    format: v.optional(v.string()),
     name: v.optional(v.string()),
-
-    username: v.optional(v.string()),
-    deviceId: v.optional(v.string()),
-
-    storeId: v.optional(v.string()),
-    storeName: v.optional(v.string()),
+    brand: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    category: v.optional(v.string()),
+    productUrl: v.optional(v.string()),
+    source: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -217,23 +147,25 @@ export const saveManualScan = mutation({
 
     const existing = await ctx.db
       .query("scanHistory")
-      .withIndex("by_barcode_updatedAt", (q) => q.eq("barcode", barcode))
-      .order("desc")
+      .withIndex("by_barcode", (q) => q.eq("barcode", barcode))
       .first();
 
-    const productData = {
+    const data = {
       barcode,
-      format: normalizeOptionalString(args.format),
+
       name: normalizeOptionalString(args.name),
-      source: "manual",
+      brand: normalizeOptionalString(args.brand),
+      imageUrl: normalizeOptionalString(args.imageUrl),
+      category: normalizeOptionalString(args.category),
+      productUrl: normalizeOptionalString(args.productUrl),
+
+      source: normalizeOptionalString(args.source) || "manual",
+
       updatedAt: now,
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        ...productData,
-        scannedAt: now,
-      });
+      await ctx.db.patch(existing._id, data);
 
       return {
         action: "updated",
@@ -242,15 +174,7 @@ export const saveManualScan = mutation({
     }
 
     const id = await ctx.db.insert("scanHistory", {
-      ...productData,
-
-      username: normalizeOptionalString(args.username) || "anonymous",
-      deviceId: normalizeOptionalString(args.deviceId),
-
-      storeId: normalizeOptionalString(args.storeId),
-      storeName: normalizeOptionalString(args.storeName),
-
-      scannedAt: now,
+      ...data,
       createdAt: now,
     });
 
@@ -261,7 +185,19 @@ export const saveManualScan = mutation({
   },
 });
 
-export const removeScan = mutation({
+export const listProducts = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("scanHistory")
+      .order("desc")
+      .take(args.limit ?? 50);
+  },
+});
+
+export const removeProduct = mutation({
   args: {
     id: v.id("scanHistory"),
   },
@@ -274,30 +210,17 @@ export const removeScan = mutation({
   },
 });
 
-export const clearByUsername = mutation({
-  args: {
-    username: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const username = normalizeOptionalString(args.username);
+export const clearProducts = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const products = await ctx.db.query("scanHistory").collect();
 
-    if (!username) {
-      return {
-        deleted: 0,
-      };
-    }
-
-    const scans = await ctx.db
-      .query("scanHistory")
-      .withIndex("by_username_scannedAt", (q) => q.eq("username", username))
-      .collect();
-
-    for (const scan of scans) {
-      await ctx.db.delete(scan._id);
+    for (const product of products) {
+      await ctx.db.delete(product._id);
     }
 
     return {
-      deleted: scans.length,
+      deleted: products.length,
     };
   },
 });

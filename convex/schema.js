@@ -4,32 +4,21 @@ import { v } from "convex/values";
 export default defineSchema({
   scanHistory: defineTable({
     barcode: v.string(),
-    format: v.optional(v.string()),
 
     name: v.optional(v.string()),
     brand: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     category: v.optional(v.string()),
-    subcategory: v.optional(v.string()),
     productUrl: v.optional(v.string()),
 
     source: v.optional(v.string()),
     rawData: v.optional(v.any()),
 
-    username: v.string(),
-    deviceId: v.optional(v.string()),
-
-    storeId: v.optional(v.string()),
-    storeName: v.optional(v.string()),
-
-    scannedAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_barcode", ["barcode"])
-    .index("by_barcode_updatedAt", ["barcode", "updatedAt"])
-    .index("by_username_scannedAt", ["username", "scannedAt"])
-    .index("by_deviceId_scannedAt", ["deviceId", "scannedAt"]),
+    .index("by_barcode_updatedAt", ["barcode", "updatedAt"]),
 
   stores: defineTable({
     id: v.string(),
