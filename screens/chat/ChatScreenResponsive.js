@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +13,11 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { Audio } from "expo-av";
+import moment from "moment";
+import "moment/locale/es";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 const COLORS = {
   bg: "#F6F8F5",
@@ -29,42 +35,14 @@ const COLORS = {
   shadow: "#000000",
 };
 
+const DEFAULT_ROOM = "general";
+const DEFAULT_USERNAME = "Josh";
+
 const ROOMS = [
   { id: "general", name: "general", icon: "💬" },
   { id: "familia", name: "familia", icon: "👥" },
-  { id: "ofertas", name: "ofertas", icon: "🏷️" },
-  { id: "tienda", name: "tienda", icon: "🏪" },
-];
-
-const INITIAL_MESSAGES = [
-  {
-    id: "1",
-    room: "general",
-    username: "Ana",
-    text: "¿Compramos leche?",
-    createdAt: "10:21",
-  },
-  {
-    id: "2",
-    room: "general",
-    username: "Josh",
-    text: "Sí, añado 2 bricks",
-    createdAt: "10:22",
-  },
-  {
-    id: "3",
-    room: "general",
-    username: "Luis",
-    text: "Mira aceite de oliva",
-    createdAt: "10:23",
-  },
-  {
-    id: "4",
-    room: "general",
-    username: "Josh",
-    text: "Listo, ya añadí todo a la lista de la compra",
-    createdAt: "10:24",
-  },
+  { id: "trabajo", name: "trabajo", icon: "💼" },
+  { id: "compras", name: "compras", icon: "🛒" },
 ];
 
 const CONNECTED_USERS = [
@@ -73,37 +51,111 @@ const CONNECTED_USERS = [
   { id: "luis", name: "Luis", label: "", color: "#C9DAF8" },
 ];
 
-export default function ChatScreenResponsive() {
+moment.locale("es");
+
+export default function ChatScreenResponsive({
+  room = DEFAULT_ROOM,
+  username = DEFAULT_USERNAME,
+}) {
   const { width } = useWindowDimensions();
 
   const isDesktop = width >= 900;
   const isTablet = width >= 700 && width < 900;
 
-  const [activeRoom, setActiveRoom] = useState("general");
-  const [username] = useState("Josh");
+  const [activeRoom, setActiveRoom] = useState(room || DEFAULT_ROOM);
+  const [activeUsername, setActiveUsername] = useState(
+    username || DEFAULT_USERNAME,
+  );
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const [sending, setSending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [now, setNow] = useState(Date.now());
+
+  const messages = useQuery(api.chat.listMessages, {
+    room: activeRoom,
+  });
+
+  const sendMessage = useMutation(api.chat.sendMessage);
 
   const filteredMessages = useMemo(() => {
-    return messages.filter((message) => message.room === activeRoom);
-  }, [messages, activeRoom]);
+    return Array.isArray(messages) ? messages : [];
+  }, [messages]);
 
-  const handleSend = () => {
+  const isLoading = messages === undefined;
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setNow(Date.now());
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  async function playMessageTone() {
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        require("@/assets/messageTone.mp3"),
+      );
+
+      await sound.playAsync();
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          sound.unloadAsync();
+        }
+      });
+    } catch (error) {
+      console.error("Error reproduciendo messageTone.mp3:", error);
+    }
+  }
+
+  async function handleSend() {
     const cleanText = input.trim();
+    const cleanUsername = activeUsername.trim() || DEFAULT_USERNAME;
+    const cleanRoom = activeRoom.trim() || DEFAULT_ROOM;
 
-    if (!cleanText) return;
+    if (!cleanText || sending) {
+      return;
+    }
 
-    const newMessage = {
-      id: String(Date.now()),
-      room: activeRoom,
-      username,
-      text: cleanText,
-      createdAt: getCurrentTime(),
-    };
-
-    setMessages((prev) => [...prev, newMessage]);
     setInput("");
-  };
+    setSending(true);
+    setErrorMessage("");
+
+    try {
+      await sendMessage({
+        room: cleanRoom,
+        username: cleanUsername,
+        text: cleanText,
+      });
+
+      playMessageTone();
+      setNow(Date.now());
+    } catch (error) {
+      console.error("Error enviando mensaje con Convex:", error);
+      setInput(cleanText);
+      setErrorMessage(error?.message || "No se pudo enviar el mensaje.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function handleSelectRoom(nextRoom) {
+    if (!nextRoom || nextRoom === activeRoom) {
+      return;
+    }
+
+    setActiveRoom(nextRoom);
+    setErrorMessage("");
+  }
+
+  function handleChangeUsername(value) {
+    setActiveUsername(value);
+
+    if (errorMessage) {
+      setErrorMessage("");
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -122,8 +174,9 @@ export default function ChatScreenResponsive() {
             <Sidebar
               rooms={ROOMS}
               activeRoom={activeRoom}
-              onSelectRoom={setActiveRoom}
-              username={username}
+              onSelectRoom={handleSelectRoom}
+              username={activeUsername}
+              onChangeUsername={handleChangeUsername}
             />
           )}
 
@@ -133,14 +186,18 @@ export default function ChatScreenResponsive() {
             {!isDesktop && (
               <MobileHeader
                 activeRoom={activeRoom}
-                username={username}
+                username={activeUsername}
                 rooms={ROOMS}
-                onSelectRoom={setActiveRoom}
+                onSelectRoom={handleSelectRoom}
+                onChangeUsername={handleChangeUsername}
               />
             )}
 
             {isDesktop && (
-              <DesktopChatHeader activeRoom={activeRoom} username={username} />
+              <DesktopChatHeader
+                activeRoom={activeRoom}
+                username={activeUsername}
+              />
             )}
 
             <View style={styles.dayDivider}>
@@ -149,23 +206,55 @@ export default function ChatScreenResponsive() {
               <View style={styles.dividerLine} />
             </View>
 
-            <FlatList
-              data={filteredMessages}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.messagesList}
-              renderItem={({ item }) => (
-                <MessageBubble
-                  message={item}
-                  isMine={item.username === username}
-                />
-              )}
-            />
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color={COLORS.green} />
+                <Text style={styles.loadingText}>Cargando mensajes...</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredMessages}
+                keyExtractor={(item) => item._id}
+                contentContainerStyle={styles.messagesList}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => (
+                  <MessageBubble
+                    message={item}
+                    isMine={
+                      normalizeName(item.username) ===
+                      normalizeName(activeUsername)
+                    }
+                    now={now}
+                  />
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyText}>
+                      Todavía no hay mensajes en esta room.
+                    </Text>
+                  </View>
+                }
+              />
+            )}
+
+            {errorMessage ? (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{errorMessage}</Text>
+              </View>
+            ) : null}
 
             <Composer
               value={input}
-              onChangeText={setInput}
+              onChangeText={(value) => {
+                setInput(value);
+
+                if (errorMessage) {
+                  setErrorMessage("");
+                }
+              }}
               onSend={handleSend}
               isDesktop={isDesktop}
+              sending={sending}
             />
           </View>
 
@@ -176,7 +265,13 @@ export default function ChatScreenResponsive() {
   );
 }
 
-function Sidebar({ rooms, activeRoom, onSelectRoom, username }) {
+function Sidebar({
+  rooms,
+  activeRoom,
+  onSelectRoom,
+  username,
+  onChangeUsername,
+}) {
   return (
     <View style={styles.sidebar}>
       <View style={styles.logoRow}>
@@ -204,6 +299,7 @@ function Sidebar({ rooms, activeRoom, onSelectRoom, username }) {
               onPress={() => onSelectRoom(room.id)}
             >
               <Text style={styles.roomIcon}>{room.icon}</Text>
+
               <Text
                 style={[styles.roomText, selected && styles.roomTextActive]}
               >
@@ -216,27 +312,59 @@ function Sidebar({ rooms, activeRoom, onSelectRoom, username }) {
 
       <View style={styles.sidebarFooter}>
         <View style={styles.avatarSmall}>
-          <Text style={styles.avatarText}>J</Text>
+          <Text style={styles.avatarText}>{getInitial(username)}</Text>
         </View>
 
         <View style={styles.sidebarUserText}>
-          <Text style={styles.sidebarUserName}>{username}</Text>
-          <Text style={styles.sidebarUserRole}>Usuario</Text>
-        </View>
+          <Text style={styles.sidebarUserLabel}>Usuario</Text>
 
-        <Text style={styles.chevron}>⌄</Text>
+          <TextInput
+            value={username}
+            onChangeText={onChangeUsername}
+            placeholder="anonymous"
+            placeholderTextColor={COLORS.muted}
+            style={styles.sidebarUsernameInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={32}
+          />
+        </View>
       </View>
     </View>
   );
 }
 
-function MobileHeader({ activeRoom, username, rooms, onSelectRoom }) {
+function MobileHeader({
+  activeRoom,
+  username,
+  rooms,
+  onSelectRoom,
+  onChangeUsername,
+}) {
   return (
     <View style={styles.mobileHeader}>
-      <View>
-        <Text style={styles.mobileTitle}>Chat de Shopp</Text>
-        <Text style={styles.mobileSubtitle}>Usuario: {username}</Text>
+      <View style={styles.mobileTitleRow}>
+        <View style={styles.mobileTitleBlock}>
+          <Text style={styles.mobileTitle}>Chat de Shopp</Text>
+
+          <Text style={styles.mobileSubtitle}>Room: {activeRoom}</Text>
+        </View>
+
+        <View style={styles.mobileAvatar}>
+          <Text style={styles.avatarText}>{getInitial(username)}</Text>
+        </View>
       </View>
+
+      <TextInput
+        value={username}
+        onChangeText={onChangeUsername}
+        placeholder="anonymous"
+        placeholderTextColor={COLORS.muted}
+        style={styles.mobileUsernameInput}
+        autoCapitalize="none"
+        autoCorrect={false}
+        maxLength={32}
+      />
 
       <ScrollView
         horizontal
@@ -276,6 +404,7 @@ function DesktopChatHeader({ activeRoom, username }) {
     <View style={styles.desktopChatHeader}>
       <View>
         <Text style={styles.chatTitle}>Chat: {activeRoom}</Text>
+
         <Text style={styles.chatSubtitle}>
           Usuario: <Text style={styles.greenText}>{username}</Text>
         </Text>
@@ -294,8 +423,12 @@ function DesktopChatHeader({ activeRoom, username }) {
   );
 }
 
-function MessageBubble({ message, isMine }) {
-  const initial = message.username?.charAt(0)?.toUpperCase() || "?";
+function MessageBubble({ message, isMine, now }) {
+  const initial = getInitial(message.username);
+  const createdAt = message.createdAt ?? message._creationTime;
+
+  const elapsedTime = formatElapsedTime(createdAt, now);
+  const clockTime = formatClockTime(createdAt);
 
   return (
     <View style={[styles.messageRow, isMine && styles.messageRowMine]}>
@@ -310,10 +443,13 @@ function MessageBubble({ message, isMine }) {
       >
         <View style={styles.messageMetaRow}>
           <Text style={[styles.messageUser, isMine && styles.messageUserMine]}>
-            {isMine ? "Tú" : message.username}
+            {isMine ? "Tú" : message.username || DEFAULT_USERNAME}
           </Text>
 
-          <Text style={styles.messageTime}>{message.createdAt}</Text>
+          <View style={styles.messageTimeBlock}>
+            <Text style={styles.messageElapsedTime}>{elapsedTime}</Text>
+            <Text style={styles.messageTime}>{clockTime}</Text>
+          </View>
         </View>
 
         <View
@@ -331,7 +467,7 @@ function MessageBubble({ message, isMine }) {
   );
 }
 
-function Composer({ value, onChangeText, onSend, isDesktop }) {
+function Composer({ value, onChangeText, onSend, isDesktop, sending }) {
   return (
     <View style={[styles.composer, isDesktop && styles.composerDesktop]}>
       <Pressable style={styles.attachButton}>
@@ -345,11 +481,20 @@ function Composer({ value, onChangeText, onSend, isDesktop }) {
         placeholder="Escribe mensaje..."
         placeholderTextColor={COLORS.muted}
         multiline={!isDesktop}
+        maxLength={500}
+        returnKeyType="send"
         onSubmitEditing={Platform.OS === "web" ? onSend : undefined}
       />
 
-      <Pressable style={styles.sendButton} onPress={onSend}>
-        <Text style={styles.sendButtonText}>➤</Text>
+      <Pressable
+        style={[
+          styles.sendButton,
+          (!value.trim() || sending) && styles.sendButtonDisabled,
+        ]}
+        onPress={onSend}
+        disabled={!value.trim() || sending}
+      >
+        <Text style={styles.sendButtonText}>{sending ? "…" : "➤"}</Text>
       </Pressable>
     </View>
   );
@@ -374,12 +519,12 @@ function RoomDetails({ activeRoom }) {
         </Text>
 
         <Text style={styles.roomDetailsMeta}>
-          Creado por Josh el 01/05/2024
+          Mensajes sincronizados con Convex
         </Text>
       </View>
 
       <View style={styles.detailsSection}>
-        <Text style={styles.detailsSectionTitle}>Usuarios conectados (3)</Text>
+        <Text style={styles.detailsSectionTitle}>Usuarios conectados</Text>
 
         {CONNECTED_USERS.map((user) => (
           <View key={user.id} style={styles.connectedUserRow}>
@@ -422,20 +567,55 @@ function ActionRow({ icon, label, danger }) {
   return (
     <Pressable style={styles.actionRow}>
       <Text style={styles.actionIcon}>{icon}</Text>
+
       <Text style={[styles.actionLabel, danger && styles.actionLabelDanger]}>
         {label}
       </Text>
+
       <Text style={styles.actionChevron}>›</Text>
     </Pressable>
   );
 }
 
-function getCurrentTime() {
-  const date = new Date();
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
+function normalizeName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
 
-  return `${hours}:${minutes}`;
+function getInitial(value) {
+  return String(value || DEFAULT_USERNAME)
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+}
+
+function formatElapsedTime(createdAt, now) {
+  if (!createdAt) {
+    return "";
+  }
+
+  const date = moment(createdAt);
+
+  if (!date.isValid()) {
+    return "";
+  }
+
+  return date.from(now);
+}
+
+function formatClockTime(createdAt) {
+  if (!createdAt) {
+    return "";
+  }
+
+  const date = moment(createdAt);
+
+  if (!date.isValid()) {
+    return "";
+  }
+
+  return date.format("HH:mm");
 }
 
 const styles = StyleSheet.create({
@@ -577,23 +757,23 @@ const styles = StyleSheet.create({
   },
 
   sidebarUserText: {
+    flex: 1,
     marginLeft: 10,
   },
 
-  sidebarUserName: {
+  sidebarUserLabel: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  sidebarUsernameInput: {
+    minHeight: 28,
     color: COLORS.text,
     fontWeight: "800",
-  },
-
-  sidebarUserRole: {
-    color: COLORS.muted,
-    fontSize: 13,
-  },
-
-  chevron: {
-    marginLeft: "auto",
-    color: COLORS.muted,
-    fontSize: 20,
+    fontSize: 15,
+    padding: 0,
+    outlineStyle: "none",
   },
 
   chatPanel: {
@@ -669,6 +849,17 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.panel,
   },
 
+  mobileTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  mobileTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+
   mobileTitle: {
     fontSize: 26,
     fontWeight: "900",
@@ -679,6 +870,27 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 14,
     color: COLORS.muted,
+  },
+
+  mobileAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.greenSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  mobileUsernameInput: {
+    minHeight: 40,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    color: COLORS.text,
+    fontWeight: "700",
+    outlineStyle: "none",
   },
 
   mobileRoomScroller: {
@@ -729,6 +941,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    marginTop: 8,
+    color: COLORS.muted,
+    fontWeight: "600",
+  },
+
+  emptyContainer: {
+    paddingTop: 32,
+    alignItems: "center",
+  },
+
+  emptyText: {
+    color: COLORS.muted,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+
   messagesList: {
     paddingHorizontal: 28,
     paddingTop: 18,
@@ -766,7 +1001,7 @@ const styles = StyleSheet.create({
 
   messageMetaRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
     marginBottom: 8,
   },
@@ -781,8 +1016,19 @@ const styles = StyleSheet.create({
     color: COLORS.green,
   },
 
+  messageTimeBlock: {
+    alignItems: "flex-end",
+  },
+
+  messageElapsedTime: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: COLORS.muted,
+  },
+
   messageTime: {
-    fontSize: 13,
+    marginTop: 1,
+    fontSize: 12,
     color: COLORS.muted,
   },
 
@@ -818,6 +1064,23 @@ const styles = StyleSheet.create({
     color: COLORS.green,
     fontWeight: "900",
     fontSize: 13,
+  },
+
+  errorBox: {
+    marginHorizontal: 18,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#fff1f1",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#ffb4b4",
+  },
+
+  errorText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#9f1d1d",
   },
 
   composer: {
@@ -869,6 +1132,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.green,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  sendButtonDisabled: {
+    opacity: 0.45,
   },
 
   sendButtonText: {

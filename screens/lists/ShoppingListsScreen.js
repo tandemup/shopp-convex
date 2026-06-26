@@ -35,8 +35,13 @@ function MenuNavegacion2({
 }) {
   const navigation = useNavigation();
   const openChat = React.useCallback(() => {
+    navigation.navigate(ROUTES.CHAT_SCREEN);
+  }, [navigation]);
+
+  const openChatResponsive = React.useCallback(() => {
     navigation.navigate(ROUTES.CHAT_SCREEN_RESPONSIVE);
   }, [navigation]);
+
   const openParking = React.useCallback(() => {
     navigation.navigate(ROUTES.PARKING_SCREEN);
   }, [navigation]);
@@ -72,6 +77,15 @@ function MenuNavegacion2({
       variant: "purple",
       onPress: openChat,
     },
+    {
+      key: "chat2",
+      label: "Chat2",
+      icon: "chatbubble-ellipses-outline",
+      isNew: true,
+      variant: "purple",
+      onPress: openChatResponsive,
+    },
+
     {
       key: "parking",
       label: "Parking",
