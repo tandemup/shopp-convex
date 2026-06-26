@@ -20,7 +20,7 @@ const DEFAULT_USERNAME = "anonymous";
 
 const ROOM_OPTIONS = ["general", "familia", "trabajo", "compras"];
 
-export default function ChatScreenConvex({
+export default function ChatScreen({
   room = DEFAULT_ROOM,
   username = DEFAULT_USERNAME,
 }) {

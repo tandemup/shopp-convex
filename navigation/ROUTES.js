@@ -62,7 +62,9 @@ export const ROUTES = {
   CONFIRM_DELETE: "Confirm Delete Screen",
 
   // Chat
-  CHAT: "Chat",
+  CHAT_SCREEN: "Chat",
+  CHAT_SCREEN_RESPONSIVE: "Chat Responsive",
+
   // Debug
   PRODUCT_LEARNING_DEBUG: "Product Learning Debug",
 };

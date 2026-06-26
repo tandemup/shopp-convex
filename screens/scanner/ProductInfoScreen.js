@@ -16,6 +16,8 @@ import {
   View,
 } from "react-native";
 
+import { ROUTES } from "@/navigation/ROUTES";
+
 import { useProductLookupWithCache } from "@/hooks/useProductLookupWithCache";
 import {
   getProductBrand,
@@ -123,9 +125,10 @@ export default function ProductInfoScreen({ route, navigation }) {
   }, [loadProduct]);
 
   const handleEdit = useCallback(() => {
-    navigation.navigate("EditScannedItem", {
+    navigation.navigate(ROUTES.EDIT_SCANNED_ITEM, {
       barcode,
       product,
+      item: product,
     });
   }, [navigation, barcode, product]);
 

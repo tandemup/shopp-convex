@@ -35,7 +35,7 @@ function MenuNavegacion2({
 }) {
   const navigation = useNavigation();
   const openChat = React.useCallback(() => {
-    navigation.navigate(ROUTES.CHAT);
+    navigation.navigate(ROUTES.CHAT_SCREEN_RESPONSIVE);
   }, [navigation]);
 
   const actions = [
