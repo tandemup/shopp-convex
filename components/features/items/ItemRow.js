@@ -34,7 +34,7 @@ export default function ItemRow({ item, onToggle, onEdit }) {
       </Pressable>
 
       <Pressable style={styles.content} onPress={onEdit}>
-        <View style={styles.nameRow}>
+        <View style={styles.firstLine}>
           <Text
             style={[styles.name, !item.checked && styles.nameInactive]}
             numberOfLines={1}
@@ -42,23 +42,7 @@ export default function ItemRow({ item, onToggle, onEdit }) {
             {item.name}
           </Text>
 
-          {hasPromo ? (
-            <View style={styles.promoBadge}>
-              <Text style={styles.promoText}>
-                {priceInfo.promoLabel || "Oferta"}
-              </Text>
-            </View>
-          ) : null}
-
-          {hasPromo && savings > 0 ? (
-            <Text style={styles.savingsInline} numberOfLines={1}>
-              −{formatCurrency(savings, priceInfo.currency)}
-            </Text>
-          ) : null}
-        </View>
-
-        {hasCategory || hasSubcategory ? (
-          <View style={styles.categoryRow}>
+          <View style={styles.badgesInline}>
             {hasCategory ? (
               <View
                 style={[
@@ -95,6 +79,22 @@ export default function ItemRow({ item, onToggle, onEdit }) {
                   {subcategoryName}
                 </Text>
               </View>
+            ) : null}
+          </View>
+        </View>
+
+        {hasPromo ? (
+          <View style={styles.promoRow}>
+            <View style={styles.promoBadge}>
+              <Text style={styles.promoText}>
+                {priceInfo.promoLabel || "Oferta"}
+              </Text>
+            </View>
+
+            {savings > 0 ? (
+              <Text style={styles.savingsInline} numberOfLines={1}>
+                −{formatCurrency(savings, priceInfo.currency)}
+              </Text>
             ) : null}
           </View>
         ) : null}
@@ -173,14 +173,16 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
 
-  nameRow: {
+  firstLine: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "nowrap",
     minWidth: 0,
   },
 
   name: {
     flexShrink: 1,
+    minWidth: 0,
     marginRight: 6,
 
     fontSize: 16,
@@ -193,47 +195,15 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
   },
 
-  promoBadge: {
-    flexShrink: 0,
-
-    marginRight: 5,
-
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-
-    borderRadius: 999,
-
-    backgroundColor: "#fef08a",
-  },
-
-  promoText: {
-    fontSize: 10,
-    fontWeight: "800",
-
-    color: "#854d0e",
-  },
-
-  savingsInline: {
-    flexShrink: 0,
-
-    fontSize: 11,
-    fontWeight: "800",
-
-    color: "#15803d",
-  },
-
-  categoryRow: {
+  badgesInline: {
     flexDirection: "row",
-    flexWrap: "wrap",
     alignItems: "center",
-
+    flexShrink: 0,
     gap: 5,
-
-    marginTop: 6,
   },
 
   categoryBadge: {
-    maxWidth: "58%",
+    maxWidth: 92,
 
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -253,7 +223,7 @@ const styles = StyleSheet.create({
   },
 
   subcategoryBadge: {
-    maxWidth: "58%",
+    maxWidth: 92,
 
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -279,6 +249,42 @@ const styles = StyleSheet.create({
 
   badgeTextInactive: {
     color: "#94a3b8",
+  },
+
+  promoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    gap: 5,
+
+    marginTop: 6,
+  },
+
+  promoBadge: {
+    flexShrink: 0,
+
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+
+    borderRadius: 999,
+
+    backgroundColor: "#fef08a",
+  },
+
+  promoText: {
+    fontSize: 10,
+    fontWeight: "800",
+
+    color: "#854d0e",
+  },
+
+  savingsInline: {
+    flexShrink: 0,
+
+    fontSize: 11,
+    fontWeight: "800",
+
+    color: "#15803d",
   },
 
   meta: {
@@ -313,5 +319,57 @@ const styles = StyleSheet.create({
   chevron: {
     marginLeft: 4,
     padding: 4,
+  },
+  firstLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "nowrap",
+    minWidth: 0,
+  },
+
+  name: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
+
+    fontSize: 16,
+    fontWeight: "800",
+
+    color: "#1f2937",
+  },
+
+  badgesInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    flexShrink: 0,
+    gap: 5,
+  },
+  firstLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "nowrap",
+    minWidth: 0,
+  },
+
+  name: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
+
+    fontSize: 16,
+    fontWeight: "800",
+
+    color: "#1f2937",
+  },
+
+  badgesInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    flexShrink: 0,
+    gap: 5,
   },
 });

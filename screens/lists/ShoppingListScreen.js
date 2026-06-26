@@ -245,4 +245,24 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 32,
   },
+
+  firstLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "nowrap",
+    minWidth: 0,
+  },
+
+  name: {
+    flexShrink: 1,
+    minWidth: 0,
+    marginRight: 6,
+  },
+
+  badgesInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 0,
+    gap: 5,
+  },
 });
