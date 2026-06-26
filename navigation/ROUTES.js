@@ -64,6 +64,7 @@ export const ROUTES = {
   // Chat
   CHAT_SCREEN: "Chat",
   CHAT_SCREEN_RESPONSIVE: "Chat Responsive",
+  PARKING_SCREEN: "Parking",
 
   // Debug
   PRODUCT_LEARNING_DEBUG: "Product Learning Debug",

@@ -18,6 +18,7 @@ import ScannedHistoryScreen from "@/screens/scanner/ScannedHistoryScreen";
 import EditScannedItemScreen from "@/screens/scanner/EditScannedItemScreen";
 import StoreMapScreen from "@/screens/stores/StoreMapScreen";
 import MenuScreen from "@/screens/settings/MenuScreen";
+import ParkingScreen from "@/screens/chat/ParkingScreen";
 import ChatScreen from "@/screens/chat/ChatScreen";
 import ChatScreenResponsive from "@/screens/chat/ChatScreenResponsive";
 
@@ -42,6 +43,12 @@ export default function ShoppingStack() {
       <Stack.Screen
         name={ROUTES.SHOPPING_LIST}
         component={ShoppingListScreen}
+      />
+
+      <Stack.Screen
+        name={ROUTES.PARKING_SCREEN}
+        component={ParkingScreen}
+        options={{ title: "Parking" }}
       />
 
       <Stack.Screen

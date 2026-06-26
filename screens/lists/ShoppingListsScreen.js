@@ -37,6 +37,9 @@ function MenuNavegacion2({
   const openChat = React.useCallback(() => {
     navigation.navigate(ROUTES.CHAT_SCREEN_RESPONSIVE);
   }, [navigation]);
+  const openParking = React.useCallback(() => {
+    navigation.navigate(ROUTES.PARKING_SCREEN);
+  }, [navigation]);
 
   const actions = [
     {
@@ -70,6 +73,14 @@ function MenuNavegacion2({
       onPress: openChat,
     },
     {
+      key: "parking",
+      label: "Parking",
+      icon: "car-outline",
+      isNew: true,
+      variant: "green",
+      onPress: openParking,
+    },
+    {
       key: "scanned",
       label: "Escaneos",
       icon: "barcode-outline",
@@ -91,7 +102,7 @@ function MenuNavegacion2({
       >
         {actions.map((action) => {
           const isPurple = action.variant === "purple";
-
+          const isGreen = action.variant === "green";
           return (
             <Pressable
               key={action.key}
@@ -108,6 +119,7 @@ function MenuNavegacion2({
               style={({ pressed }) => [
                 quickStyles.card,
                 isPurple && quickStyles.cardPurple,
+                isGreen && quickStyles.cardGreen,
                 pressed && quickStyles.cardPressed,
               ]}
             >
@@ -121,12 +133,13 @@ function MenuNavegacion2({
                 style={[
                   quickStyles.iconBox,
                   isPurple && quickStyles.iconBoxPurple,
+                  isGreen && quickStyles.iconBoxGreen,
                 ]}
               >
                 <Ionicons
                   name={action.icon}
                   size={24}
-                  color={isPurple ? "#6d28d9" : "#2563eb"}
+                  color={isPurple ? "#6d28d9" : isGreen ? "#15803d" : "#2563eb"}
                 />
 
                 {action.badge > 0 && (
@@ -137,9 +150,12 @@ function MenuNavegacion2({
                   </View>
                 )}
               </View>
-
               <Text
-                style={[quickStyles.label, isPurple && quickStyles.labelPurple]}
+                style={[
+                  quickStyles.label,
+                  isPurple && quickStyles.labelPurple,
+                  isGreen && quickStyles.labelGreen,
+                ]}
               >
                 {action.label}
               </Text>
@@ -466,7 +482,10 @@ const quickStyles = StyleSheet.create({
     borderColor: "#c084fc",
     backgroundColor: "#faf5ff",
   },
-
+  cardGreen: {
+    borderColor: "#86efac",
+    backgroundColor: "#f0fdf4",
+  },
   cardPressed: {
     opacity: 0.8,
     transform: [{ scale: 0.98 }],
@@ -485,7 +504,9 @@ const quickStyles = StyleSheet.create({
   iconBoxPurple: {
     backgroundColor: "#f3e8ff",
   },
-
+  iconBoxGreen: {
+    backgroundColor: "#dcfce7",
+  },
   badge: {
     position: "absolute",
     top: -6,
@@ -516,7 +537,10 @@ const quickStyles = StyleSheet.create({
     color: "#581c87",
     fontWeight: "800",
   },
-
+  labelGreen: {
+    color: "#14532d",
+    fontWeight: "800",
+  },
   newBadge: {
     position: "absolute",
     top: -6,

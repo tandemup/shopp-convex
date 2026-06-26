@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ROUTES } from "@/navigation/ROUTES";
 import ChatScreen from "@/screens/chat/ChatScreen";
 import ChatScreenResponsive from "@/screens/chat/ChatScreenResponsive";
+import ParkingScreen from "@/screens/chat/ParkingScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +28,14 @@ export default function HistoryStack() {
         component={ChatScreen}
         options={{
           title: "Chat",
+        }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.PARKING_SCREEN}
+        component={ParkingScreen}
+        options={{
+          title: "Parking",
         }}
       />
     </Stack.Navigator>
