@@ -10,6 +10,10 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+
 import {
   getSearchSettings,
   DEFAULT_SEARCH_SETTINGS,
@@ -37,6 +41,16 @@ import { clearScannedHistory } from "@/services/scannerHistory";
 import { useLists } from "@/context/ListsContext";
 import { useStores } from "@/context/StoresContext";
 
+const USER_EXPORT_VERSION = 1;
+
+const EXPORT_STORAGE_KEYS = {
+  userProfile: "user_profile",
+  shoppingLists: "shopping_lists",
+  archivedLists: "archived_lists",
+  purchaseHistory: "purchase_history",
+  scanHistory: "scanned_history",
+};
+
 function buildProductSearchEngineSubtitle(settings) {
   const engineId =
     settings?.selectedProductEngine ||
@@ -51,6 +65,7 @@ function buildProductSearchEngineSubtitle(settings) {
 
   return `Motor activo: ${engineLabel}`;
 }
+
 function getPermissionLabel(permission) {
   if (!permission) return "Comprobando...";
 
@@ -69,6 +84,137 @@ function getPermissionColor(permission) {
   if (permission.status === "denied") return "#f97316";
 
   return "#64748b";
+}
+
+function safeJsonParse(value, fallbackValue) {
+  try {
+    if (!value) return fallbackValue;
+    return JSON.parse(value);
+  } catch (error) {
+    console.warn("[MenuScreen] JSON parse error", error);
+    return fallbackValue;
+  }
+}
+
+async function getStoredJson(key, fallbackValue) {
+  const rawValue = await AsyncStorage.getItem(key);
+  return safeJsonParse(rawValue, fallbackValue);
+}
+
+function buildExportFilename() {
+  const now = new Date();
+
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const min = String(now.getMinutes()).padStart(2, "0");
+
+  return `shopp-user-export-${yyyy}${mm}${dd}-${hh}${min}.json`;
+}
+
+function downloadJsonOnWeb(filename, jsonString) {
+  if (typeof document === "undefined") {
+    throw new Error("document is not available");
+  }
+
+  const blob = new Blob([jsonString], {
+    type: "application/json;charset=utf-8",
+  });
+
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+
+  document.body.appendChild(link);
+  link.click();
+
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+async function exportUserDataToJsonFile() {
+  const [
+    userProfile,
+    shoppingLists,
+    archivedLists,
+    purchaseHistory,
+    scanHistory,
+  ] = await Promise.all([
+    getStoredJson(EXPORT_STORAGE_KEYS.userProfile, {}),
+    getStoredJson(EXPORT_STORAGE_KEYS.shoppingLists, []),
+    getStoredJson(EXPORT_STORAGE_KEYS.archivedLists, []),
+    getStoredJson(EXPORT_STORAGE_KEYS.purchaseHistory, []),
+    getStoredJson(EXPORT_STORAGE_KEYS.scanHistory, []),
+  ]);
+
+  const exportData = {
+    app: "Shopp",
+    type: "user-data-export",
+    version: USER_EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+
+    user: {
+      id: userProfile?.id ?? null,
+      username: userProfile?.username ?? null,
+      city: userProfile?.city ?? null,
+      zones: Array.isArray(userProfile?.zones) ? userProfile.zones : [],
+      raw: userProfile ?? {},
+    },
+
+    data: {
+      purchaseHistory,
+      shoppingLists,
+      archivedLists,
+      scanHistory,
+    },
+
+    meta: {
+      platform: Platform.OS,
+      storageKeys: EXPORT_STORAGE_KEYS,
+    },
+  };
+
+  const filename = buildExportFilename();
+  const jsonString = JSON.stringify(exportData, null, 2);
+
+  if (Platform.OS === "web") {
+    downloadJsonOnWeb(filename, jsonString);
+
+    return {
+      ok: true,
+      filename,
+      platform: "web",
+      shared: false,
+      fileUri: null,
+    };
+  }
+
+  const fileUri = `${FileSystem.documentDirectory}${filename}`;
+
+  await FileSystem.writeAsStringAsync(fileUri, jsonString, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+
+  const canShare = await Sharing.isAvailableAsync();
+
+  if (canShare) {
+    await Sharing.shareAsync(fileUri, {
+      mimeType: "application/json",
+      dialogTitle: "Exportar datos de Shopp",
+      UTI: "public.json",
+    });
+  }
+
+  return {
+    ok: true,
+    filename,
+    platform: Platform.OS,
+    shared: canShare,
+    fileUri,
+  };
 }
 
 async function handlePermissionPress(permission, requestPermission, label) {
@@ -143,15 +289,18 @@ function SettingsCard({
   badge,
   onPress,
   danger = false,
+  disabled = false,
 }) {
   return (
     <Pressable
       style={({ pressed }) => [
         styles.card,
         danger && styles.dangerCard,
-        pressed && styles.cardPressed,
+        disabled && styles.disabledCard,
+        pressed && !disabled && styles.cardPressed,
       ]}
       onPress={onPress}
+      disabled={disabled}
     >
       <View style={styles.cardLeft}>
         <View style={[styles.cardIconBox, danger && styles.dangerIconBox]}>
@@ -196,6 +345,7 @@ function SettingsCard({
 }
 
 const CAMERA_GRANTED_STORAGE_KEY = "shopp:web-camera-access-granted";
+
 async function getWebCameraPermissionStatus() {
   if (Platform.OS !== "web") {
     return null;
@@ -306,10 +456,13 @@ export default function MenuScreen({ navigation }) {
   const [webCameraPermission, setWebCameraPermission] = useState(null);
 
   const [locationPermission, setLocationPermission] = useState(null);
+  const [exportingUserData, setExportingUserData] = useState(false);
   const [productSearchEngineSubtitle, setProductSearchEngineSubtitle] =
     useState("Motor activo: Google");
+
   const { clearActiveListsState, clearArchivedListsState, clearAllListsState } =
     useLists();
+
   const tabBarHeight = useBottomTabBarHeight();
   const { reloadStoresFromSeed } = useStores();
 
@@ -477,6 +630,7 @@ export default function MenuScreen({ navigation }) {
       });
     }
   };
+
   const requestCameraPermission = async () => {
     if (Platform.OS === "web") {
       const result = await requestWebCameraPermission();
@@ -488,6 +642,7 @@ export default function MenuScreen({ navigation }) {
 
     return requestNativeCameraPermission();
   };
+
   const goToProductSearchEngines = () => {
     navigation.navigate(ROUTES.SEARCH_ENGINE_SETTINGS, {
       type: "product",
@@ -520,6 +675,46 @@ export default function MenuScreen({ navigation }) {
         },
       ],
     });
+  };
+
+  const handleExportUserData = async () => {
+    if (exportingUserData) return;
+
+    try {
+      setExportingUserData(true);
+
+      const result = await exportUserDataToJsonFile();
+
+      if (Platform.OS === "web") {
+        safeAlert(
+          "Exportación completada",
+          `Se ha descargado el fichero ${result.filename}.`,
+        );
+        return;
+      }
+
+      if (result.shared) {
+        safeAlert(
+          "Exportación completada",
+          `Se ha generado el fichero ${result.filename}.`,
+        );
+        return;
+      }
+
+      safeAlert(
+        "Exportación completada",
+        `Se ha guardado el fichero ${result.filename} en el almacenamiento local de la app.`,
+      );
+    } catch (error) {
+      console.warn("[MenuScreen] export user data error", error);
+
+      safeAlert(
+        "Error al exportar",
+        "No se pudieron exportar los datos del usuario y el historial de compras.",
+      );
+    } finally {
+      setExportingUserData(false);
+    }
   };
 
   const handleClearActiveLists = async () => {
@@ -583,6 +778,7 @@ export default function MenuScreen({ navigation }) {
       ],
     );
   };
+
   const loadProductSearchEngineSubtitle = useCallback(async () => {
     try {
       const settings = await getSearchSettings();
@@ -599,6 +795,7 @@ export default function MenuScreen({ navigation }) {
       setProductSearchEngineSubtitle(fallbackSubtitle);
     }
   }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadProductSearchEngineSubtitle();
@@ -664,6 +861,19 @@ export default function MenuScreen({ navigation }) {
               title="Historial de escaneos"
               subtitle="Consulta los códigos escaneados recientemente"
               onPress={goToScannedHistory}
+            />
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Datos</Text>
+
+            <SettingsCard
+              icon="download-outline"
+              title="Exportar datos a JSON"
+              subtitle="Genera un fichero con datos del usuario, listas, historial de compras e historial de escaneos"
+              badge={exportingUserData ? "..." : "JSON"}
+              disabled={exportingUserData}
+              onPress={handleExportUserData}
             />
           </View>
 
@@ -933,6 +1143,10 @@ const styles = StyleSheet.create({
   cardPressed: {
     opacity: 0.75,
     transform: [{ scale: 0.99 }],
+  },
+
+  disabledCard: {
+    opacity: 0.55,
   },
 
   dangerCard: {

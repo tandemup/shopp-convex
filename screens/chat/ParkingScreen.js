@@ -12,13 +12,14 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import moment from "moment";
 import "moment/locale/es";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import { useLocation } from "@/context/LocationContext";
+import StoreMapPreview from "@/components/features/maps/StoreMapPreview";
 
 const DEFAULT_CITY = "gijon";
 const DEFAULT_ZONE = "centro";
@@ -140,33 +141,6 @@ const PARKING_MESSAGES_LIMIT = 80;
 
 moment.locale("es");
 
-const escapeHtml = (value = "") =>
-  String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-
-function LeafletMapView({ html }) {
-  if (Platform.OS === "web") {
-    return React.createElement("iframe", {
-      title: "Parking map",
-      srcDoc: html,
-      style: {
-        width: "100%",
-        height: "100%",
-        border: "0",
-        display: "block",
-      },
-    });
-  }
-
-  return (
-    <WebView originWhitelist={["*"]} source={{ html }} style={styles.webview} />
-  );
-}
-
 export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
   const [activeCity, setActiveCity] = useState(DEFAULT_CITY);
   const [activeZone, setActiveZone] = useState(DEFAULT_ZONE);
@@ -175,10 +149,20 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
   const [sending, setSending] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("");
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [showMapPreview, setShowMapPreview] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [errorMessage, setErrorMessage] = useState("");
 
   const flatListRef = useRef(null);
+  const { location } = useLocation();
+
+  const userCoords =
+    location?.lat != null && location?.lng != null
+      ? {
+          lat: location.lat,
+          lng: location.lng,
+        }
+      : null;
 
   const zoneOptions = ZONE_OPTIONS_BY_CITY[activeCity] || [];
 
@@ -196,8 +180,8 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
 
   const activeMapCenter = useMemo(() => {
     return {
-      latitude: activeZoneData?.latitude || 43.5453,
-      longitude: activeZoneData?.longitude || -5.6615,
+      lat: activeZoneData?.latitude || 43.5453,
+      lng: activeZoneData?.longitude || -5.6615,
     };
   }, [activeZoneData]);
 
@@ -284,8 +268,8 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
         userId: cleanUserId,
         text: cleanText,
         status: statusKey || undefined,
-        lat: activeMapCenter.latitude,
-        lng: activeMapCenter.longitude,
+        lat: activeMapCenter.lat,
+        lng: activeMapCenter.lng,
       });
 
       setText("");
@@ -320,6 +304,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     setActiveCity(nextCity);
     setActiveZone(firstZone);
     setSelectedStatus("");
+    setShowMapPreview(false);
     setErrorMessage("");
   }
 
@@ -330,6 +315,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
 
     setActiveZone(nextZone);
     setSelectedStatus("");
+    setShowMapPreview(false);
     setErrorMessage("");
   }
 
@@ -478,144 +464,90 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
       </Pressable>
     );
   }
+  const openInGoogleMaps = async () => {
+    const { lat, lng } = activeMapCenter;
 
-  function buildParkingMapHtml() {
-    const centerLat = activeMapCenter.latitude;
-    const centerLng = activeMapCenter.longitude;
-
-    const safeCity = escapeHtml(activeCityLabel);
-    const safeZone = escapeHtml(activeZoneLabel);
-
-    const parkingMessages = data
-      .filter(
-        (message) =>
-          Number.isFinite(message.lat) && Number.isFinite(message.lng),
-      )
-      .map((message) => ({
-        lat: message.lat,
-        lng: message.lng,
-        userId: escapeHtml(message.userId || DEFAULT_USER_ID),
-        text: escapeHtml(message.text || ""),
-        status: escapeHtml(message.status || ""),
-      }));
-
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
-
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
-
-  <style>
-    html,
-    body,
-    #map {
-      height: 100%;
-      margin: 0;
-      padding: 0;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return;
     }
 
-    .popup-title {
-      font-weight: 700;
-      margin-bottom: 4px;
+    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+
+      if (supported) {
+        await Linking.openURL(url);
+      }
+    } catch (error) {
+      console.error("Error abriendo Google Maps:", error);
     }
+  };
 
-    .popup-status {
-      font-size: 12px;
-      color: #15803d;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .popup-text {
-      font-size: 13px;
-      color: #111827;
-    }
-  </style>
-</head>
-
-<body>
-  <div id="map"></div>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <script>
-    const map = L.map("map").setView([${centerLat}, ${centerLng}], 15);
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "© OpenStreetMap contributors"
-    }).addTo(map);
-
-    L.circle([${centerLat}, ${centerLng}], {
-      radius: 350,
-      color: "#15803d",
-      weight: 2,
-      fillColor: "#22c55e",
-      fillOpacity: 0.12
-    }).addTo(map);
-
-    L.marker([${centerLat}, ${centerLng}])
-      .addTo(map)
-      .bindPopup("<b>${safeCity}</b><br/>${safeZone}");
-
-    const messages = ${JSON.stringify(parkingMessages)};
-
-    messages.forEach((message) => {
-      L.marker([message.lat, message.lng])
-        .addTo(map)
-        .bindPopup(
-          "<div class='popup-title'>" + message.userId + "</div>" +
-          (message.status
-            ? "<div class='popup-status'>" + message.status + "</div>"
-            : "") +
-          "<div class='popup-text'>" + message.text + "</div>"
-        );
-    });
-  </script>
-</body>
-</html>
-`;
-  }
-
-  function renderMap() {
-    const html = buildParkingMapHtml();
+  const LocationSection = () => {
+    const hasCoords =
+      Number.isFinite(activeMapCenter.lat) &&
+      Number.isFinite(activeMapCenter.lng);
 
     return (
-      <View style={styles.mapCard}>
-        <View style={styles.mapHeader}>
-          <View>
-            <Text style={styles.mapTitle}>Mapa de zona</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionLabel}>Ubicación</Text>
 
-            <Text style={styles.mapSubtitle}>
-              {activeCityLabel} · {activeZoneLabel}
+        {hasCoords && showMapPreview ? (
+          <View style={styles.mapContainer}>
+            <StoreMapPreview
+              lat={activeMapCenter.lat}
+              lng={activeMapCenter.lng}
+              userLat={userCoords?.lat}
+              userLng={userCoords?.lng}
+            />
+          </View>
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <Ionicons name="map-outline" size={36} color="#999" />
+
+            <Text style={styles.mapPlaceholderText}>
+              {hasCoords
+                ? "Previsualización del mapa"
+                : "Ubicación no disponible"}
             </Text>
           </View>
+        )}
 
-          <View style={styles.mapBadge}>
-            <Ionicons name="map-outline" size={16} color="#14532d" />
-            <Text style={styles.mapBadgeText}>OpenStreetMap</Text>
-          </View>
-        </View>
+        {hasCoords && !showMapPreview ? (
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={() => setShowMapPreview(true)}
+          >
+            <Ionicons name="map-outline" size={18} color="#1a73e8" />
 
-        <View style={styles.mapWrapper}>
-          <LeafletMapView html={html} />
-        </View>
+            <Text style={styles.secondaryButtonText}>
+              Ver mapa (OpenStreetMap)
+            </Text>
+          </Pressable>
+        ) : null}
 
-        <Text style={styles.mapHint}>
-          Los avisos con coordenadas se muestran como marcadores en el mapa.
-        </Text>
+        {hasCoords && showMapPreview ? (
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={() => setShowMapPreview(false)}
+          >
+            <Ionicons name="close-outline" size={18} color="#1a73e8" />
+
+            <Text style={styles.secondaryButtonText}>Ocultar mapa</Text>
+          </Pressable>
+        ) : null}
+
+        {hasCoords ? (
+          <Pressable style={styles.mapsButton} onPress={openInGoogleMaps}>
+            <Ionicons name="navigate-outline" size={18} color="#fff" />
+
+            <Text style={styles.mapsButtonText}>Abrir en Google Maps</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
-  }
+  };
 
   function renderHeader() {
     return (
@@ -708,7 +640,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
           </View>
         </View>
 
-        {renderMap()}
+        <LocationSection />
 
         <View style={styles.chatHeader}>
           <Text style={styles.chatTitle}>Chat de parking</Text>
@@ -1166,20 +1098,49 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  mapWrapper: {
-    height: 190,
-    borderRadius: 16,
+  mapContainer: {
+    height: 180,
+    borderRadius: 10,
     overflow: "hidden",
-    backgroundColor: "#e5e7eb",
+    marginBottom: 12,
   },
 
-  webview: {
-    flex: 1,
-    backgroundColor: "#F9FAFB",
+  mapPlaceholder: {
+    height: 180,
+    borderRadius: 10,
+    backgroundColor: "#f2f2f2",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+
+  mapPlaceholderText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#777",
+  },
+
+  secondaryButton: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1a73e8",
+    marginBottom: 10,
+    backgroundColor: "#ffffff",
+  },
+
+  secondaryButtonText: {
+    marginLeft: 8,
+    color: "#1a73e8",
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   mapHint: {
-    marginTop: 8,
+    marginTop: 2,
     color: "#6b7280",
     fontSize: 11,
     fontWeight: "700",
@@ -1425,5 +1386,36 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "900",
+  },
+  section: {
+    marginBottom: 14,
+    padding: 12,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    borderRadius: 18,
+  },
+
+  sectionLabel: {
+    marginBottom: 8,
+    color: "#14532d",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+
+  mapsButton: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#1a73e8",
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+
+  mapsButtonText: {
+    marginLeft: 8,
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

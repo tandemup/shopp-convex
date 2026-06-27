@@ -5,17 +5,19 @@ import { Ionicons } from "@expo/vector-icons";
 import { formatCurrency } from "@/utils/store/formatters";
 import { formatUnit } from "@/utils/pricing/unitFormat";
 
+const LAYOUT_VARIANT = "compact";
+// Opciones: "compact", "table", "stacked"
+
 export default function ItemRow({ item, onToggle, onEdit }) {
   const priceInfo = item.priceInfo || {};
 
   const subtotal = priceInfo.total ?? 0;
   const savings = priceInfo.savings ?? 0;
-
   const hasPromo = Boolean(priceInfo.promo) && priceInfo.promo !== "none";
 
   const unit = item.unit ?? priceInfo.unit ?? "u";
-  const qty = priceInfo.qty ?? 1;
-  const unitPrice = priceInfo.unitPrice ?? 0;
+  const qty = priceInfo.qty ?? item.qty ?? 1;
+  const unitPrice = priceInfo.unitPrice ?? item.price ?? 0;
 
   const categoryName = item.categoryName ?? null;
   const subcategoryName = item.subcategoryName ?? null;
@@ -23,100 +25,233 @@ export default function ItemRow({ item, onToggle, onEdit }) {
   const hasCategory = Boolean(categoryName);
   const hasSubcategory = Boolean(subcategoryName);
 
+  const currency = priceInfo.currency;
+
+  const offerText = hasPromo ? priceInfo.promoLabel || "Oferta" : "Sin oferta";
+  const totalText = formatCurrency(subtotal, currency);
+  const unitPriceText = formatCurrency(unitPrice, currency);
+
   return (
     <View style={[styles.container, !item.checked && styles.containerInactive]}>
       <Pressable style={styles.checkbox} onPress={onToggle} hitSlop={10}>
         <Ionicons
           name={item.checked ? "checkbox-outline" : "square-outline"}
-          size={22}
+          size={24}
           color={item.checked ? "#16a34a" : "#94a3b8"}
         />
       </Pressable>
 
       <Pressable style={styles.content} onPress={onEdit}>
-        <View style={styles.firstLine}>
+        <View style={styles.badgesRow}>
+          {hasCategory ? (
+            <View
+              style={[
+                styles.categoryBadge,
+                !item.checked && styles.badgeInactive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.categoryBadgeText,
+                  !item.checked && styles.badgeTextInactive,
+                ]}
+                numberOfLines={1}
+              >
+                {categoryName}
+              </Text>
+            </View>
+          ) : null}
+
+          {hasSubcategory ? (
+            <View
+              style={[
+                styles.subcategoryBadge,
+                !item.checked && styles.badgeInactive,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.subcategoryBadgeText,
+                  !item.checked && styles.badgeTextInactive,
+                ]}
+                numberOfLines={1}
+              >
+                {subcategoryName}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        <View style={styles.nameRow}>
           <Text
             style={[styles.name, !item.checked && styles.nameInactive]}
             numberOfLines={1}
           >
             {item.name}
           </Text>
-
-          <View style={styles.badgesInline}>
-            {hasCategory ? (
-              <View
-                style={[
-                  styles.categoryBadge,
-                  !item.checked && styles.badgeInactive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.categoryBadgeText,
-                    !item.checked && styles.badgeTextInactive,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {categoryName}
-                </Text>
-              </View>
-            ) : null}
-
-            {hasSubcategory ? (
-              <View
-                style={[
-                  styles.subcategoryBadge,
-                  !item.checked && styles.badgeInactive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.subcategoryBadgeText,
-                    !item.checked && styles.badgeTextInactive,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {subcategoryName}
-                </Text>
-              </View>
-            ) : null}
-          </View>
         </View>
 
-        {hasPromo ? (
-          <View style={styles.promoRow}>
-            <View style={styles.promoBadge}>
-              <Text style={styles.promoText}>
-                {priceInfo.promoLabel || "Oferta"}
-              </Text>
+        {LAYOUT_VARIANT === "compact" ? (
+          <View style={styles.compactRow}>
+            <View style={styles.compactInfo}>
+              <View style={styles.infoLine}>
+                <Text style={styles.label}>Cantidad</Text>
+                <Text
+                  style={[styles.value, !item.checked && styles.textInactive]}
+                >
+                  {qty} {formatUnit(unit)}
+                </Text>
+              </View>
+
+              <View style={styles.infoLine}>
+                <Text style={styles.label}>Precio/u</Text>
+                <Text
+                  style={[styles.value, !item.checked && styles.textInactive]}
+                >
+                  {unitPriceText}
+                </Text>
+              </View>
+
+              <View style={styles.infoLine}>
+                <Text style={styles.label}>Oferta</Text>
+                <Text
+                  style={[
+                    hasPromo ? styles.offerValue : styles.noOfferValue,
+                    !item.checked && styles.textInactive,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {offerText}
+                </Text>
+              </View>
             </View>
 
-            {savings > 0 ? (
-              <Text style={styles.savingsInline} numberOfLines={1}>
-                −{formatCurrency(savings, priceInfo.currency)}
+            <View style={styles.totalBlock}>
+              <Text style={styles.totalLabel}>TOTAL</Text>
+              <Text
+                style={[styles.total, !item.checked && styles.subtotalInactive]}
+                numberOfLines={1}
+              >
+                {totalText}
               </Text>
-            ) : null}
+            </View>
           </View>
         ) : null}
 
-        <Text
-          style={[styles.meta, !item.checked && styles.textInactive]}
-          numberOfLines={1}
-        >
-          {qty} {formatUnit(unit)} ×{" "}
-          {formatCurrency(unitPrice, priceInfo.currency)}/{formatUnit(unit)}
-        </Text>
+        {LAYOUT_VARIANT === "table" ? (
+          <View style={styles.tableBox}>
+            <View style={styles.tableRow}>
+              <Text style={styles.tableLabel}>Cantidad</Text>
+              <Text
+                style={[
+                  styles.tableValue,
+                  !item.checked && styles.textInactive,
+                ]}
+              >
+                {qty} {formatUnit(unit)}
+              </Text>
+            </View>
+
+            <View style={styles.tableRow}>
+              <Text style={styles.tableLabel}>Precio unitario</Text>
+              <Text
+                style={[
+                  styles.tableValue,
+                  !item.checked && styles.textInactive,
+                ]}
+              >
+                {unitPriceText}/{formatUnit(unit)}
+              </Text>
+            </View>
+
+            <View style={styles.tableRow}>
+              <Text style={styles.tableLabel}>Oferta aplicable</Text>
+              <Text
+                style={[
+                  hasPromo ? styles.offerValue : styles.noOfferValue,
+                  !item.checked && styles.textInactive,
+                ]}
+                numberOfLines={1}
+              >
+                {offerText}
+              </Text>
+            </View>
+
+            {hasPromo && savings > 0 ? (
+              <View style={styles.tableRow}>
+                <Text style={styles.tableLabel}>Ahorro</Text>
+                <Text style={styles.savingsValue}>
+                  −{formatCurrency(savings, currency)}
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.tableTotalRow}>
+              <Text style={styles.tableTotalLabel}>TOTAL</Text>
+              <Text
+                style={[
+                  styles.tableTotalValue,
+                  !item.checked && styles.subtotalInactive,
+                ]}
+              >
+                {totalText}
+              </Text>
+            </View>
+          </View>
+        ) : null}
+
+        {LAYOUT_VARIANT === "stacked" ? (
+          <View style={styles.stackedBox}>
+            <View style={styles.stackedItem}>
+              <Text style={styles.stackedLabel}>Cantidad</Text>
+              <Text
+                style={[
+                  styles.stackedValue,
+                  !item.checked && styles.textInactive,
+                ]}
+              >
+                {qty} {formatUnit(unit)}
+              </Text>
+            </View>
+
+            <View style={styles.stackedItem}>
+              <Text style={styles.stackedLabel}>Precio unitario</Text>
+              <Text
+                style={[
+                  styles.stackedValue,
+                  !item.checked && styles.textInactive,
+                ]}
+              >
+                {unitPriceText}/{formatUnit(unit)}
+              </Text>
+            </View>
+
+            <View style={styles.stackedItem}>
+              <Text style={styles.stackedLabel}>Oferta</Text>
+              <Text
+                style={[
+                  hasPromo ? styles.offerValue : styles.noOfferValue,
+                  !item.checked && styles.textInactive,
+                ]}
+              >
+                {offerText}
+              </Text>
+            </View>
+
+            <View style={styles.stackedTotal}>
+              <Text style={styles.totalLabel}>TOTAL</Text>
+              <Text
+                style={[styles.total, !item.checked && styles.subtotalInactive]}
+              >
+                {totalText}
+              </Text>
+            </View>
+          </View>
+        ) : null}
       </Pressable>
 
-      <Text
-        style={[styles.subtotal, !item.checked && styles.subtotalInactive]}
-        numberOfLines={1}
-      >
-        {formatCurrency(subtotal, priceInfo.currency)}
-      </Text>
-
       <Pressable style={styles.chevron} onPress={onEdit} hitSlop={10}>
-        <Ionicons name="chevron-forward" size={19} color="#94a3b8" />
+        <Ionicons name="chevron-forward" size={21} color="#94a3b8" />
       </Pressable>
     </View>
   );
@@ -127,8 +262,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
 
-    minHeight: 84,
-
+    minHeight: 118,
     marginBottom: 10,
 
     paddingHorizontal: 12,
@@ -144,15 +278,11 @@ const styles = StyleSheet.create({
       web: {
         boxShadow: "0 2px 6px rgba(15, 23, 42, 0.06)",
       },
-
       default: {
         shadowColor: "#000000",
         shadowOpacity: 0.06,
         shadowRadius: 6,
-        shadowOffset: {
-          width: 0,
-          height: 2,
-        },
+        shadowOffset: { width: 0, height: 2 },
         elevation: 2,
       },
     }),
@@ -164,81 +294,53 @@ const styles = StyleSheet.create({
   },
 
   checkbox: {
+    flexShrink: 0,
     marginRight: 10,
   },
 
   content: {
     flex: 1,
     minWidth: 0,
-    marginRight: 8,
-  },
-
-  firstLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "nowrap",
-    minWidth: 0,
-  },
-
-  name: {
-    flexShrink: 1,
-    minWidth: 0,
     marginRight: 6,
-
-    fontSize: 16,
-    fontWeight: "800",
-
-    color: "#1f2937",
   },
 
-  nameInactive: {
-    color: "#94a3b8",
-  },
-
-  badgesInline: {
+  badgesRow: {
     flexDirection: "row",
+    justifyContent: "flex-end",
     alignItems: "center",
-    flexShrink: 0,
-    gap: 5,
+    gap: 6,
+    marginBottom: 6,
   },
 
   categoryBadge: {
-    maxWidth: 92,
-
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-
+    maxWidth: 130,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: "#bfdbfe",
     borderRadius: 999,
-
     backgroundColor: "#eff6ff",
   },
 
   categoryBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-
+    fontSize: 12,
+    fontWeight: "800",
     color: "#1d4ed8",
   },
 
   subcategoryBadge: {
-    maxWidth: 92,
-
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-
+    maxWidth: 110,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 1,
     borderColor: "#bbf7d0",
     borderRadius: 999,
-
     backgroundColor: "#f0fdf4",
   },
 
   subcategoryBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-
+    fontSize: 12,
+    fontWeight: "800",
     color: "#15803d",
   },
 
@@ -251,65 +353,178 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
   },
 
-  promoRow: {
+  nameRow: {
     flexDirection: "row",
     alignItems: "center",
-
-    gap: 5,
-
-    marginTop: 6,
+    marginBottom: 8,
   },
 
-  promoBadge: {
+  name: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#1f2937",
+  },
+
+  nameInactive: {
+    color: "#94a3b8",
+  },
+
+  compactRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  compactInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  infoLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 3,
+  },
+
+  label: {
+    width: 76,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+
+  value: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#334155",
+  },
+
+  offerValue: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#ea580c",
+  },
+
+  noOfferValue: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#94a3b8",
+  },
+
+  totalBlock: {
     flexShrink: 0,
-
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-
-    borderRadius: 999,
-
-    backgroundColor: "#fef08a",
+    alignItems: "flex-end",
   },
 
-  promoText: {
+  totalLabel: {
+    marginBottom: 2,
     fontSize: 10,
-    fontWeight: "800",
-
-    color: "#854d0e",
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    color: "#94a3b8",
   },
 
-  savingsInline: {
-    flexShrink: 0,
-
-    fontSize: 11,
-    fontWeight: "800",
-
+  total: {
+    fontSize: 24,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
     color: "#15803d",
   },
 
-  meta: {
-    marginTop: 5,
+  tableBox: {
+    gap: 4,
+  },
 
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  tableLabel: {
+    flex: 1,
     fontSize: 12,
-    fontWeight: "500",
-
+    fontWeight: "800",
     color: "#64748b",
+  },
+
+  tableValue: {
+    flexShrink: 0,
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#334155",
+  },
+
+  savingsValue: {
+    flexShrink: 0,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#15803d",
+  },
+
+  tableTotalRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+
+    marginTop: 4,
+    paddingTop: 6,
+
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+
+  tableTotalLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    color: "#64748b",
+  },
+
+  tableTotalValue: {
+    fontSize: 24,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+    color: "#15803d",
+  },
+
+  stackedBox: {
+    gap: 6,
+  },
+
+  stackedItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  stackedLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+
+  stackedValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#334155",
+  },
+
+  stackedTotal: {
+    alignItems: "flex-end",
+    marginTop: 6,
   },
 
   textInactive: {
     color: "#94a3b8",
-  },
-
-  subtotal: {
-    marginLeft: 6,
-    marginRight: 4,
-
-    fontSize: 16,
-    fontWeight: "900",
-
-    fontVariant: ["tabular-nums"],
-
-    color: "#15803d",
   },
 
   subtotalInactive: {
@@ -317,59 +532,8 @@ const styles = StyleSheet.create({
   },
 
   chevron: {
-    marginLeft: 4,
+    flexShrink: 0,
+    marginLeft: 2,
     padding: 4,
-  },
-  firstLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "nowrap",
-    minWidth: 0,
-  },
-
-  name: {
-    flex: 1,
-    minWidth: 0,
-    marginRight: 8,
-
-    fontSize: 16,
-    fontWeight: "800",
-
-    color: "#1f2937",
-  },
-
-  badgesInline: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    flexShrink: 0,
-    gap: 5,
-  },
-  firstLine: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    flexWrap: "nowrap",
-    minWidth: 0,
-  },
-
-  name: {
-    flex: 1,
-    minWidth: 0,
-    marginRight: 8,
-
-    fontSize: 16,
-    fontWeight: "800",
-
-    color: "#1f2937",
-  },
-
-  badgesInline: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    flexShrink: 0,
-    gap: 5,
   },
 });
