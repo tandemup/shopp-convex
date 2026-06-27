@@ -94,6 +94,16 @@ function MenuNavegacion2({
       variant: "green",
       onPress: openParking,
     },
+
+    {
+      key: "yesterday",
+      label: "yesterday-news",
+      icon: "car-outline",
+      isNew: true,
+      variant: "green",
+      onPress: openParking,
+    },
+
     {
       key: "scanned",
       label: "Escaneos",
