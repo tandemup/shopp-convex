@@ -46,4 +46,20 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.optional(v.number()),
   }).index("by_barcode", ["barcode"]),
+
+  parkingMessages: defineTable({
+    city: v.string(),
+    zone: v.string(),
+    userId: v.string(),
+    text: v.string(),
+    status: v.optional(v.string()),
+
+    // Preparado para geolocalización futura
+    lat: v.optional(v.number()),
+    lng: v.optional(v.number()),
+
+    createdAt: v.number(),
+  })
+    .index("by_city_zone_createdAt", ["city", "zone", "createdAt"])
+    .index("by_userId_createdAt", ["userId", "createdAt"]),
 });

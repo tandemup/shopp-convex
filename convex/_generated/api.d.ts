@@ -9,6 +9,7 @@
  */
 
 import type * as chat from "../chat.js";
+import type * as parking from "../parking.js";
 import type * as scanHistory from "../scanHistory.js";
 import type * as stores from "../stores.js";
 
@@ -20,6 +21,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   chat: typeof chat;
+  parking: typeof parking;
   scanHistory: typeof scanHistory;
   stores: typeof stores;
 }>;
