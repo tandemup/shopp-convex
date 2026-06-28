@@ -213,11 +213,34 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     return () => clearInterval(intervalId);
   }, []);
 
+  const previousMessagesCountRef = useRef(0);
+  const didInitialScrollRef = useRef(false);
+
   useEffect(() => {
-    if (data.length > 0) {
+    if (isLoading) {
+      return;
+    }
+
+    const previousCount = previousMessagesCountRef.current;
+    const currentCount = data.length;
+
+    if (!didInitialScrollRef.current) {
+      didInitialScrollRef.current = true;
+      previousMessagesCountRef.current = currentCount;
+
+      if (currentCount > 0) {
+        scrollToBottom(false);
+      }
+
+      return;
+    }
+
+    if (currentCount > previousCount) {
       scrollToBottom(true);
     }
-  }, [data.length]);
+
+    previousMessagesCountRef.current = currentCount;
+  }, [data.length, isLoading]);
 
   function scrollToBottom(animated = true) {
     requestAnimationFrame(() => {
@@ -600,7 +623,6 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
 
               <View style={styles.fieldBlock}>
                 <Text style={styles.fieldLabel}>User ID</Text>
-
                 <TextInput
                   value={activeUserId}
                   onChangeText={setActiveUserId}
@@ -707,7 +729,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
               <FlatList
                 data={[]}
                 keyExtractor={(item) => item._id}
-                ListHeaderComponent={renderHeader}
+                ListHeaderComponent={renderHeader()}
                 ListFooterComponent={
                   <View style={styles.loadingContainer}>
                     <ActivityIndicator />
@@ -723,11 +745,9 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
                 data={data}
                 keyExtractor={(item) => item._id}
                 renderItem={renderMessage}
-                ListHeaderComponent={renderHeader}
+                ListHeaderComponent={renderHeader()}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
-                onContentSizeChange={() => scrollToBottom(true)}
-                onLayout={() => scrollToBottom(false)}
                 ListEmptyComponent={
                   <View style={styles.emptyContainer}>
                     <Ionicons

@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -18,12 +17,6 @@ import moment from "moment";
 import "moment/locale/es";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import {
-  URL_STATUS,
-  analyzeMessageInput,
-  getUrlStatusFromMessage,
-  getUrlStatusLabel,
-} from "@/services/urlSafety";
 
 const DEFAULT_ROOM = "general";
 const DEFAULT_USERNAME = "anonymous";
@@ -60,26 +53,13 @@ export default function ChatScreen({
     return Array.isArray(messages) ? messages : [];
   }, [messages]);
 
-  const localAnalysis = useMemo(() => {
-    return analyzeMessageInput(text);
-  }, [text]);
-
-  const hasSuspiciousDraftUrl = localAnalysis.urls.some(
-    (item) => item.status === URL_STATUS.SUSPICIOUS,
-  );
-
-  const hasMaliciousDraftUrl = localAnalysis.urls.some(
-    (item) => item.status === URL_STATUS.MALICIOUS,
-  );
-
   const isLoading = messages === undefined;
 
   const textLength = text.length;
   const remainingChars = MAX_POST_LENGTH - textLength;
   const isOverLimit = remainingChars < 0;
   const isNearLimit = remainingChars <= LOW_CHARS_WARNING;
-  const canSend =
-    Boolean(text.trim()) && !sending && !isOverLimit && !hasMaliciousDraftUrl;
+  const canSend = Boolean(text.trim()) && !sending && !isOverLimit;
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -135,21 +115,6 @@ export default function ChatScreen({
       return;
     }
 
-    const analyzedMessage = analyzeMessageInput(cleanText);
-
-    if (!analyzedMessage.canPost) {
-      const blockedUrl = analyzedMessage.urls.find(
-        (item) => item.status === URL_STATUS.MALICIOUS,
-      );
-
-      setErrorMessage(
-        blockedUrl?.reason
-          ? `No se puede publicar este enlace: ${blockedUrl.reason}.`
-          : "El mensaje contiene una URL bloqueada o peligrosa.",
-      );
-      return;
-    }
-
     setText("");
     setSending(true);
     setErrorMessage("");
@@ -158,10 +123,7 @@ export default function ChatScreen({
       await sendMessage({
         room: cleanRoom,
         username: cleanUsername,
-        text: analyzedMessage.text,
-        urls: analyzedMessage.urls,
-        messageStatus: analyzedMessage.messageStatus,
-        checkedLocallyAt: analyzedMessage.checkedLocallyAt,
+        text: cleanText,
       });
 
       playMessageTone();
@@ -207,84 +169,7 @@ export default function ChatScreen({
     return date.from(now);
   }
 
-  function getMessageExpiresAt(item) {
-    if (item.expiresAt) {
-      return item.expiresAt;
-    }
-
-    const createdAt = item.createdAt ?? item._creationTime;
-
-    if (!createdAt) {
-      return null;
-    }
-
-    return createdAt + 24 * 60 * 60 * 1000;
-  }
-
-  function formatTimeUntilDelete(item) {
-    const expiresAt = getMessageExpiresAt(item);
-
-    if (!expiresAt) {
-      return "";
-    }
-
-    const remainingMs = expiresAt - now;
-
-    if (remainingMs <= 0) {
-      return "Caducado";
-    }
-
-    const totalMinutes = Math.ceil(remainingMs / (60 * 1000));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-
-    if (hours <= 0) {
-      return `Se borra en ${minutes} min`;
-    }
-
-    if (minutes === 0) {
-      return `Se borra en ${hours} h`;
-    }
-
-    return `Se borra en ${hours} h ${minutes} min`;
-  }
-
-  function cleanDisplayUrl(value = "") {
-    return String(value || "")
-      .trim()
-      .replace(/[.,!?;:)\]}]+$/, "");
-  }
-
-  function isImageUrl(value = "") {
-    const cleanUrl = cleanDisplayUrl(value).toLowerCase();
-
-    return /\.(jpg|jpeg|png|webp|gif|svg)(\?.*)?$/i.test(cleanUrl);
-  }
-
-  function getSafeUrlForRender(part, messageUrls = []) {
-    const cleanPart = cleanDisplayUrl(part);
-    const urlInfo = getUrlStatusFromMessage(cleanPart, messageUrls);
-
-    return {
-      urlInfo,
-      status: urlInfo?.status || URL_STATUS.PENDING,
-      url: urlInfo?.normalizedUrl || cleanPart,
-    };
-  }
-
-  async function handleOpenUrl(url, urlInfo) {
-    if (urlInfo?.status === URL_STATUS.MALICIOUS) {
-      setErrorMessage("Este enlace está bloqueado por seguridad.");
-      return;
-    }
-
-    if (urlInfo?.status === URL_STATUS.SUSPICIOUS) {
-      setErrorMessage(
-        "Este enlace parece sospechoso. Revísalo antes de abrirlo.",
-      );
-      return;
-    }
-
+  async function handleOpenUrl(url) {
     try {
       const supported = await Linking.canOpenURL(url);
 
@@ -293,23 +178,20 @@ export default function ChatScreen({
       }
     } catch (error) {
       console.error("Error abriendo enlace:", error);
-      setErrorMessage("No se pudo abrir el enlace.");
     }
   }
 
-  function renderMessageText(value, messageUrls = []) {
+  function renderMessageText(value) {
     const content = String(value || "");
-    const urlRegex = /(https?:\/\/[^\s<>"']+)/gi;
+    const urlRegex = /(https?:\/\/[^\s]+)/gi;
     const parts = content.split(urlRegex);
 
     return (
-      <View style={styles.messageBody}>
+      <Text style={styles.messageText}>
         {parts.map((part, index) => {
-          const isUrl = /^https?:\/\/[^\s<>"']+$/i.test(part);
+          const isUrl = /^https?:\/\/[^\s]+$/i.test(part);
 
           if (!isUrl) {
-            if (!part) return null;
-
             return (
               <Text key={`text-${index}`} style={styles.messageText}>
                 {part}
@@ -317,54 +199,17 @@ export default function ChatScreen({
             );
           }
 
-          const { urlInfo, status, url } = getSafeUrlForRender(
-            part,
-            messageUrls,
-          );
-
-          const isBlocked = status === URL_STATUS.MALICIOUS;
-          const isSuspicious = status === URL_STATUS.SUSPICIOUS;
-          const label = getUrlStatusLabel(status);
-          const canPreviewImage =
-            isImageUrl(url) &&
-            status !== URL_STATUS.MALICIOUS &&
-            status !== URL_STATUS.SUSPICIOUS;
-
           return (
-            <View key={`url-block-${index}`} style={styles.urlBlock}>
-              <Text
-                style={[
-                  styles.messageLink,
-                  status === URL_STATUS.PENDING && styles.messageLinkPending,
-                  status === URL_STATUS.SAFE && styles.messageLinkSafe,
-                  isSuspicious && styles.messageLinkSuspicious,
-                  isBlocked && styles.messageLinkBlocked,
-                ]}
-                onPress={() => handleOpenUrl(url, urlInfo)}
-              >
-                {cleanDisplayUrl(part)}
-                {status !== URL_STATUS.SAFE ? ` (${label})` : ""}
-              </Text>
-
-              {canPreviewImage ? (
-                <Pressable
-                  onPress={() => handleOpenUrl(url, urlInfo)}
-                  style={({ pressed }) => [
-                    styles.imagePreviewButton,
-                    pressed && styles.imagePreviewButtonPressed,
-                  ]}
-                >
-                  <Image
-                    source={{ uri: url }}
-                    style={styles.messageImage}
-                    resizeMode="cover"
-                  />
-                </Pressable>
-              ) : null}
-            </View>
+            <Text
+              key={`url-${index}`}
+              style={styles.messageLink}
+              onPress={() => handleOpenUrl(part)}
+            >
+              {part}
+            </Text>
           );
         })}
-      </View>
+      </Text>
     );
   }
 
@@ -393,71 +238,11 @@ export default function ChatScreen({
     );
   }
 
-  function renderMessageStatus(item) {
-    const urls = Array.isArray(item.urls) ? item.urls : [];
-
-    if (!urls.length) {
-      return null;
-    }
-
-    const hasMalicious = urls.some(
-      (urlInfo) => urlInfo.status === URL_STATUS.MALICIOUS,
-    );
-
-    const hasSuspicious = urls.some(
-      (urlInfo) => urlInfo.status === URL_STATUS.SUSPICIOUS,
-    );
-
-    const hasPending = urls.some(
-      (urlInfo) => urlInfo.status === URL_STATUS.PENDING,
-    );
-
-    if (hasMalicious) {
-      return (
-        <View style={[styles.urlStatusPill, styles.urlStatusPillBlocked]}>
-          <Text style={[styles.urlStatusText, styles.urlStatusTextBlocked]}>
-            Enlace bloqueado
-          </Text>
-        </View>
-      );
-    }
-
-    if (hasSuspicious) {
-      return (
-        <View style={[styles.urlStatusPill, styles.urlStatusPillSuspicious]}>
-          <Text style={[styles.urlStatusText, styles.urlStatusTextSuspicious]}>
-            Contiene enlace sospechoso
-          </Text>
-        </View>
-      );
-    }
-
-    if (hasPending) {
-      return (
-        <View style={[styles.urlStatusPill, styles.urlStatusPillPending]}>
-          <Text style={[styles.urlStatusText, styles.urlStatusTextPending]}>
-            Enlace pendiente de comprobar
-          </Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={[styles.urlStatusPill, styles.urlStatusPillSafe]}>
-        <Text style={[styles.urlStatusText, styles.urlStatusTextSafe]}>
-          Enlace verificado
-        </Text>
-      </View>
-    );
-  }
-
   function renderMessage({ item }) {
     const createdAt = item.createdAt ?? item._creationTime;
-    const messageUrls = Array.isArray(item.urls) ? item.urls : [];
 
     const date = createdAt ? moment(createdAt).format("HH:mm") : "";
     const elapsedTime = formatElapsedTime(createdAt);
-    const deleteCountdown = formatTimeUntilDelete(item);
 
     return (
       <View style={styles.messageCard}>
@@ -469,54 +254,10 @@ export default function ChatScreen({
           <View style={styles.messageTimeBlock}>
             <Text style={styles.elapsedTime}>{elapsedTime}</Text>
             <Text style={styles.time}>{date}</Text>
-
-            {deleteCountdown ? (
-              <Text style={styles.deleteCountdown}>{deleteCountdown}</Text>
-            ) : null}
           </View>
         </View>
 
-        {renderMessageText(item.text, messageUrls)}
-
-        {renderMessageStatus(item)}
-      </View>
-    );
-  }
-
-  function renderDraftUrlWarning() {
-    if (!text.trim() || !localAnalysis.urls.length) {
-      return null;
-    }
-
-    if (hasMaliciousDraftUrl) {
-      const blockedUrl = localAnalysis.urls.find(
-        (item) => item.status === URL_STATUS.MALICIOUS,
-      );
-
-      return (
-        <View style={[styles.draftUrlBox, styles.draftUrlBoxBlocked]}>
-          <Text style={[styles.draftUrlText, styles.draftUrlTextBlocked]}>
-            URL bloqueada: {blockedUrl?.reason || "enlace peligroso"}.
-          </Text>
-        </View>
-      );
-    }
-
-    if (hasSuspiciousDraftUrl) {
-      return (
-        <View style={[styles.draftUrlBox, styles.draftUrlBoxSuspicious]}>
-          <Text style={[styles.draftUrlText, styles.draftUrlTextSuspicious]}>
-            El mensaje contiene un enlace sospechoso. Se publicará con aviso.
-          </Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={[styles.draftUrlBox, styles.draftUrlBoxPending]}>
-        <Text style={[styles.draftUrlText, styles.draftUrlTextPending]}>
-          El enlace se publicará como pendiente de comprobar.
-        </Text>
+        {renderMessageText(item.text)}
       </View>
     );
   }
@@ -606,8 +347,6 @@ export default function ChatScreen({
               />
             )}
 
-            {renderDraftUrlWarning()}
-
             {errorMessage ? (
               <View style={styles.errorBox}>
                 <Text style={styles.errorText}>{errorMessage}</Text>
@@ -619,7 +358,6 @@ export default function ChatScreen({
                 style={[
                   styles.composerBox,
                   isOverLimit && styles.composerBoxError,
-                  hasMaliciousDraftUrl && styles.composerBoxError,
                 ]}
               >
                 <TextInput
@@ -638,7 +376,7 @@ export default function ChatScreen({
 
                 <View style={styles.composerFooter}>
                   <Text style={styles.composerHint}>
-                    Se permiten enlaces e imágenes por URL http:// o https://
+                    Se permiten enlaces http:// y https://
                   </Text>
 
                   <Text
@@ -892,12 +630,6 @@ const styles = StyleSheet.create({
     color: "#888",
   },
 
-  deleteCountdown: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#9a6700",
-  },
-
   messageText: {
     fontSize: 15,
     color: "#111",
@@ -910,113 +642,6 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: "700",
     textDecorationLine: "underline",
-  },
-
-  messageLinkPending: {
-    color: "#6f5f00",
-  },
-
-  messageLinkSafe: {
-    color: "#1465d8",
-  },
-
-  messageLinkSuspicious: {
-    color: "#b76b00",
-  },
-
-  messageLinkBlocked: {
-    color: "#9f1d1d",
-    textDecorationLine: "line-through",
-  },
-
-  urlStatusPill: {
-    alignSelf: "flex-start",
-    marginTop: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-
-  urlStatusPillPending: {
-    backgroundColor: "#fff8d6",
-    borderColor: "#e2cb60",
-  },
-
-  urlStatusPillSafe: {
-    backgroundColor: "#edf7ee",
-    borderColor: "#b7dfbc",
-  },
-
-  urlStatusPillSuspicious: {
-    backgroundColor: "#fff3e0",
-    borderColor: "#ffc36b",
-  },
-
-  urlStatusPillBlocked: {
-    backgroundColor: "#fff1f1",
-    borderColor: "#ffb4b4",
-  },
-
-  urlStatusText: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  urlStatusTextPending: {
-    color: "#6f5f00",
-  },
-
-  urlStatusTextSafe: {
-    color: "#166329",
-  },
-
-  urlStatusTextSuspicious: {
-    color: "#965800",
-  },
-
-  urlStatusTextBlocked: {
-    color: "#9f1d1d",
-  },
-
-  draftUrlBox: {
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-
-  draftUrlBoxPending: {
-    backgroundColor: "#fff8d6",
-    borderColor: "#e2cb60",
-  },
-
-  draftUrlBoxSuspicious: {
-    backgroundColor: "#fff3e0",
-    borderColor: "#ffc36b",
-  },
-
-  draftUrlBoxBlocked: {
-    backgroundColor: "#fff1f1",
-    borderColor: "#ffb4b4",
-  },
-
-  draftUrlText: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
-  draftUrlTextPending: {
-    color: "#6f5f00",
-  },
-
-  draftUrlTextSuspicious: {
-    color: "#965800",
-  },
-
-  draftUrlTextBlocked: {
-    color: "#9f1d1d",
   },
 
   errorBox: {
@@ -1121,36 +746,5 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 15,
     fontWeight: "800",
-  },
-  messageBody: {
-    gap: 6,
-  },
-
-  urlBlock: {
-    gap: 6,
-  },
-
-  imagePreviewButton: {
-    marginTop: 4,
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: "#eee",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
-  },
-
-  imagePreviewButtonPressed: {
-    opacity: 0.85,
-  },
-
-  messageImage: {
-    width: "100%",
-    height: 180,
-    backgroundColor: "#eee",
-  },
-  deleteCountdown: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#9a6700",
   },
 });

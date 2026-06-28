@@ -42,11 +42,15 @@ function MenuNavegacion2({
     navigation.navigate(ROUTES.CHAT_SCREEN_RESPONSIVE);
   }, [navigation]);
 
+  const openYesterdayNews = React.useCallback(() => {
+    navigation.navigate(ROUTES.CHAT_SCREEN_RESPONSIVE);
+  }, [navigation]);
+
   const openParking = React.useCallback(() => {
     navigation.navigate(ROUTES.PARKING_SCREEN);
   }, [navigation]);
 
-  const actions = [
+  const actions0 = [
     {
       key: "new",
       label: "Nueva lista",
@@ -101,7 +105,7 @@ function MenuNavegacion2({
       icon: "car-outline",
       isNew: true,
       variant: "green",
-      onPress: openParking,
+      onPress: openYesterdayNews,
     },
 
     {
@@ -111,6 +115,54 @@ function MenuNavegacion2({
       tab: ROUTES.SCANNER_TAB,
       route: ROUTES.SCANNED_HISTORY,
       badge: scannedCount,
+    },
+  ];
+  const actions = [
+    {
+      key: "new",
+      label: "Nueva lista",
+      icon: "add-outline",
+      onPress: onCreateList,
+    },
+    {
+      key: "archived",
+      label: "Archivadas",
+      icon: "archive-outline",
+      tab: ROUTES.SHOPPING_TAB,
+      route: ROUTES.ARCHIVED_LISTS,
+      badge: archivedCount,
+    },
+    {
+      key: "history",
+      label: "Compras",
+      icon: "receipt-outline",
+      tab: ROUTES.SHOPPING_TAB,
+      route: ROUTES.PURCHASE_HISTORY,
+      badge: historyCount,
+    },
+    {
+      key: "scanned",
+      label: "Escaneos",
+      icon: "barcode-outline",
+      tab: ROUTES.SCANNER_TAB,
+      route: ROUTES.SCANNED_HISTORY,
+      badge: scannedCount,
+    },
+    {
+      key: "chat",
+      label: "Chat",
+      icon: "chatbubble-ellipses-outline",
+      isNew: true,
+      variant: "purple",
+      onPress: openChat,
+    },
+    {
+      key: "parking",
+      label: "Parking",
+      icon: "car-outline",
+      isNew: true,
+      variant: "green",
+      onPress: openParking,
     },
   ];
 

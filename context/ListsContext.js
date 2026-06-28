@@ -102,9 +102,22 @@ export function ListsProvider({ children }) {
 
   const archiveList = (listId) => {
     setLists((prev) =>
-      prev.map((l) =>
-        l.id === listId ? { ...l, archived: true, archivedAt: Date.now() } : l,
-      ),
+      prev.map((list) => {
+        if (list.id !== listId) {
+          return list;
+        }
+
+        const checkedItems = Array.isArray(list.items)
+          ? list.items.filter((item) => item?.checked === true)
+          : [];
+
+        return {
+          ...list,
+          items: checkedItems,
+          archived: true,
+          archivedAt: Date.now(),
+        };
+      }),
     );
   };
 

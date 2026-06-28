@@ -1,13 +1,46 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+const urlInfoValidator = v.object({
+  originalUrl: v.string(),
+  normalizedUrl: v.union(v.string(), v.null()),
+  hostname: v.union(v.string(), v.null()),
+
+  status: v.union(
+    v.literal("pending"),
+    v.literal("safe"),
+    v.literal("suspicious"),
+    v.literal("malicious"),
+  ),
+
+  riskScore: v.number(),
+  reason: v.string(),
+  provider: v.string(),
+  checkedAt: v.number(),
+});
+
+const messageStatusValidator = v.union(
+  v.literal("clean"),
+  v.literal("blocked"),
+  v.literal("warning"),
+  v.literal("pending_url_check"),
+);
+
 export default defineSchema({
   chatMessages: defineTable({
     room: v.string(),
     username: v.string(),
     text: v.string(),
+
     createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+
     status: v.optional(v.string()),
+
+    urls: v.optional(v.array(urlInfoValidator)),
+    messageStatus: v.optional(messageStatusValidator),
+    checkedLocallyAt: v.optional(v.number()),
+    checkedExternallyAt: v.optional(v.number()),
   }).index("by_room_createdAt", ["room", "createdAt"]),
 
   stores: defineTable({

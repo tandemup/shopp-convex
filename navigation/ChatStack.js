@@ -4,6 +4,7 @@ import { ROUTES } from "@/navigation/ROUTES";
 import ChatScreen from "@/screens/chat/ChatScreen";
 import ChatScreenResponsive from "@/screens/chat/ChatScreenResponsive";
 import ParkingScreen from "@/screens/chat/ParkingScreen";
+import YesterdayNewsScreen from "@/screens/chat/YesterdayNewsScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -28,6 +29,14 @@ export default function HistoryStack() {
         component={ChatScreen}
         options={{
           title: "Chat",
+        }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.YESTERDAY_NEWS_SCREEN}
+        component={YesterdayNewsScreen}
+        options={{
+          title: "Yesterday News",
         }}
       />
 

@@ -19,6 +19,7 @@ import EditScannedItemScreen from "@/screens/scanner/EditScannedItemScreen";
 import StoreMapScreen from "@/screens/stores/StoreMapScreen";
 import MenuScreen from "@/screens/settings/MenuScreen";
 import ParkingScreen from "@/screens/chat/ParkingScreen";
+import YesterdayNewsScreen from "@/screens/chat/YesterdayNewsScreen";
 import ChatScreen from "@/screens/chat/ChatScreen";
 import ChatScreenResponsive from "@/screens/chat/ChatScreenResponsive";
 

@@ -66,11 +66,16 @@ export default function ShoppingListScreen() {
 
   const assignedStore = list.storeId ? getStoreById(list.storeId) : null;
 
-  const total = useMemo(() => {
-    return list.items
-      .filter((i) => i.checked)
-      .reduce((sum, i) => sum + (i.priceInfo?.total ?? 0), 0);
+  const checkedItems = useMemo(() => {
+    return list.items.filter((item) => item.checked);
   }, [list.items]);
+
+  const total = useMemo(() => {
+    return checkedItems.reduce(
+      (sum, item) => sum + (item.priceInfo?.total ?? 0),
+      0,
+    );
+  }, [checkedItems]);
 
   const handleCreateNew = (name) => {
     const trimmed = name?.trim();
@@ -128,6 +133,15 @@ export default function ShoppingListScreen() {
       return;
     }
 
+    if (!checkedItems.length) {
+      safeAlert(
+        "Sin productos marcados",
+        "Marca al menos un producto para finalizar la compra.",
+        [{ text: "Aceptar" }],
+      );
+      return;
+    }
+
     if (!total || total <= 0) {
       safeAlert(
         "Sin importe",
@@ -139,7 +153,7 @@ export default function ShoppingListScreen() {
 
     safeAlert(
       "Finalizar compra",
-      "¿Quieres archivar esta lista y guardar el historial de compras?",
+      "¿Quieres archivar esta lista y guardar solo los productos marcados en el historial de compras?",
       [
         { text: "Cancelar", style: "cancel" },
         {
