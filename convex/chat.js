@@ -24,10 +24,10 @@ const urlInfoValidator = v.object({
     v.literal("malicious"),
   ),
 
-  riskScore: v.number(),
+  riskScore: v.float64(),
   reason: v.string(),
   provider: v.string(),
-  checkedAt: v.number(),
+  checkedAt: v.float64(),
 });
 
 const messageStatusValidator = v.union(
@@ -71,6 +71,14 @@ function hasMaliciousUrl(urls = []) {
   return urls.some((urlInfo) => urlInfo.status === "malicious");
 }
 
+function hasSuspiciousUrl(urls = []) {
+  return urls.some((urlInfo) => urlInfo.status === "suspicious");
+}
+
+function hasPendingUrl(urls = []) {
+  return urls.some((urlInfo) => urlInfo.status === "pending");
+}
+
 function getExpiresAt(createdAt) {
   return createdAt + MESSAGE_TTL_MS;
 }
@@ -81,6 +89,22 @@ function getMessageExpiresAt(message) {
 
 function isExpired(message, now = Date.now()) {
   return getMessageExpiresAt(message) <= now;
+}
+
+function getFinalMessageStatus(urls = [], requestedStatus) {
+  if (hasMaliciousUrl(urls)) {
+    return "blocked";
+  }
+
+  if (hasPendingUrl(urls)) {
+    return "pending_url_check";
+  }
+
+  if (hasSuspiciousUrl(urls)) {
+    return "warning";
+  }
+
+  return requestedStatus || "clean";
 }
 
 async function deleteExpiredMessagesInRoom(ctx, room) {
@@ -107,6 +131,7 @@ export const listMessages = query({
   args: {
     room: v.string(),
   },
+
   handler: async (ctx, args) => {
     const cleanRoom = cleanText(args.room) || DEFAULT_ROOM;
     const now = Date.now();
@@ -119,11 +144,15 @@ export const listMessages = query({
 
     return messages
       .filter((message) => {
-        if (message.status === "hidden") {
+        // Compatibilidad con mensajes antiguos:
+        // si message.status no existe, lo tratamos como "visible".
+        const visibilityStatus = message.status || "visible";
+
+        if (visibilityStatus === "hidden") {
           return false;
         }
 
-        if (message.status === "blocked") {
+        if (visibilityStatus === "blocked") {
           return false;
         }
 
@@ -145,16 +174,19 @@ export const sendMessage = mutation({
 
     urls: v.optional(v.array(urlInfoValidator)),
     messageStatus: v.optional(messageStatusValidator),
-    checkedLocallyAt: v.optional(v.number()),
+    checkedLocallyAt: v.optional(v.float64()),
   },
+
   handler: async (ctx, args) => {
     const cleanRoom = cleanText(args.room) || DEFAULT_ROOM;
     const cleanUsername = cleanText(args.username) || DEFAULT_USERNAME;
     const cleanMessageText = cleanText(args.text);
 
     const urls = Array.isArray(args.urls) ? args.urls : [];
-    const messageStatus = args.messageStatus || "clean";
-    const checkedLocallyAt = args.checkedLocallyAt || Date.now();
+    const now = Date.now();
+
+    const checkedLocallyAt = args.checkedLocallyAt ?? now;
+    const finalMessageStatus = getFinalMessageStatus(urls, args.messageStatus);
 
     if (!cleanMessageText) {
       throw new Error("El mensaje está vacío.");
@@ -176,21 +208,25 @@ export const sendMessage = mutation({
 
     await deleteExpiredMessagesInRoom(ctx, cleanRoom);
 
-    const now = Date.now();
-
-    await ctx.db.insert("chatMessages", {
+    const messageId = await ctx.db.insert("chatMessages", {
       room: cleanRoom,
       username: cleanUsername,
       text: cleanMessageText,
 
-      urls,
-      messageStatus,
-      checkedLocallyAt,
-
       createdAt: now,
-      expiresAt: getExpiresAt(now),
+      expiresAt: now + MESSAGE_TTL_MS,
+
       status: "visible",
+      messageStatus: finalMessageStatus,
+
+      checkedLocallyAt,
+      urls,
     });
+
+    return {
+      ok: true,
+      messageId,
+    };
   },
 });
 
@@ -198,6 +234,7 @@ export const hideMessage = mutation({
   args: {
     messageId: v.id("chatMessages"),
   },
+
   handler: async (ctx, args) => {
     await ctx.db.patch(args.messageId, {
       status: "hidden",
@@ -209,10 +246,29 @@ export const hideMessage = mutation({
   },
 });
 
+export const blockMessage = mutation({
+  args: {
+    messageId: v.id("chatMessages"),
+  },
+
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.messageId, {
+      status: "blocked",
+      messageStatus: "blocked",
+      checkedExternallyAt: Date.now(),
+    });
+
+    return {
+      ok: true,
+    };
+  },
+});
+
 export const deleteOldMessages = mutation({
   args: {
-    maxHours: v.optional(v.number()),
+    maxHours: v.optional(v.float64()),
   },
+
   handler: async (ctx, args) => {
     const maxHours = args.maxHours ?? MESSAGE_TTL_HOURS;
     const minCreatedAt = Date.now() - maxHours * 60 * 60 * 1000;
@@ -234,6 +290,7 @@ export const deleteOldMessages = mutation({
 
 export const deleteExpiredMessages = mutation({
   args: {},
+
   handler: async (ctx) => {
     const now = Date.now();
 
@@ -260,15 +317,60 @@ export const updateUrlStatus = mutation({
     urls: v.array(urlInfoValidator),
     messageStatus: messageStatusValidator,
   },
+
   handler: async (ctx, args) => {
+    const finalMessageStatus = getFinalMessageStatus(
+      args.urls,
+      args.messageStatus,
+    );
+
     await ctx.db.patch(args.messageId, {
       urls: args.urls,
-      messageStatus: args.messageStatus,
+      messageStatus: finalMessageStatus,
       checkedExternallyAt: Date.now(),
+
+      // Si una comprobación externa marca la URL como maliciosa,
+      // ocultamos el mensaje del chat.
+      status: finalMessageStatus === "blocked" ? "blocked" : "visible",
     });
 
     return {
       ok: true,
+    };
+  },
+});
+
+export const migrateMissingStatus = mutation({
+  args: {},
+
+  handler: async (ctx) => {
+    const messages = await ctx.db.query("chatMessages").collect();
+
+    let updated = 0;
+
+    for (const message of messages) {
+      const patch = {};
+
+      if (!message.status) {
+        patch.status = "visible";
+      }
+
+      if (!message.messageStatus) {
+        patch.messageStatus = "clean";
+      }
+
+      if (!message.expiresAt) {
+        patch.expiresAt = getExpiresAt(message.createdAt);
+      }
+
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(message._id, patch);
+        updated += 1;
+      }
+    }
+
+    return {
+      updated,
     };
   },
 });

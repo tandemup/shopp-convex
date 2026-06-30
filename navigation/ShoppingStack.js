@@ -18,10 +18,6 @@ import ScannedHistoryScreen from "@/screens/scanner/ScannedHistoryScreen";
 import EditScannedItemScreen from "@/screens/scanner/EditScannedItemScreen";
 import StoreMapScreen from "@/screens/stores/StoreMapScreen";
 import MenuScreen from "@/screens/settings/MenuScreen";
-import ParkingScreen from "@/screens/chat/ParkingScreen";
-import YesterdayNewsScreen from "@/screens/chat/YesterdayNewsScreen";
-import ChatScreen from "@/screens/chat/ChatScreen";
-import ChatScreenResponsive from "@/screens/chat/ChatScreenResponsive";
 
 const Stack = createNativeStackNavigator();
 export default function ShoppingStack() {
@@ -45,25 +41,6 @@ export default function ShoppingStack() {
         name={ROUTES.SHOPPING_LIST}
         component={ShoppingListScreen}
       />
-
-      <Stack.Screen
-        name={ROUTES.PARKING_SCREEN}
-        component={ParkingScreen}
-        options={{ title: "Parking" }}
-      />
-
-      <Stack.Screen
-        name={ROUTES.CHAT_SCREEN}
-        component={ChatScreen}
-        options={{ title: "Chat" }}
-      />
-
-      <Stack.Screen
-        name={ROUTES.CHAT_SCREEN_RESPONSIVE}
-        component={ChatScreenResponsive}
-        options={{ title: "Chat" }}
-      />
-
       <Stack.Screen name={ROUTES.ITEM_DETAIL} component={ItemDetailScreen} />
 
       <Stack.Screen name={ROUTES.STORES_HOME} component={StoresScreen} />

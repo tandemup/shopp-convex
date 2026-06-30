@@ -1,8 +1,15 @@
-import React, { useEffect, useRef, useMemo, useState } from "react";
+// screens/ChatScreen.js
+
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import {
-  ActivityIndicator,
   FlatList,
-  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -13,663 +20,577 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Audio } from "expo-av";
-import moment from "moment";
-import "moment/locale/es";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+
+import { Ionicons } from "@expo/vector-icons";
+import { safeAlert } from "@/components/ui/alert/safeAlert";
 import {
-  URL_STATUS,
-  analyzeMessageInput,
+  buildUrlSafetyRecords,
+  canOpenUrlByStatus,
+  extractUrlsFromText,
+  getInitialUrlStatus,
+  getUrlBlockedReason,
   getUrlStatusFromMessage,
   getUrlStatusLabel,
+  getUrlStatusTone,
+  normalizeUrl,
+  URL_STATUS,
 } from "@/services/urlSafety";
 
+const MAX_MESSAGE_LENGTH = 280;
 const DEFAULT_ROOM = "general";
 const DEFAULT_USERNAME = "anonymous";
+const SELF_DELETE_MS = 24 * 60 * 60 * 1000;
 
-const ROOM_OPTIONS = ["general", "familia", "trabajo", "compras"];
+const ROOM_OPTIONS = [
+  {
+    id: "general",
+    label: "General",
+    icon: "chatbubbles-outline",
+  },
+  {
+    id: "ofertas",
+    label: "Ofertas",
+    icon: "pricetag-outline",
+  },
+  {
+    id: "tiendas",
+    label: "Tiendas",
+    icon: "storefront-outline",
+  },
+  {
+    id: "parking",
+    label: "Parking",
+    icon: "car-outline",
+  },
+  {
+    id: "avisos",
+    label: "Avisos",
+    icon: "megaphone-outline",
+  },
+];
 
-const MAX_POST_LENGTH = 280;
-const LOW_CHARS_WARNING = 30;
+function now() {
+  return Date.now();
+}
 
-moment.locale("es");
+function formatRelativeTime(timestamp) {
+  if (!timestamp) return "";
 
-export default function ChatScreen({
-  room = DEFAULT_ROOM,
-  username = DEFAULT_USERNAME,
-}) {
-  const [activeRoom, setActiveRoom] = useState(room || DEFAULT_ROOM);
-  const [activeUsername, setActiveUsername] = useState(
-    username || DEFAULT_USERNAME,
+  const diff = Math.max(0, now() - timestamp);
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 1) return "ahora";
+  if (minutes === 1) return "hace 1 min";
+  if (minutes < 60) return `hace ${minutes} min`;
+  if (hours === 1) return "hace 1 hora";
+  if (hours < 24) return `hace ${hours} horas`;
+  if (days === 1) return "hace 1 día";
+
+  return `hace ${days} días`;
+}
+
+function formatTimeLeft(createdAt) {
+  if (!createdAt) return "";
+
+  const deleteAt = createdAt + SELF_DELETE_MS;
+  const remaining = deleteAt - now();
+
+  if (remaining <= 0) {
+    return "Se borrará pronto";
+  }
+
+  const totalMinutes = Math.floor(remaining / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours <= 0) {
+    return `Se borra en ${minutes} min`;
+  }
+
+  return `Se borra en ${hours} h ${minutes} min`;
+}
+
+function isImageUrl(url) {
+  if (!url) return false;
+
+  const clean = url.toLowerCase().split("?")[0];
+
+  return (
+    clean.endsWith(".jpg") ||
+    clean.endsWith(".jpeg") ||
+    clean.endsWith(".png") ||
+    clean.endsWith(".gif") ||
+    clean.endsWith(".webp")
   );
-  const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
-  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
-  const [now, setNow] = useState(Date.now());
-  const [errorMessage, setErrorMessage] = useState("");
-  const flatListRef = useRef(null);
+}
 
-  const messages = useQuery(api.chat.listMessages, {
-    room: activeRoom,
-  });
+function splitTextWithUrls(text) {
+  if (!text) return [];
 
-  const sendMessage = useMutation(api.chat.sendMessage);
+  const regex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
 
-  const data = useMemo(() => {
-    return Array.isArray(messages) ? messages : [];
-  }, [messages]);
+  while ((match = regex.exec(text)) !== null) {
+    const url = match[0];
+    const start = match.index;
 
-  const localAnalysis = useMemo(() => {
-    return analyzeMessageInput(text);
-  }, [text]);
-
-  const hasSuspiciousDraftUrl = localAnalysis.urls.some(
-    (item) => item.status === URL_STATUS.SUSPICIOUS,
-  );
-
-  const hasMaliciousDraftUrl = localAnalysis.urls.some(
-    (item) => item.status === URL_STATUS.MALICIOUS,
-  );
-
-  const isLoading = messages === undefined;
-
-  const textLength = text.length;
-  const remainingChars = MAX_POST_LENGTH - textLength;
-  const isOverLimit = remainingChars < 0;
-  const isNearLimit = remainingChars <= LOW_CHARS_WARNING;
-  const canSend =
-    Boolean(text.trim()) && !sending && !isOverLimit && !hasMaliciousDraftUrl;
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      setNow(Date.now());
-    }, 30000);
-
-    return () => clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
-    if (data.length > 0) {
-      scrollToBottom(true);
+    if (start > lastIndex) {
+      parts.push({
+        type: "text",
+        value: text.slice(lastIndex, start),
+      });
     }
-  }, [data.length]);
 
-  function scrollToBottom(animated = true) {
-    requestAnimationFrame(() => {
-      flatListRef.current?.scrollToEnd({ animated });
+    parts.push({
+      type: "url",
+      value: url,
+    });
+
+    lastIndex = start + url.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({
+      type: "text",
+      value: text.slice(lastIndex),
     });
   }
 
-  async function playMessageTone() {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        require("@/assets/messageTone.mp3"),
-      );
+  return parts;
+}
 
-      await sound.playAsync();
+function UrlBadge({ status }) {
+  const tone = getUrlStatusTone(status);
+  const label = getUrlStatusLabel(status);
 
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          sound.unloadAsync();
-        }
-      });
-    } catch (error) {
-      console.error("Error reproduciendo message-tone.mp3:", error);
-    }
-  }
-
-  async function handleSend() {
-    const cleanText = text.trim();
-    const cleanUsername = activeUsername.trim() || DEFAULT_USERNAME;
-    const cleanRoom = activeRoom.trim() || DEFAULT_ROOM;
-
-    if (!cleanText || sending) {
-      return;
-    }
-
-    if (cleanText.length > MAX_POST_LENGTH) {
-      setErrorMessage(
-        `El mensaje supera el límite de ${MAX_POST_LENGTH} caracteres.`,
-      );
-      return;
-    }
-
-    const analyzedMessage = analyzeMessageInput(cleanText);
-
-    if (!analyzedMessage.canPost) {
-      const blockedUrl = analyzedMessage.urls.find(
-        (item) => item.status === URL_STATUS.MALICIOUS,
-      );
-
-      setErrorMessage(
-        blockedUrl?.reason
-          ? `No se puede publicar este enlace: ${blockedUrl.reason}.`
-          : "El mensaje contiene una URL bloqueada o peligrosa.",
-      );
-      return;
-    }
-
-    setText("");
-    setSending(true);
-    setErrorMessage("");
-
-    try {
-      await sendMessage({
-        room: cleanRoom,
-        username: cleanUsername,
-        text: analyzedMessage.text,
-        urls: analyzedMessage.urls,
-        messageStatus: analyzedMessage.messageStatus,
-        checkedLocallyAt: analyzedMessage.checkedLocallyAt,
-      });
-
-      playMessageTone();
-      setNow(Date.now());
-      scrollToBottom(true);
-    } catch (error) {
-      console.error("Error enviando mensaje con Convex:", error);
-      setText(cleanText);
-      setErrorMessage(error?.message || "No se pudo enviar el mensaje.");
-    } finally {
-      setSending(false);
-    }
-  }
-
-  function handleSelectRoom(nextRoom) {
-    if (!nextRoom || nextRoom === activeRoom) {
-      return;
-    }
-
-    setActiveRoom(nextRoom);
-    setErrorMessage("");
-  }
-
-  function handleChangeText(value) {
-    setText(value);
-
-    if (errorMessage) {
-      setErrorMessage("");
-    }
-  }
-
-  function formatElapsedTime(createdAt) {
-    if (!createdAt) {
-      return "";
-    }
-
-    const date = moment(createdAt);
-
-    if (!date.isValid()) {
-      return "";
-    }
-
-    return date.from(now);
-  }
-
-  function getMessageExpiresAt(item) {
-    if (item.expiresAt) {
-      return item.expiresAt;
-    }
-
-    const createdAt = item.createdAt ?? item._creationTime;
-
-    if (!createdAt) {
-      return null;
-    }
-
-    return createdAt + 24 * 60 * 60 * 1000;
-  }
-
-  function formatTimeUntilDelete(item) {
-    const expiresAt = getMessageExpiresAt(item);
-
-    if (!expiresAt) {
-      return "";
-    }
-
-    const remainingMs = expiresAt - now;
-
-    if (remainingMs <= 0) {
-      return "Caducado";
-    }
-
-    const totalMinutes = Math.ceil(remainingMs / (60 * 1000));
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-
-    if (hours <= 0) {
-      return `Se borra en ${minutes} min`;
-    }
-
-    if (minutes === 0) {
-      return `Se borra en ${hours} h`;
-    }
-
-    return `Se borra en ${hours} h ${minutes} min`;
-  }
-
-  function cleanDisplayUrl(value = "") {
-    return String(value || "")
-      .trim()
-      .replace(/[.,!?;:)\]}]+$/, "");
-  }
-
-  function isImageUrl(value = "") {
-    const cleanUrl = cleanDisplayUrl(value).toLowerCase();
-
-    return /\.(jpg|jpeg|png|webp|gif|svg)(\?.*)?$/i.test(cleanUrl);
-  }
-
-  function getSafeUrlForRender(part, messageUrls = []) {
-    const cleanPart = cleanDisplayUrl(part);
-    const urlInfo = getUrlStatusFromMessage(cleanPart, messageUrls);
-
-    return {
-      urlInfo,
-      status: urlInfo?.status || URL_STATUS.PENDING,
-      url: urlInfo?.normalizedUrl || cleanPart,
-    };
-  }
-
-  async function handleOpenUrl(url, urlInfo) {
-    if (urlInfo?.status === URL_STATUS.MALICIOUS) {
-      setErrorMessage("Este enlace está bloqueado por seguridad.");
-      return;
-    }
-
-    if (urlInfo?.status === URL_STATUS.SUSPICIOUS) {
-      setErrorMessage(
-        "Este enlace parece sospechoso. Revísalo antes de abrirlo.",
-      );
-      return;
-    }
-
-    try {
-      const supported = await Linking.canOpenURL(url);
-
-      if (supported) {
-        await Linking.openURL(url);
-      }
-    } catch (error) {
-      console.error("Error abriendo enlace:", error);
-      setErrorMessage("No se pudo abrir el enlace.");
-    }
-  }
-
-  function renderMessageText(value, messageUrls = []) {
-    const content = String(value || "");
-    const urlRegex = /(https?:\/\/[^\s<>"']+)/gi;
-    const parts = content.split(urlRegex);
-
-    return (
-      <View style={styles.messageBody}>
-        {parts.map((part, index) => {
-          const isUrl = /^https?:\/\/[^\s<>"']+$/i.test(part);
-
-          if (!isUrl) {
-            if (!part) return null;
-
-            return (
-              <Text key={`text-${index}`} style={styles.messageText}>
-                {part}
-              </Text>
-            );
-          }
-
-          const { urlInfo, status, url } = getSafeUrlForRender(
-            part,
-            messageUrls,
-          );
-
-          const isBlocked = status === URL_STATUS.MALICIOUS;
-          const isSuspicious = status === URL_STATUS.SUSPICIOUS;
-          const label = getUrlStatusLabel(status);
-          const canPreviewImage =
-            isImageUrl(url) &&
-            status !== URL_STATUS.MALICIOUS &&
-            status !== URL_STATUS.SUSPICIOUS;
-
-          return (
-            <View key={`url-block-${index}`} style={styles.urlBlock}>
-              <Text
-                style={[
-                  styles.messageLink,
-                  status === URL_STATUS.PENDING && styles.messageLinkPending,
-                  status === URL_STATUS.SAFE && styles.messageLinkSafe,
-                  isSuspicious && styles.messageLinkSuspicious,
-                  isBlocked && styles.messageLinkBlocked,
-                ]}
-                onPress={() => handleOpenUrl(url, urlInfo)}
-              >
-                {cleanDisplayUrl(part)}
-                {status !== URL_STATUS.SAFE ? ` (${label})` : ""}
-              </Text>
-
-              {canPreviewImage ? (
-                <Pressable
-                  onPress={() => handleOpenUrl(url, urlInfo)}
-                  style={({ pressed }) => [
-                    styles.imagePreviewButton,
-                    pressed && styles.imagePreviewButtonPressed,
-                  ]}
-                >
-                  <Image
-                    source={{ uri: url }}
-                    style={styles.messageImage}
-                    resizeMode="cover"
-                  />
-                </Pressable>
-              ) : null}
-            </View>
-          );
-        })}
-      </View>
-    );
-  }
-
-  function renderRoomButton(roomName) {
-    const selected = roomName === activeRoom;
-
-    return (
-      <Pressable
-        key={roomName}
-        onPress={() => handleSelectRoom(roomName)}
-        style={({ pressed }) => [
-          styles.roomButton,
-          selected && styles.roomButtonSelected,
-          pressed && styles.roomButtonPressed,
+  return (
+    <View
+      style={[
+        styles.urlBadge,
+        tone === "safe" && styles.urlBadgeSafe,
+        tone === "pending" && styles.urlBadgePending,
+        tone === "suspicious" && styles.urlBadgeSuspicious,
+        tone === "malicious" && styles.urlBadgeMalicious,
+      ]}
+    >
+      <Text
+        style={[
+          styles.urlBadgeText,
+          tone === "safe" && styles.urlBadgeTextSafe,
+          tone === "pending" && styles.urlBadgeTextPending,
+          tone === "suspicious" && styles.urlBadgeTextSuspicious,
+          tone === "malicious" && styles.urlBadgeTextMalicious,
         ]}
       >
-        <Text
-          style={[
-            styles.roomButtonText,
-            selected && styles.roomButtonTextSelected,
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function MessageText({ message, onOpenUrl }) {
+  const text = message?.text || "";
+  const parts = splitTextWithUrls(text);
+
+  return (
+    <Text style={styles.messageText}>
+      {parts.map((part, index) => {
+        if (part.type === "text") {
+          return (
+            <Text key={`text-${index}`} style={styles.messageText}>
+              {part.value}
+            </Text>
+          );
+        }
+
+        const normalizedUrl = normalizeUrl(part.value);
+        const status = getUrlStatusFromMessage(message, normalizedUrl);
+        const canOpen = canOpenUrlByStatus(status);
+
+        return (
+          <Text
+            key={`url-${index}`}
+            style={[styles.messageLink, !canOpen && styles.messageLinkDisabled]}
+            onPress={() => onOpenUrl(normalizedUrl, status)}
+          >
+            {part.value}
+          </Text>
+        );
+      })}
+    </Text>
+  );
+}
+
+function MessageCard({ item, onOpenUrl }) {
+  const urls = useMemo(() => {
+    return extractUrlsFromText(item?.text || "");
+  }, [item?.text]);
+
+  return (
+    <View style={styles.messageCard}>
+      <View style={styles.messageHeader}>
+        <Text style={styles.messageUser}>
+          {item.username || DEFAULT_USERNAME}
+        </Text>
+
+        <View style={styles.messageMeta}>
+          <Text style={styles.messageAge}>
+            {formatRelativeTime(item.createdAt)}
+          </Text>
+
+          <Text style={styles.messageClock}>{item.displayTime || ""}</Text>
+        </View>
+      </View>
+
+      <MessageText message={item} onOpenUrl={onOpenUrl} />
+
+      {urls.length > 0 && (
+        <View style={styles.urlBadgesBlock}>
+          {urls.map((url) => {
+            const normalizedUrl = normalizeUrl(url);
+            const status = getUrlStatusFromMessage(item, normalizedUrl);
+
+            return (
+              <UrlBadge
+                key={`${item.id || item._id}-${normalizedUrl}`}
+                status={status}
+              />
+            );
+          })}
+        </View>
+      )}
+
+      <Text style={styles.selfDeleteText}>
+        {formatTimeLeft(item.createdAt)}
+      </Text>
+    </View>
+  );
+}
+
+export default function ChatScreen({ navigation }) {
+  const listRef = useRef(null);
+
+  const [room, setRoom] = useState(DEFAULT_ROOM);
+  const [username, setUsername] = useState(DEFAULT_USERNAME);
+  const [input, setInput] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+
+  const [messages, setMessages] = useState([
+    {
+      id: "demo-1",
+      room: DEFAULT_ROOM,
+      username: "sam",
+      text: "https://es.wikipedia.org/wiki/Guglielmo_Marconi",
+      createdAt: Date.now() - 13 * 60 * 60 * 1000,
+      displayTime: "20:44",
+      urlSafety: [
+        {
+          url: "https://es.wikipedia.org/wiki/Guglielmo_Marconi",
+          status: URL_STATUS.TRUSTED,
+          checkedAt: Date.now() - 13 * 60 * 60 * 1000,
+        },
+      ],
+    },
+    {
+      id: "demo-2",
+      room: DEFAULT_ROOM,
+      username: "sam",
+      text: "https://www.google.com/finance/beta?hl=es",
+      createdAt: Date.now() - 13 * 60 * 60 * 1000,
+      displayTime: "20:46",
+      urlSafety: [
+        {
+          url: "https://www.google.com/finance/beta?hl=es",
+          status: URL_STATUS.PENDING,
+          checkedAt: null,
+        },
+      ],
+    },
+  ]);
+
+  const filteredMessages = useMemo(() => {
+    const activeRoom = room.trim() || DEFAULT_ROOM;
+
+    return messages
+      .filter((message) => {
+        return (message.room || DEFAULT_ROOM) === activeRoom;
+      })
+      .filter((message) => {
+        if (!message.createdAt) return true;
+
+        return now() - message.createdAt < SELF_DELETE_MS;
+      })
+      .sort((a, b) => {
+        return (a.createdAt || 0) - (b.createdAt || 0);
+      });
+  }, [messages, room]);
+
+  const remainingChars = MAX_MESSAGE_LENGTH - input.length;
+  const canPost = input.trim().length > 0 && remainingChars >= 0;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessages((prev) => {
+        return prev.filter((message) => {
+          if (!message.createdAt) return true;
+
+          return now() - message.createdAt < SELF_DELETE_MS;
+        });
+      });
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      listRef.current?.scrollToEnd?.({ animated: true });
+    }, 100);
+
+    return () => clearTimeout(timeout);
+  }, [filteredMessages.length]);
+
+  const handleOpenUrl = useCallback(async (url, status) => {
+    const safeStatus = status || getInitialUrlStatus(url);
+
+    if (!canOpenUrlByStatus(safeStatus)) {
+      const reason = getUrlBlockedReason(safeStatus);
+
+      safeAlert("Enlace no disponible", reason);
+      return;
+    }
+
+    try {
+      const normalizedUrl = normalizeUrl(url);
+
+      if (!normalizedUrl) {
+        safeAlert("URL no válida", "La URL no es válida.");
+        return;
+      }
+
+      const supported = await Linking.canOpenURL(normalizedUrl);
+
+      if (!supported) {
+        safeAlert("No se puede abrir", "No se puede abrir este enlace.");
+        return;
+      }
+
+      await Linking.openURL(normalizedUrl);
+    } catch {
+      safeAlert("Error", "Ha ocurrido un error al abrir el enlace.");
+    }
+  }, []);
+
+  const handlePost = useCallback(() => {
+    const cleanText = input.trim();
+
+    if (!cleanText) return;
+
+    if (cleanText.length > MAX_MESSAGE_LENGTH) {
+      safeAlert(
+        "Mensaje demasiado largo",
+        `El mensaje no puede superar ${MAX_MESSAGE_LENGTH} caracteres.`,
+      );
+      return;
+    }
+
+    const createdAt = Date.now();
+    const urlSafety = buildUrlSafetyRecords(cleanText);
+
+    const newMessage = {
+      id: `local-${createdAt}`,
+      room: room.trim() || DEFAULT_ROOM,
+      username: username.trim() || DEFAULT_USERNAME,
+      text: cleanText,
+      createdAt,
+      displayTime: new Date(createdAt).toLocaleTimeString("es-ES", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      urlSafety,
+    };
+
+    setMessages((prev) => [...prev, newMessage]);
+    setInput("");
+
+    setTimeout(() => {
+      listRef.current?.scrollToEnd?.({ animated: true });
+    }, 100);
+  }, [input, room, username]);
+
+  const renderItem = useCallback(
+    ({ item }) => {
+      return <MessageCard item={item} onOpenUrl={handleOpenUrl} />;
+    },
+    [handleOpenUrl],
+  );
+
+  const renderRoomOption = useCallback(
+    (option) => {
+      const selected = room === option.id;
+
+      return (
+        <Pressable
+          key={option.id}
+          onPress={() => setRoom(option.id)}
+          style={({ pressed }) => [
+            styles.roomOption,
+            selected && styles.roomOptionSelected,
+            pressed && styles.roomOptionPressed,
           ]}
         >
-          {roomName}
-        </Text>
-      </Pressable>
-    );
-  }
+          <Ionicons
+            name={option.icon}
+            size={18}
+            color={selected ? "#ffffff" : "#111827"}
+          />
 
-  function renderMessageStatus(item) {
-    const urls = Array.isArray(item.urls) ? item.urls : [];
-
-    if (!urls.length) {
-      return null;
-    }
-
-    const hasMalicious = urls.some(
-      (urlInfo) => urlInfo.status === URL_STATUS.MALICIOUS,
-    );
-
-    const hasSuspicious = urls.some(
-      (urlInfo) => urlInfo.status === URL_STATUS.SUSPICIOUS,
-    );
-
-    const hasPending = urls.some(
-      (urlInfo) => urlInfo.status === URL_STATUS.PENDING,
-    );
-
-    if (hasMalicious) {
-      return (
-        <View style={[styles.urlStatusPill, styles.urlStatusPillBlocked]}>
-          <Text style={[styles.urlStatusText, styles.urlStatusTextBlocked]}>
-            Enlace bloqueado
+          <Text
+            style={[
+              styles.roomOptionText,
+              selected && styles.roomOptionTextSelected,
+            ]}
+          >
+            {option.label}
           </Text>
-        </View>
+        </Pressable>
       );
-    }
-
-    if (hasSuspicious) {
-      return (
-        <View style={[styles.urlStatusPill, styles.urlStatusPillSuspicious]}>
-          <Text style={[styles.urlStatusText, styles.urlStatusTextSuspicious]}>
-            Contiene enlace sospechoso
-          </Text>
-        </View>
-      );
-    }
-
-    if (hasPending) {
-      return (
-        <View style={[styles.urlStatusPill, styles.urlStatusPillPending]}>
-          <Text style={[styles.urlStatusText, styles.urlStatusTextPending]}>
-            Enlace pendiente de comprobar
-          </Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={[styles.urlStatusPill, styles.urlStatusPillSafe]}>
-        <Text style={[styles.urlStatusText, styles.urlStatusTextSafe]}>
-          Enlace verificado
-        </Text>
-      </View>
-    );
-  }
-
-  function renderMessage({ item }) {
-    const createdAt = item.createdAt ?? item._creationTime;
-    const messageUrls = Array.isArray(item.urls) ? item.urls : [];
-
-    const date = createdAt ? moment(createdAt).format("HH:mm") : "";
-    const elapsedTime = formatElapsedTime(createdAt);
-    const deleteCountdown = formatTimeUntilDelete(item);
-
-    return (
-      <View style={styles.messageCard}>
-        <View style={styles.messageHeader}>
-          <Text style={styles.username}>
-            {item.username || DEFAULT_USERNAME}
-          </Text>
-
-          <View style={styles.messageTimeBlock}>
-            <Text style={styles.elapsedTime}>{elapsedTime}</Text>
-            <Text style={styles.time}>{date}</Text>
-
-            {deleteCountdown ? (
-              <Text style={styles.deleteCountdown}>{deleteCountdown}</Text>
-            ) : null}
-          </View>
-        </View>
-
-        {renderMessageText(item.text, messageUrls)}
-
-        {renderMessageStatus(item)}
-      </View>
-    );
-  }
-
-  function renderDraftUrlWarning() {
-    if (!text.trim() || !localAnalysis.urls.length) {
-      return null;
-    }
-
-    if (hasMaliciousDraftUrl) {
-      const blockedUrl = localAnalysis.urls.find(
-        (item) => item.status === URL_STATUS.MALICIOUS,
-      );
-
-      return (
-        <View style={[styles.draftUrlBox, styles.draftUrlBoxBlocked]}>
-          <Text style={[styles.draftUrlText, styles.draftUrlTextBlocked]}>
-            URL bloqueada: {blockedUrl?.reason || "enlace peligroso"}.
-          </Text>
-        </View>
-      );
-    }
-
-    if (hasSuspiciousDraftUrl) {
-      return (
-        <View style={[styles.draftUrlBox, styles.draftUrlBoxSuspicious]}>
-          <Text style={[styles.draftUrlText, styles.draftUrlTextSuspicious]}>
-            El mensaje contiene un enlace sospechoso. Se publicará con aviso.
-          </Text>
-        </View>
-      );
-    }
-
-    return (
-      <View style={[styles.draftUrlBox, styles.draftUrlBoxPending]}>
-        <Text style={[styles.draftUrlText, styles.draftUrlTextPending]}>
-          El enlace se publicará como pendiente de comprobar.
-        </Text>
-      </View>
-    );
-  }
+    },
+    [room],
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.screenShell}>
-        <KeyboardAvoidingView
-          style={styles.phoneFrame}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <View style={styles.container}>
-            <View style={styles.header}>
-              <View style={styles.headerTop}>
-                <View style={styles.titleBlock}>
-                  <Text style={styles.title}>Chat</Text>
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.topBar}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => {
+              if (navigation?.goBack) {
+                navigation.goBack();
+              }
+            }}
+          >
+            <Ionicons name="arrow-back" size={26} color="#111827" />
+          </Pressable>
 
-                  <Text style={styles.subtitle}>
-                    Room: {activeRoom} · Usuario:{" "}
-                    {activeUsername.trim() || DEFAULT_USERNAME}
-                  </Text>
-                </View>
+          <Text style={styles.topTitle}>Chat</Text>
 
-                <Pressable
-                  onPress={() => setShowSettingsPanel((current) => !current)}
-                  style={({ pressed }) => [
-                    styles.settingsToggleButton,
-                    pressed && styles.settingsToggleButtonPressed,
-                  ]}
-                >
-                  <Text style={styles.settingsToggleButtonText}>
-                    {showSettingsPanel ? "Ocultar" : "Ajustes"}
-                  </Text>
-                </Pressable>
-              </View>
+          <View style={styles.topRightSpace} />
+        </View>
 
-              {showSettingsPanel ? (
-                <View style={styles.settingsPanel}>
-                  <View style={styles.fieldBlock}>
-                    <Text style={styles.fieldLabel}>Rooms</Text>
-
-                    <View style={styles.roomsRow}>
-                      {ROOM_OPTIONS.map(renderRoomButton)}
-                    </View>
-                  </View>
-
-                  <View style={styles.fieldBlock}>
-                    <Text style={styles.fieldLabel}>Username</Text>
-
-                    <TextInput
-                      value={activeUsername}
-                      onChangeText={setActiveUsername}
-                      placeholder="anonymous"
-                      placeholderTextColor="#888"
-                      style={styles.usernameInput}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      maxLength={32}
-                    />
-                  </View>
-                </View>
-              ) : null}
-            </View>
-
-            {isLoading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator />
-                <Text style={styles.loadingText}>Cargando mensajes...</Text>
-              </View>
-            ) : (
-              <FlatList
-                ref={flatListRef}
-                data={data}
-                keyExtractor={(item) => item._id}
-                renderItem={renderMessage}
-                contentContainerStyle={styles.messagesList}
-                keyboardShouldPersistTaps="handled"
-                onContentSizeChange={() => scrollToBottom(true)}
-                onLayout={() => scrollToBottom(false)}
-                ListEmptyComponent={
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>
-                      Todavía no hay mensajes en esta room.
-                    </Text>
-                  </View>
-                }
-              />
-            )}
-
-            {renderDraftUrlWarning()}
-
-            {errorMessage ? (
-              <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{errorMessage}</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.inputRow}>
-              <View
-                style={[
-                  styles.composerBox,
-                  isOverLimit && styles.composerBoxError,
-                  hasMaliciousDraftUrl && styles.composerBoxError,
-                ]}
-              >
-                <TextInput
-                  value={text}
-                  onChangeText={handleChangeText}
-                  placeholder="¿Qué está pasando en la compra?"
-                  placeholderTextColor="#888"
-                  style={styles.input}
-                  multiline
-                  maxLength={MAX_POST_LENGTH}
-                  returnKeyType="send"
-                  onSubmitEditing={
-                    Platform.OS === "web" ? handleSend : undefined
-                  }
-                />
-
-                <View style={styles.composerFooter}>
-                  <Text style={styles.composerHint}>
-                    Se permiten enlaces e imágenes por URL http:// o https://
-                  </Text>
-
-                  <Text
-                    style={[
-                      styles.charCounter,
-                      isNearLimit && styles.charCounterWarning,
-                      isOverLimit && styles.charCounterError,
-                    ]}
-                  >
-                    {textLength}/{MAX_POST_LENGTH}
-                  </Text>
-                </View>
+        <View style={styles.page}>
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardTitleBlock}>
+                <Text style={styles.title}>Chat</Text>
+                <Text style={styles.subtitle}>
+                  Room: {room || DEFAULT_ROOM} · Usuario:{" "}
+                  {username || DEFAULT_USERNAME}
+                </Text>
               </View>
 
               <Pressable
-                onPress={handleSend}
-                disabled={!canSend}
-                style={({ pressed }) => [
-                  styles.sendButton,
-                  !canSend && styles.sendButtonDisabled,
-                  pressed && canSend && styles.sendButtonPressed,
-                ]}
+                style={styles.settingsButton}
+                onPress={() => setShowSettings((prev) => !prev)}
               >
-                <Text style={styles.sendButtonText}>
-                  {sending ? "..." : "Post"}
+                <Text style={styles.settingsButtonText}>
+                  {showSettings ? "Ocultar" : "Ajustes"}
                 </Text>
               </Pressable>
             </View>
+
+            {showSettings && (
+              <View style={styles.settingsPanel}>
+                <Text style={styles.settingsLabel}>Room</Text>
+
+                <View style={styles.roomPicker}>
+                  {ROOM_OPTIONS.map(renderRoomOption)}
+                </View>
+                <Text style={styles.settingsLabel}>Usuario</Text>
+                <TextInput
+                  value={username}
+                  onChangeText={setUsername}
+                  placeholder="anonymous"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.settingsInput}
+                />
+              </View>
+            )}
+
+            <FlatList
+              ref={listRef}
+              data={filteredMessages}
+              keyExtractor={(item) => String(item.id || item._id)}
+              renderItem={renderItem}
+              style={styles.list}
+              contentContainerStyle={styles.listContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              ListEmptyComponent={
+                <View style={styles.emptyBlock}>
+                  <Text style={styles.emptyTitle}>Todavía no hay mensajes</Text>
+                  <Text style={styles.emptyText}>
+                    Publica un mensaje para iniciar el chat.
+                  </Text>
+                </View>
+              }
+            />
+
+            <View style={styles.inputBlock}>
+              <TextInput
+                value={input}
+                onChangeText={(text) => {
+                  if (text.length <= MAX_MESSAGE_LENGTH) {
+                    setInput(text);
+                  } else {
+                    setInput(text.slice(0, MAX_MESSAGE_LENGTH));
+                  }
+                }}
+                placeholder="¿Qué está pasando en la compra?"
+                placeholderTextColor="#8a8a8a"
+                multiline
+                maxLength={MAX_MESSAGE_LENGTH}
+                style={styles.input}
+              />
+
+              <View style={styles.inputFooter}>
+                <Text style={styles.inputHint}>
+                  Se permiten enlaces e imágenes por URL http:// o https://
+                </Text>
+
+                <Text
+                  style={[
+                    styles.counter,
+                    remainingChars < 20 && styles.counterWarning,
+                  ]}
+                >
+                  {input.length}/{MAX_MESSAGE_LENGTH}
+                </Text>
+              </View>
+
+              <Pressable
+                style={[
+                  styles.postButton,
+                  !canPost && styles.postButtonDisabled,
+                ]}
+                disabled={!canPost}
+                onPress={handlePost}
+              >
+                <Text style={styles.postButtonText}>Post</Text>
+              </Pressable>
+            </View>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -677,480 +598,389 @@ export default function ChatScreen({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#e9e9e9",
+    backgroundColor: "#f3f4f6",
   },
 
-  screenShell: {
+  screen: {
     flex: 1,
-    alignItems: Platform.OS === "web" ? "center" : "stretch",
-    justifyContent: Platform.OS === "web" ? "center" : "flex-start",
-    paddingHorizontal: Platform.OS === "web" ? 16 : 0,
-    paddingVertical: Platform.OS === "web" ? 16 : 0,
-    backgroundColor: Platform.OS === "web" ? "#e9e9e9" : "#f6f6f6",
+    backgroundColor: "#f3f4f6",
   },
 
-  phoneFrame: {
-    flex: 1,
-    width: Platform.OS === "web" ? "100%" : undefined,
-    maxWidth: Platform.OS === "web" ? 430 : undefined,
-    maxHeight: Platform.OS === "web" ? 860 : undefined,
-    borderRadius: Platform.OS === "web" ? 26 : 0,
-    overflow: "hidden",
-    backgroundColor: "#f6f6f6",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: Platform.OS === "web" ? 0.14 : 0,
-    shadowRadius: 30,
-    elevation: Platform.OS === "web" ? 8 : 0,
-  },
-
-  container: {
-    flex: 1,
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    backgroundColor: "#f6f6f6",
-  },
-
-  header: {
-    marginBottom: 12,
-  },
-
-  headerTop: {
+  topBar: {
+    height: 72,
+    backgroundColor: "#fff1d6",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 12,
+    paddingHorizontal: 18,
   },
 
-  titleBlock: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  title: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#111",
-  },
-
-  subtitle: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#666",
-  },
-
-  settingsToggleButton: {
-    minHeight: 36,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    backgroundColor: "white",
+  backButton: {
+    width: 42,
+    height: 42,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  settingsToggleButtonPressed: {
-    opacity: 0.75,
+  topTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#111827",
   },
 
-  settingsToggleButtonText: {
-    fontSize: 13,
+  topRightSpace: {
+    width: 42,
+  },
+
+  page: {
+    flex: 1,
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+  },
+
+  card: {
+    width: "100%",
+    maxWidth: 540,
+    flex: 1,
+    backgroundColor: "#f8f8f8",
+    borderRadius: 28,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    elevation: 6,
+  },
+
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 10,
+  },
+
+  cardTitleBlock: {
+    flex: 1,
+  },
+
+  title: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#111827",
+  },
+
+  subtitle: {
+    marginTop: 2,
+    fontSize: 14,
+    color: "#555",
+  },
+
+  settingsButton: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+  },
+
+  settingsButtonText: {
+    fontSize: 14,
     fontWeight: "800",
-    color: "#222",
+    color: "#111827",
   },
 
   settingsPanel: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: "white",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    marginBottom: 12,
+  },
+
+  settingsLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#374151",
+    marginBottom: 6,
+  },
+
+  settingsInput: {
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#111827",
+    marginBottom: 12,
+  },
+
+  list: {
+    flex: 1,
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+  },
+
+  listContent: {
+    paddingVertical: 12,
     gap: 12,
   },
 
-  fieldBlock: {
-    gap: 6,
+  emptyBlock: {
+    padding: 24,
+    alignItems: "center",
   },
 
-  fieldLabel: {
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  emptyText: {
+    marginTop: 6,
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+  },
+
+  messageCard: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+
+  messageHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 10,
+    gap: 12,
+  },
+
+  messageUser: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#111827",
+  },
+
+  messageMeta: {
+    alignItems: "flex-end",
+  },
+
+  messageAge: {
     fontSize: 13,
-    fontWeight: "700",
-    color: "#333",
+    fontWeight: "800",
+    color: "#4b5563",
   },
 
-  roomsRow: {
+  messageClock: {
+    marginTop: 2,
+    fontSize: 13,
+    color: "#6b7280",
+  },
+
+  messageText: {
+    fontSize: 16,
+    lineHeight: 22,
+    color: "#111827",
+    fontWeight: "500",
+  },
+
+  messageLink: {
+    color: "#0066cc",
+    fontWeight: "800",
+    textDecorationLine: "underline",
+  },
+
+  messageLinkDisabled: {
+    color: "#8a6d00",
+    textDecorationLine: "none",
+  },
+
+  urlBadgesBlock: {
+    marginTop: 12,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
   },
 
-  roomButton: {
-    minHeight: 36,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    backgroundColor: "#f8f8f8",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  roomButtonSelected: {
-    borderColor: "#222",
-    backgroundColor: "#222",
-  },
-
-  roomButtonPressed: {
-    opacity: 0.75,
-  },
-
-  roomButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#333",
-  },
-
-  roomButtonTextSelected: {
-    color: "white",
-  },
-
-  usernameInput: {
-    minHeight: 42,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: Platform.OS === "ios" ? 10 : 8,
-    backgroundColor: "#fff",
-    fontSize: 15,
-    color: "#111",
-  },
-
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  loadingText: {
-    marginTop: 8,
-    color: "#666",
-  },
-
-  messagesList: {
-    paddingBottom: 12,
-  },
-
-  emptyContainer: {
-    paddingTop: 32,
-    alignItems: "center",
-  },
-
-  emptyText: {
-    color: "#777",
-    fontSize: 14,
-  },
-
-  messageCard: {
-    backgroundColor: "white",
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
-  },
-
-  messageHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 6,
-    gap: 12,
-  },
-
-  username: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#222",
-  },
-
-  messageTimeBlock: {
-    alignItems: "flex-end",
-    gap: 2,
-  },
-
-  elapsedTime: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#555",
-  },
-
-  time: {
-    fontSize: 12,
-    color: "#888",
-  },
-
-  deleteCountdown: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#9a6700",
-  },
-
-  messageText: {
-    fontSize: 15,
-    color: "#111",
-    lineHeight: 21,
-  },
-
-  messageLink: {
-    fontSize: 15,
-    color: "#1465d8",
-    lineHeight: 21,
-    fontWeight: "700",
-    textDecorationLine: "underline",
-  },
-
-  messageLinkPending: {
-    color: "#6f5f00",
-  },
-
-  messageLinkSafe: {
-    color: "#1465d8",
-  },
-
-  messageLinkSuspicious: {
-    color: "#b76b00",
-  },
-
-  messageLinkBlocked: {
-    color: "#9f1d1d",
-    textDecorationLine: "line-through",
-  },
-
-  urlStatusPill: {
+  urlBadge: {
     alignSelf: "flex-start",
-    marginTop: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
     borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-
-  urlStatusPillPending: {
-    backgroundColor: "#fff8d6",
-    borderColor: "#e2cb60",
-  },
-
-  urlStatusPillSafe: {
-    backgroundColor: "#edf7ee",
-    borderColor: "#b7dfbc",
-  },
-
-  urlStatusPillSuspicious: {
-    backgroundColor: "#fff3e0",
-    borderColor: "#ffc36b",
-  },
-
-  urlStatusPillBlocked: {
-    backgroundColor: "#fff1f1",
-    borderColor: "#ffb4b4",
-  },
-
-  urlStatusText: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  urlStatusTextPending: {
-    color: "#6f5f00",
-  },
-
-  urlStatusTextSafe: {
-    color: "#166329",
-  },
-
-  urlStatusTextSuspicious: {
-    color: "#965800",
-  },
-
-  urlStatusTextBlocked: {
-    color: "#9f1d1d",
-  },
-
-  draftUrlBox: {
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-
-  draftUrlBoxPending: {
-    backgroundColor: "#fff8d6",
-    borderColor: "#e2cb60",
-  },
-
-  draftUrlBoxSuspicious: {
-    backgroundColor: "#fff3e0",
-    borderColor: "#ffc36b",
-  },
-
-  draftUrlBoxBlocked: {
-    backgroundColor: "#fff1f1",
-    borderColor: "#ffb4b4",
-  },
-
-  draftUrlText: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-
-  draftUrlTextPending: {
-    color: "#6f5f00",
-  },
-
-  draftUrlTextSuspicious: {
-    color: "#965800",
-  },
-
-  draftUrlTextBlocked: {
-    color: "#9f1d1d",
-  },
-
-  errorBox: {
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "#fff1f1",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ffb4b4",
-  },
-
-  errorText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#9f1d1d",
-  },
-
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 8,
-    paddingVertical: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#ddd",
-  },
-
-  composerBox: {
-    flex: 1,
-    minHeight: 72,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 7,
-    backgroundColor: "white",
   },
 
-  composerBoxError: {
-    borderColor: "#d93025",
-    backgroundColor: "#fffafa",
+  urlBadgeSafe: {
+    backgroundColor: "#ecfdf3",
+    borderColor: "#b7ebc6",
+  },
+
+  urlBadgePending: {
+    backgroundColor: "#fff8db",
+    borderColor: "#f0d264",
+  },
+
+  urlBadgeSuspicious: {
+    backgroundColor: "#fff1e5",
+    borderColor: "#f5b66d",
+  },
+
+  urlBadgeMalicious: {
+    backgroundColor: "#fee2e2",
+    borderColor: "#fca5a5",
+  },
+
+  urlBadgeText: {
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  urlBadgeTextSafe: {
+    color: "#147a32",
+  },
+
+  urlBadgeTextPending: {
+    color: "#7a5a00",
+  },
+
+  urlBadgeTextSuspicious: {
+    color: "#9a4b00",
+  },
+
+  urlBadgeTextMalicious: {
+    color: "#991b1b",
+  },
+
+  selfDeleteText: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#9a6600",
+    textAlign: "right",
+  },
+
+  inputBlock: {
+    marginTop: 12,
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    padding: 14,
+    position: "relative",
+    paddingRight: 96,
+    minHeight: 104,
   },
 
   input: {
-    minHeight: 44,
+    minHeight: 56,
     maxHeight: 120,
+    fontSize: 16,
+    color: "#111827",
+    textAlignVertical: "top",
     padding: 0,
-    backgroundColor: "white",
-    fontSize: 15,
-    lineHeight: 20,
-    color: "#111",
-    outlineStyle: "none",
+    outlineStyle: Platform.OS === "web" ? "none" : undefined,
   },
 
-  composerFooter: {
-    marginTop: 6,
+  inputFooter: {
+    marginTop: 10,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     gap: 8,
   },
 
-  composerHint: {
+  inputHint: {
     flex: 1,
-    fontSize: 11,
-    color: "#777",
-  },
-
-  charCounter: {
     fontSize: 12,
+    color: "#6b7280",
+    lineHeight: 16,
+  },
+
+  counter: {
+    fontSize: 13,
     fontWeight: "800",
-    color: "#777",
+    color: "#6b7280",
   },
 
-  charCounterWarning: {
-    color: "#b76b00",
+  counterWarning: {
+    color: "#b45309",
   },
 
-  charCounterError: {
-    color: "#d93025",
-  },
-
-  sendButton: {
-    minHeight: 44,
-    paddingHorizontal: 16,
+  postButton: {
+    position: "absolute",
+    right: 14,
+    bottom: 14,
+    width: 68,
+    height: 54,
     borderRadius: 999,
+    backgroundColor: "#111827",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#222",
   },
 
-  sendButtonDisabled: {
-    opacity: 0.45,
+  postButtonDisabled: {
+    backgroundColor: "#9ca3af",
   },
 
-  sendButtonPressed: {
-    opacity: 0.8,
-  },
-
-  sendButtonText: {
-    color: "white",
+  postButtonText: {
+    color: "#fff",
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "900",
   },
-  messageBody: {
+  roomPicker: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  roomOption: {
+    minHeight: 40,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
   },
 
-  urlBlock: {
-    gap: 6,
+  roomOptionSelected: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
   },
 
-  imagePreviewButton: {
-    marginTop: 4,
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: "#eee",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#ddd",
+  roomOptionPressed: {
+    opacity: 0.75,
   },
 
-  imagePreviewButtonPressed: {
-    opacity: 0.85,
-  },
-
-  messageImage: {
-    width: "100%",
-    height: 180,
-    backgroundColor: "#eee",
-  },
-  deleteCountdown: {
-    fontSize: 11,
+  roomOptionText: {
+    color: "#111827",
+    fontSize: 13,
     fontWeight: "800",
-    color: "#9a6700",
+  },
+
+  roomOptionTextSelected: {
+    color: "#ffffff",
   },
 });

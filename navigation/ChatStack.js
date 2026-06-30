@@ -1,5 +1,6 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+
 import { ROUTES } from "@/navigation/ROUTES";
 import ChatScreen from "@/screens/chat/ChatScreen";
 import ChatScreenResponsive from "@/screens/chat/ChatScreenResponsive";
@@ -8,27 +9,33 @@ import YesterdayNewsScreen from "@/screens/chat/YesterdayNewsScreen";
 
 const Stack = createNativeStackNavigator();
 
-export default function HistoryStack() {
+export default function ChatStack() {
   return (
     <Stack.Navigator
+      initialRouteName={ROUTES.CHAT_SCREEN}
       screenOptions={{
         headerTitleAlign: "center",
-        headerTitleStyle: { fontSize: 20, fontWeight: "700" },
+        headerTitleStyle: {
+          fontSize: 20,
+          fontWeight: "700",
+        },
         headerBackButtonDisplayMode: "minimal",
       }}
     >
-      <Stack.Screen
-        name={ROUTES.CHAT_SCREEN_RESPONSIVE}
-        component={ChatScreenResponsive}
-        options={{
-          title: "Chat responsive",
-        }}
-      />
       <Stack.Screen
         name={ROUTES.CHAT_SCREEN}
         component={ChatScreen}
         options={{
           title: "Chat",
+          headerShown: false,
+        }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.CHAT_SCREEN_RESPONSIVE}
+        component={ChatScreenResponsive}
+        options={{
+          title: "Chat responsive",
         }}
       />
 
@@ -50,11 +57,3 @@ export default function HistoryStack() {
     </Stack.Navigator>
   );
 }
-
-/*
-      <Stack.Screen
-        name={ROUTES.ITEM_DETAIL}
-        component={ItemDetailScreen}
-        options={{ title: "Detalle" }}
-      />
-*/

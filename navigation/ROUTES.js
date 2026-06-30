@@ -3,6 +3,7 @@ export const ROUTES = {
   SHOPPING_TAB: "ShoppingTab",
   STORES_TAB: "StoresTab",
   SCANNER_TAB: "ScannerTab",
+  CHAT_TAB: "ChatTab",
   MENU_TAB: "MenuTab",
 
   // Shopping stack
@@ -32,15 +33,12 @@ export const ROUTES = {
   // Scanner stack
   SCANNER_HOME: "Scanner Home",
 
-  // Scanner básico heredado:
-  // Se conserva como pantalla auxiliar.
+  // Scanner básico heredado
   PRODUCT_BARCODE_SCANNER: "ProductBarcodeScanner",
 
-  // Scanner principal:
-  // Se usa desde el tab Scanner para escanear un producto nuevo.
-  // ItemDetailScreen también abre NEW_PRODUCT_SCANNER2 con
-  // captureMode: "ean13-input" para activar el lector rápido.
+  // Scanner principal
   NEW_PRODUCT_SCANNER2: "NewProductScanner2",
+
   // Pantalla para mostrar información obtenida del producto escaneado
   PRODUCT_INFO: "ProductInfo",
 
@@ -61,7 +59,7 @@ export const ROUTES = {
   BARCODE_SETTINGS: "Barcode Settings Screen",
   CONFIRM_DELETE: "Confirm Delete Screen",
 
-  // Chat
+  // Chat stack
   CHAT_SCREEN: "Chat",
   CHAT_SCREEN_RESPONSIVE: "Chat Responsive",
   PARKING_SCREEN: "Parking",

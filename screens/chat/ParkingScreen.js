@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
+import * as Location from "expo-location";
 import moment from "moment";
 import "moment/locale/es";
 import { useMutation, useQuery } from "convex/react";
@@ -138,6 +139,7 @@ const PARKING_STATUS_OPTIONS = [
 const MAX_POST_LENGTH = 280;
 const LOW_CHARS_WARNING = 30;
 const PARKING_MESSAGES_LIMIT = 80;
+const CLEANUP_INTERVAL_MS = 60 * 1000;
 
 moment.locale("es");
 
@@ -148,12 +150,17 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("");
+  const [showLocationSection, setShowLocationSection] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [showMapPreview, setShowMapPreview] = useState(false);
+  const [currentGpsCoords, setCurrentGpsCoords] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [errorMessage, setErrorMessage] = useState("");
 
   const flatListRef = useRef(null);
+  const previousMessagesCountRef = useRef(0);
+  const didInitialScrollRef = useRef(false);
+
   const { location } = useLocation();
 
   const userCoords =
@@ -185,17 +192,42 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     };
   }, [activeZoneData]);
 
+  const displayCoords = currentGpsCoords || activeMapCenter;
+
   const messages = useQuery(api.parking.listParkingMessages, {
     city: activeCity,
     zone: activeZone,
     limit: PARKING_MESSAGES_LIMIT,
   });
 
+  const activeParkingSpotsResult = useQuery(
+    api.parking.listActiveParkingSpots,
+    {
+      city: activeCity,
+      zone: activeZone,
+      limit: 20,
+    },
+  );
+
   const sendParkingMessage = useMutation(api.parking.sendParkingMessage);
+
+  const deleteExpiredLookingMessages = useMutation(
+    api.parking.deleteExpiredLookingMessages,
+  );
+
+  const expireOldFreeParkingSpots = useMutation(
+    api.parking.expireOldFreeParkingSpots,
+  );
 
   const data = useMemo(() => {
     return Array.isArray(messages) ? messages : [];
   }, [messages]);
+
+  const activeParkingSpots = useMemo(() => {
+    return Array.isArray(activeParkingSpotsResult)
+      ? activeParkingSpotsResult
+      : [];
+  }, [activeParkingSpotsResult]);
 
   const isLoading = messages === undefined;
 
@@ -213,8 +245,36 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     return () => clearInterval(intervalId);
   }, []);
 
-  const previousMessagesCountRef = useRef(0);
-  const didInitialScrollRef = useRef(false);
+  useEffect(() => {
+    async function cleanupParkingData() {
+      try {
+        await deleteExpiredLookingMessages({
+          city: activeCity,
+          zone: activeZone,
+        });
+
+        await expireOldFreeParkingSpots({
+          city: activeCity,
+          zone: activeZone,
+        });
+      } catch (error) {
+        console.error("Error limpiando datos de parking:", error);
+      }
+    }
+
+    cleanupParkingData();
+
+    const intervalId = setInterval(() => {
+      cleanupParkingData();
+    }, CLEANUP_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [
+    deleteExpiredLookingMessages,
+    expireOldFreeParkingSpots,
+    activeCity,
+    activeZone,
+  ]);
 
   useEffect(() => {
     if (isLoading) {
@@ -266,6 +326,85 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     }
   }
 
+  async function getFreshGpsCoords() {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        return null;
+      }
+
+      const currentPosition = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const lat = currentPosition?.coords?.latitude;
+      const lng = currentPosition?.coords?.longitude;
+      const accuracy = currentPosition?.coords?.accuracy;
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return null;
+      }
+
+      return {
+        lat,
+        lng,
+        accuracy: Number.isFinite(accuracy) ? accuracy : undefined,
+        source: "gps",
+      };
+    } catch (error) {
+      console.error("Error obteniendo GPS actual:", error);
+      return null;
+    }
+  }
+
+  async function getCoordsForStatus(statusKey = "") {
+    const shouldUseFreshGps = ["looking", "parked", "leaving"].includes(
+      statusKey,
+    );
+
+    const hasUserGps =
+      Number.isFinite(userCoords?.lat) && Number.isFinite(userCoords?.lng);
+
+    if (shouldUseFreshGps) {
+      const freshGpsCoords = await getFreshGpsCoords();
+
+      if (freshGpsCoords) {
+        return freshGpsCoords;
+      }
+
+      if (hasUserGps) {
+        return {
+          lat: userCoords.lat,
+          lng: userCoords.lng,
+          source: "context-gps",
+        };
+      }
+    }
+
+    return {
+      lat: activeMapCenter.lat,
+      lng: activeMapCenter.lng,
+      source: "zone",
+    };
+  }
+
+  async function cleanupParkingDataOnce() {
+    try {
+      await deleteExpiredLookingMessages({
+        city: activeCity,
+        zone: activeZone,
+      });
+
+      await expireOldFreeParkingSpots({
+        city: activeCity,
+        zone: activeZone,
+      });
+    } catch (error) {
+      console.error("Error limpiando datos de parking:", error);
+    }
+  }
+
   async function postMessage(messageText, statusKey = "") {
     const cleanText = String(messageText || "").trim();
     const cleanUserId = activeUserId.trim() || DEFAULT_USER_ID;
@@ -285,15 +424,31 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     setErrorMessage("");
 
     try {
+      const messageCoords = await getCoordsForStatus(statusKey);
+
+      if (["looking", "parked", "leaving"].includes(statusKey)) {
+        setCurrentGpsCoords({
+          lat: messageCoords.lat,
+          lng: messageCoords.lng,
+        });
+
+        setShowLocationSection(true);
+        setShowMapPreview(true);
+      }
+
       await sendParkingMessage({
         city: activeCity,
         zone: activeZone,
         userId: cleanUserId,
         text: cleanText,
         status: statusKey || undefined,
-        lat: activeMapCenter.lat,
-        lng: activeMapCenter.lng,
+        lat: messageCoords.lat,
+        lng: messageCoords.lng,
+        accuracy: messageCoords.accuracy,
+        locationSource: messageCoords.source,
       });
+
+      await cleanupParkingDataOnce();
 
       setText("");
       setSelectedStatus(statusKey);
@@ -327,6 +482,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     setActiveCity(nextCity);
     setActiveZone(firstZone);
     setSelectedStatus("");
+    setCurrentGpsCoords(null);
     setShowMapPreview(false);
     setErrorMessage("");
   }
@@ -338,6 +494,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
 
     setActiveZone(nextZone);
     setSelectedStatus("");
+    setCurrentGpsCoords(null);
     setShowMapPreview(false);
     setErrorMessage("");
   }
@@ -364,6 +521,26 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     return date.from(now);
   }
 
+  function formatSpotTimeLeft(expiresAt) {
+    if (!expiresAt) {
+      return "";
+    }
+
+    const diff = expiresAt - Date.now();
+
+    if (diff <= 0) {
+      return "expirada";
+    }
+
+    const minutes = Math.max(1, Math.ceil(diff / 60000));
+
+    if (minutes === 1) {
+      return "válida 1 min";
+    }
+
+    return `válida ${minutes} min`;
+  }
+
   async function handleOpenUrl(url) {
     try {
       const supported = await Linking.canOpenURL(url);
@@ -375,6 +552,83 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
       console.error("Error abriendo enlace:", error);
     }
   }
+
+  async function openCoordsInGoogleMaps(lat, lng) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return;
+    }
+
+    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+
+      if (supported) {
+        await Linking.openURL(url);
+      }
+    } catch (error) {
+      console.error("Error abriendo coordenadas en Google Maps:", error);
+    }
+  }
+
+  const openInGoogleMaps = async () => {
+    await openCoordsInGoogleMaps(displayCoords.lat, displayCoords.lng);
+  };
+
+  const CoordinatesBadge = ({
+    lat,
+    lng,
+    variant = "default",
+    label = "Coordenadas",
+  }) => {
+    const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+
+    if (!hasCoords) {
+      return null;
+    }
+
+    return (
+      <Pressable
+        onPress={() => openCoordsInGoogleMaps(lat, lng)}
+        style={({ pressed }) => [
+          styles.coordsBadge,
+          variant === "message" && styles.coordsBadgeMessage,
+          variant === "freeSpot" && styles.coordsBadgeFreeSpot,
+          pressed && styles.coordsBadgePressed,
+        ]}
+      >
+        <Ionicons
+          name={
+            variant === "freeSpot" ? "checkmark-circle" : "location-outline"
+          }
+          size={variant === "message" ? 14 : 16}
+          color={variant === "freeSpot" ? "#15803d" : "#14532d"}
+        />
+
+        <View style={styles.coordsBadgeTextBlock}>
+          {label ? (
+            <Text
+              style={[
+                styles.coordsBadgeLabel,
+                variant === "message" && styles.coordsBadgeLabelMessage,
+              ]}
+            >
+              {label}
+            </Text>
+          ) : null}
+
+          <Text
+            style={[
+              styles.coordsBadgeText,
+              variant === "message" && styles.coordsBadgeTextMessage,
+            ]}
+          >
+            {lat.toFixed(5)}, {lng.toFixed(5)}
+          </Text>
+        </View>
+      </Pressable>
+    );
+  };
 
   function renderMessageText(value) {
     const content = String(value || "");
@@ -487,86 +741,138 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
       </Pressable>
     );
   }
-  const openInGoogleMaps = async () => {
-    const { lat, lng } = activeMapCenter;
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return;
+  const ActiveSpotsSection = () => {
+    if (!activeParkingSpots.length) {
+      return (
+        <View style={styles.freeSpotsEmpty}>
+          <Ionicons name="leaf-outline" size={18} color="#6b7280" />
+          <Text style={styles.freeSpotsEmptyText}>
+            No hay plazas libres reveladas ahora mismo.
+          </Text>
+        </View>
+      );
     }
 
-    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+    return (
+      <View style={styles.freeSpotsBlock}>
+        <Text style={styles.freeSpotsTitle}>Plazas libres reveladas</Text>
 
-    try {
-      const supported = await Linking.canOpenURL(url);
+        {activeParkingSpots.map((spot) => {
+          return (
+            <View key={spot._id} style={styles.freeSpotRow}>
+              <CoordinatesBadge
+                lat={spot.lat}
+                lng={spot.lng}
+                variant="freeSpot"
+                label={`Libre · ${formatSpotTimeLeft(spot.expiresAt)}`}
+              />
 
-      if (supported) {
-        await Linking.openURL(url);
-      }
-    } catch (error) {
-      console.error("Error abriendo Google Maps:", error);
-    }
+              <Text style={styles.freeSpotMeta}>
+                Avisó: {spot.revealedBy || "anonymous"}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    );
   };
 
   const LocationSection = () => {
     const hasCoords =
-      Number.isFinite(activeMapCenter.lat) &&
-      Number.isFinite(activeMapCenter.lng);
+      Number.isFinite(displayCoords.lat) && Number.isFinite(displayCoords.lng);
 
     return (
-      <View style={styles.section}>
-        <Text style={styles.sectionLabel}>Ubicación</Text>
+      <View style={styles.locationCollapseCard}>
+        <Pressable
+          onPress={() => setShowLocationSection((current) => !current)}
+          style={({ pressed }) => [
+            styles.locationCollapseHeader,
+            pressed && styles.locationCollapseHeaderPressed,
+          ]}
+        >
+          <View style={styles.locationCollapseTitleBlock}>
+            <Ionicons name="location-outline" size={20} color="#14532d" />
 
-        {hasCoords && showMapPreview ? (
-          <View style={styles.mapContainer}>
-            <StoreMapPreview
-              lat={activeMapCenter.lat}
-              lng={activeMapCenter.lng}
-              userLat={userCoords?.lat}
-              userLng={userCoords?.lng}
-            />
+            <View>
+              <Text style={styles.sectionLabel}>Ubicación</Text>
+
+              <Text style={styles.locationCollapseSubtitle}>
+                {activeCityLabel} · {activeZoneLabel}
+              </Text>
+            </View>
           </View>
-        ) : (
-          <View style={styles.mapPlaceholder}>
-            <Ionicons name="map-outline" size={36} color="#999" />
 
-            <Text style={styles.mapPlaceholderText}>
-              {hasCoords
-                ? "Previsualización del mapa"
-                : "Ubicación no disponible"}
-            </Text>
+          <Ionicons
+            name={showLocationSection ? "chevron-up" : "chevron-down"}
+            size={22}
+            color="#14532d"
+          />
+        </Pressable>
+
+        {showLocationSection ? (
+          <View style={styles.locationCollapseBody}>
+            {hasCoords && showMapPreview ? (
+              <View style={styles.mapContainer}>
+                <StoreMapPreview
+                  lat={displayCoords.lat}
+                  lng={displayCoords.lng}
+                  userLat={userCoords?.lat}
+                  userLng={userCoords?.lng}
+                  parkingSpots={activeParkingSpots}
+                />
+              </View>
+            ) : (
+              <View style={styles.mapPlaceholder}>
+                <Ionicons name="map-outline" size={36} color="#999" />
+
+                <Text style={styles.mapPlaceholderText}>
+                  {hasCoords
+                    ? "Previsualización del mapa"
+                    : "Ubicación no disponible"}
+                </Text>
+              </View>
+            )}
+
+            {hasCoords ? (
+              <CoordinatesBadge
+                lat={displayCoords.lat}
+                lng={displayCoords.lng}
+                label={
+                  currentGpsCoords
+                    ? "Coordenadas GPS actuales"
+                    : "Coordenadas de zona"
+                }
+              />
+            ) : null}
+
+            {hasCoords ? (
+              <View style={styles.locationButtonsRow}>
+                <Pressable
+                  style={styles.secondaryButton}
+                  onPress={() => setShowMapPreview((current) => !current)}
+                >
+                  <Ionicons
+                    name={showMapPreview ? "eye-off-outline" : "map-outline"}
+                    size={18}
+                    color="#1a73e8"
+                  />
+
+                  <Text style={styles.secondaryButtonText}>
+                    {showMapPreview ? "Ocultar mapa" : "Ver mapa"}
+                  </Text>
+                </Pressable>
+
+                <Pressable style={styles.mapsButton} onPress={openInGoogleMaps}>
+                  <Ionicons name="navigate-outline" size={18} color="#fff" />
+
+                  <Text style={styles.mapsButtonText}>Google Maps</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            <ActiveSpotsSection />
           </View>
-        )}
-
-        {hasCoords && !showMapPreview ? (
-          <Pressable
-            style={styles.secondaryButton}
-            onPress={() => setShowMapPreview(true)}
-          >
-            <Ionicons name="map-outline" size={18} color="#1a73e8" />
-
-            <Text style={styles.secondaryButtonText}>
-              Ver mapa (OpenStreetMap)
-            </Text>
-          </Pressable>
-        ) : null}
-
-        {hasCoords && showMapPreview ? (
-          <Pressable
-            style={styles.secondaryButton}
-            onPress={() => setShowMapPreview(false)}
-          >
-            <Ionicons name="close-outline" size={18} color="#1a73e8" />
-
-            <Text style={styles.secondaryButtonText}>Ocultar mapa</Text>
-          </Pressable>
-        ) : null}
-
-        {hasCoords ? (
-          <Pressable style={styles.mapsButton} onPress={openInGoogleMaps}>
-            <Ionicons name="navigate-outline" size={18} color="#fff" />
-
-            <Text style={styles.mapsButtonText}>Abrir en Google Maps</Text>
-          </Pressable>
         ) : null}
       </View>
     );
@@ -623,6 +929,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
 
               <View style={styles.fieldBlock}>
                 <Text style={styles.fieldLabel}>User ID</Text>
+
                 <TextInput
                   value={activeUserId}
                   onChangeText={setActiveUserId}
@@ -708,11 +1015,12 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
 
         {renderMessageText(item.text)}
 
-        {typeof item.lat === "number" && typeof item.lng === "number" ? (
-          <Text style={styles.messageLocation}>
-            {item.lat.toFixed(5)}, {item.lng.toFixed(5)}
-          </Text>
-        ) : null}
+        <CoordinatesBadge
+          lat={item.lat}
+          lng={item.lng}
+          variant="message"
+          label=""
+        />
       </View>
     );
   }
@@ -1070,54 +1378,6 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
 
-  mapCard: {
-    marginBottom: 14,
-    padding: 12,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    borderRadius: 18,
-  },
-
-  mapHeader: {
-    marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  mapTitle: {
-    color: "#14532d",
-    fontSize: 17,
-    fontWeight: "900",
-  },
-
-  mapSubtitle: {
-    marginTop: 2,
-    color: "#6b7280",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  mapBadge: {
-    minHeight: 32,
-    paddingHorizontal: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    backgroundColor: "#f0fdf4",
-  },
-
-  mapBadgeText: {
-    color: "#14532d",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
   mapContainer: {
     height: 180,
     borderRadius: 10,
@@ -1141,14 +1401,15 @@ const styles = StyleSheet.create({
   },
 
   secondaryButton: {
+    flex: 1,
+    minHeight: 42,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: "#1a73e8",
-    marginBottom: 10,
     backgroundColor: "#ffffff",
   },
 
@@ -1159,11 +1420,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  mapHint: {
-    marginTop: 2,
-    color: "#6b7280",
-    fontSize: 11,
-    fontWeight: "700",
+  mapsButton: {
+    flex: 1,
+    minHeight: 42,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#1a73e8",
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+
+  mapsButtonText: {
+    marginLeft: 8,
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   chatHeader: {
@@ -1296,13 +1568,6 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
 
-  messageLocation: {
-    marginTop: 7,
-    color: "#6b7280",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
   errorBox: {
     marginBottom: 8,
     paddingHorizontal: 12,
@@ -1354,7 +1619,7 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontSize: 15,
     lineHeight: 20,
-    outlineStyle: "none",
+    outlineStyle: Platform.OS === "web" ? "none" : undefined,
   },
 
   composerFooter: {
@@ -1407,14 +1672,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "900",
   },
-  section: {
-    marginBottom: 14,
-    padding: 12,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    borderRadius: 18,
-  },
 
   sectionLabel: {
     marginBottom: 8,
@@ -1423,19 +1680,156 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  mapsButton: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#1a73e8",
-    paddingVertical: 12,
-    borderRadius: 8,
+  locationCollapseCard: {
+    marginBottom: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    borderRadius: 18,
+    overflow: "hidden",
   },
 
-  mapsButtonText: {
-    marginLeft: 8,
-    color: "#fff",
+  locationCollapseHeader: {
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    backgroundColor: "#ffffff",
+  },
+
+  locationCollapseHeaderPressed: {
+    opacity: 0.75,
+  },
+
+  locationCollapseTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  locationCollapseSubtitle: {
+    marginTop: 2,
+    color: "#6b7280",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  locationCollapseBody: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+
+  locationButtonsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  coordsBadge: {
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#f0fdf4",
+    borderWidth: 1,
+    borderColor: "#dcfce7",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  coordsBadgeMessage: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+    marginBottom: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    borderColor: "#bbf7d0",
+  },
+
+  coordsBadgeFreeSpot: {
+    backgroundColor: "#dcfce7",
+    borderColor: "#86efac",
+  },
+
+  coordsBadgePressed: {
+    opacity: 0.75,
+  },
+
+  coordsBadgeTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  coordsBadgeLabel: {
+    color: "#14532d",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  coordsBadgeLabelMessage: {
+    display: "none",
+  },
+
+  coordsBadgeText: {
+    marginTop: 2,
+    color: "#4b5563",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  coordsBadgeTextMessage: {
+    marginTop: 0,
+    color: "#4b5563",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  freeSpotsBlock: {
+    marginTop: 12,
+    gap: 8,
+  },
+
+  freeSpotsTitle: {
+    color: "#14532d",
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "900",
+  },
+
+  freeSpotRow: {
+    gap: 4,
+  },
+
+  freeSpotMeta: {
+    marginLeft: 4,
+    color: "#6b7280",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  freeSpotsEmpty: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: "#f9fafb",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#d1d5db",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
+  freeSpotsEmptyText: {
+    flex: 1,
+    color: "#6b7280",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

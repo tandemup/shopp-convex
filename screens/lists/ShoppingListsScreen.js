@@ -34,89 +34,25 @@ function MenuNavegacion2({
   onCreateList,
 }) {
   const navigation = useNavigation();
+
   const openChat = React.useCallback(() => {
-    navigation.navigate(ROUTES.CHAT_SCREEN);
+    navigation.navigate(ROUTES.CHAT_TAB, {
+      screen: ROUTES.CHAT_SCREEN,
+    });
   }, [navigation]);
 
   const openChatResponsive = React.useCallback(() => {
-    navigation.navigate(ROUTES.CHAT_SCREEN_RESPONSIVE);
-  }, [navigation]);
-
-  const openYesterdayNews = React.useCallback(() => {
-    navigation.navigate(ROUTES.CHAT_SCREEN_RESPONSIVE);
+    navigation.navigate(ROUTES.CHAT_TAB, {
+      screen: ROUTES.CHAT_SCREEN_RESPONSIVE,
+    });
   }, [navigation]);
 
   const openParking = React.useCallback(() => {
-    navigation.navigate(ROUTES.PARKING_SCREEN);
+    navigation.navigate(ROUTES.CHAT_TAB, {
+      screen: ROUTES.PARKING_SCREEN,
+    });
   }, [navigation]);
 
-  const actions0 = [
-    {
-      key: "new",
-      label: "Nueva lista",
-      icon: "add-outline",
-      onPress: onCreateList,
-    },
-    {
-      key: "archived",
-      label: "Archivadas",
-      icon: "archive-outline",
-      tab: ROUTES.SHOPPING_TAB,
-      route: ROUTES.ARCHIVED_LISTS,
-      badge: archivedCount,
-    },
-    {
-      key: "history",
-      label: "Compras",
-      icon: "receipt-outline",
-      tab: ROUTES.SHOPPING_TAB,
-      route: ROUTES.PURCHASE_HISTORY,
-      badge: historyCount,
-    },
-    {
-      key: "chat",
-      label: "Chat",
-      icon: "chatbubble-ellipses-outline",
-      isNew: true,
-      variant: "purple",
-      onPress: openChat,
-    },
-    {
-      key: "chat2",
-      label: "Chat2",
-      icon: "chatbubble-ellipses-outline",
-      isNew: true,
-      variant: "purple",
-      onPress: openChatResponsive,
-    },
-
-    {
-      key: "parking",
-      label: "Parking",
-      icon: "car-outline",
-      isNew: true,
-      variant: "green",
-      onPress: openParking,
-    },
-
-    {
-      key: "yesterday",
-      label: "yesterday-news",
-      icon: "car-outline",
-      isNew: true,
-      variant: "green",
-      onPress: openYesterdayNews,
-    },
-
-    {
-      key: "scanned",
-      label: "Escaneos",
-      icon: "barcode-outline",
-      tab: ROUTES.SCANNER_TAB,
-      route: ROUTES.SCANNED_HISTORY,
-      badge: scannedCount,
-    },
-  ];
   const actions = [
     {
       key: "new",
@@ -157,6 +93,14 @@ function MenuNavegacion2({
       onPress: openChat,
     },
     {
+      key: "chat2",
+      label: "Chat2",
+      icon: "chatbox-ellipses-outline",
+      isNew: true,
+      variant: "purple",
+      onPress: openChatResponsive,
+    },
+    {
       key: "parking",
       label: "Parking",
       icon: "car-outline",
@@ -179,6 +123,7 @@ function MenuNavegacion2({
         {actions.map((action) => {
           const isPurple = action.variant === "purple";
           const isGreen = action.variant === "green";
+
           return (
             <Pressable
               key={action.key}
@@ -188,9 +133,11 @@ function MenuNavegacion2({
                   return;
                 }
 
-                navigation.navigate(action.tab, {
-                  screen: action.route,
-                });
+                if (action.tab && action.route) {
+                  navigation.navigate(action.tab, {
+                    screen: action.route,
+                  });
+                }
               }}
               style={({ pressed }) => [
                 quickStyles.card,
@@ -199,11 +146,11 @@ function MenuNavegacion2({
                 pressed && quickStyles.cardPressed,
               ]}
             >
-              {action.isNew && (
+              {action.isNew ? (
                 <View style={quickStyles.newBadge}>
                   <Text style={quickStyles.newBadgeText}>NUEVO</Text>
                 </View>
-              )}
+              ) : null}
 
               <View
                 style={[
@@ -218,14 +165,15 @@ function MenuNavegacion2({
                   color={isPurple ? "#6d28d9" : isGreen ? "#15803d" : "#2563eb"}
                 />
 
-                {action.badge > 0 && (
+                {action.badge > 0 ? (
                   <View style={quickStyles.badge}>
                     <Text style={quickStyles.badgeText}>
                       {action.badge > 99 ? "99+" : action.badge}
                     </Text>
                   </View>
-                )}
+                ) : null}
               </View>
+
               <Text
                 style={[
                   quickStyles.label,
@@ -271,10 +219,15 @@ export default function ShoppingListsScreen() {
       String(list.name || "").trim(),
     );
 
-    if (!allNames.includes(baseName)) return baseName;
+    if (!allNames.includes(baseName)) {
+      return baseName;
+    }
 
     let suffix = 2;
-    while (allNames.includes(`${baseName}-${suffix}`)) suffix += 1;
+
+    while (allNames.includes(`${baseName}-${suffix}`)) {
+      suffix += 1;
+    }
 
     return `${baseName}-${suffix}`;
   };
@@ -370,7 +323,10 @@ export default function ShoppingListsScreen() {
 
   const handleConfirmEditName = () => {
     const name = editName.trim();
-    if (!name) return;
+
+    if (!name) {
+      return;
+    }
 
     if (editingList) {
       updateList(editingList.id, { name });
@@ -513,6 +469,7 @@ export default function ShoppingListsScreen() {
     </View>
   );
 }
+
 const quickStyles = StyleSheet.create({
   wrapper: {
     width: "100%",
@@ -558,10 +515,12 @@ const quickStyles = StyleSheet.create({
     borderColor: "#c084fc",
     backgroundColor: "#faf5ff",
   },
+
   cardGreen: {
     borderColor: "#86efac",
     backgroundColor: "#f0fdf4",
   },
+
   cardPressed: {
     opacity: 0.8,
     transform: [{ scale: 0.98 }],
@@ -580,9 +539,11 @@ const quickStyles = StyleSheet.create({
   iconBoxPurple: {
     backgroundColor: "#f3e8ff",
   },
+
   iconBoxGreen: {
     backgroundColor: "#dcfce7",
   },
+
   badge: {
     position: "absolute",
     top: -6,
@@ -613,10 +574,12 @@ const quickStyles = StyleSheet.create({
     color: "#581c87",
     fontWeight: "800",
   },
+
   labelGreen: {
     color: "#14532d",
     fontWeight: "800",
   },
+
   newBadge: {
     position: "absolute",
     top: -6,

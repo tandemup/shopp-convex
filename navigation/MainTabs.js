@@ -6,6 +6,7 @@ import { StyleSheet } from "react-native";
 import { ROUTES } from "./ROUTES";
 import ShoppingStack from "./ShoppingStack";
 import StoresStack from "./StoresStack";
+import ChatStack from "./ChatStack";
 import ScannerStack from "./ScannerStack";
 import MenuStack from "./MenuStack";
 
@@ -45,8 +46,8 @@ export default function MainTabs() {
         name={ROUTES.STORES_TAB}
         component={StoresStack}
         listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            e.preventDefault();
+          tabPress: (event) => {
+            event.preventDefault();
 
             navigation.navigate(ROUTES.STORES_TAB, {
               screen: ROUTES.STORES_HOME,
@@ -62,11 +63,31 @@ export default function MainTabs() {
       />
 
       <Tab.Screen
+        name={ROUTES.CHAT_TAB}
+        component={ChatStack}
+        listeners={({ navigation }) => ({
+          tabPress: (event) => {
+            event.preventDefault();
+
+            navigation.navigate(ROUTES.CHAT_TAB, {
+              screen: ROUTES.CHAT_SCREEN,
+            });
+          },
+        })}
+        options={{
+          title: "Chat",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbox-ellipses-sharp" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tab.Screen
         name={ROUTES.SCANNER_TAB}
         component={ScannerStack}
         listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            e.preventDefault();
+          tabPress: (event) => {
+            event.preventDefault();
 
             navigation.navigate(ROUTES.SCANNER_TAB, {
               screen: ROUTES.SCANNER_HOME,
