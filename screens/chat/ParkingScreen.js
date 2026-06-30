@@ -23,97 +23,67 @@ import { useLocation } from "@/context/LocationContext";
 import StoreMapPreview from "@/components/features/maps/StoreMapPreview";
 
 const DEFAULT_CITY = "gijon";
-const DEFAULT_ZONE = "centro";
+const DEFAULT_DESTINATION = "palacio-deportes";
 const DEFAULT_USER_ID = "anonymous";
 
-const CITY_OPTIONS = [
-  { id: "gijon", label: "Gijón" },
-  { id: "oviedo", label: "Oviedo" },
-  { id: "aviles", label: "Avilés" },
+const DESTINATION_OPTIONS = [
+  {
+    id: "palacio-deportes",
+    label: "Palacio de los Deportes",
+    category: "Deporte",
+    address: "Paseo del Doctor Fleming, 929, 33203 Gijón, Asturias",
+    latitude: 43.53502,
+    longitude: -5.63586,
+  },
+  {
+    id: "el-corte-ingles",
+    label: "El Corte Inglés",
+    category: "Centro comercial",
+    address: "C/ Ramón Areces, 2, 33211 Gijón, Asturias",
+    latitude: 43.5361,
+    longitude: -5.6844,
+  },
+  {
+    id: "los-fresnos",
+    label: "C.C. Los Fresnos",
+    category: "Centro comercial",
+    address: "C. Río de Oro, 3, Centro, 33209 Gijón, Asturias",
+    latitude: 43.5321,
+    longitude: -5.6619,
+  },
+  {
+    id: "el-molinon",
+    label: "El Molinón",
+    category: "Estadio",
+    address: "C/ Luis Adaro Falcó, 33203 Gijón, Asturias",
+    latitude: 43.536329,
+    longitude: -5.637417,
+  },
+  {
+    id: "hospital-cabuenes",
+    label: "Hospital de Cabueñes",
+    category: "Hospital",
+    address: "Calle Los Prados, 395, 33203 Gijón, Asturias",
+    latitude: 43.525186,
+    longitude: -5.606614,
+  },
+  {
+    id: "playa-san-lorenzo",
+    label: "Playa de San Lorenzo",
+    category: "Ocio",
+    address: "Avda. Rufo García Rendueles, Paseo Marítimo, Gijón, Asturias",
+    latitude: 43.541062,
+    longitude: -5.650062,
+  },
+  {
+    id: "intu-asturias",
+    label: "Intu Asturias / Parque Principado",
+    category: "Centro comercial",
+    address: "Autovía Ruta de la Plata, Km 4,5, 33429 Lugones, Siero, Asturias",
+    latitude: 43.4012,
+    longitude: -5.8095,
+  },
 ];
-
-const ZONE_OPTIONS_BY_CITY = {
-  gijon: [
-    {
-      id: "centro",
-      label: "Centro",
-      latitude: 43.5453,
-      longitude: -5.6615,
-    },
-    {
-      id: "la-calzada",
-      label: "La Calzada",
-      latitude: 43.5359,
-      longitude: -5.7007,
-    },
-    {
-      id: "el-llano",
-      label: "El Llano",
-      latitude: 43.5358,
-      longitude: -5.6566,
-    },
-    {
-      id: "viesques",
-      label: "Viesques",
-      latitude: 43.5248,
-      longitude: -5.6327,
-    },
-    {
-      id: "la-arena",
-      label: "La Arena",
-      latitude: 43.5407,
-      longitude: -5.6471,
-    },
-  ],
-
-  oviedo: [
-    {
-      id: "centro",
-      label: "Centro",
-      latitude: 43.3619,
-      longitude: -5.8494,
-    },
-    {
-      id: "masip",
-      label: "Masip",
-      latitude: 43.3611,
-      longitude: -5.8638,
-    },
-    {
-      id: "teatinos",
-      label: "Teatinos",
-      latitude: 43.3771,
-      longitude: -5.8264,
-    },
-    {
-      id: "salesas",
-      label: "Salesas",
-      latitude: 43.3656,
-      longitude: -5.8457,
-    },
-  ],
-
-  aviles: [
-    {
-      id: "centro",
-      label: "Centro",
-      latitude: 43.5569,
-      longitude: -5.9247,
-    },
-    {
-      id: "sabugo",
-      label: "Sabugo",
-      latitude: 43.5578,
-      longitude: -5.9281,
-    },
-    {
-      id: "la-luz",
-      label: "La Luz",
-      latitude: 43.5418,
-      longitude: -5.9026,
-    },
-  ],
-};
 
 const PARKING_STATUS_OPTIONS = [
   {
@@ -121,18 +91,21 @@ const PARKING_STATUS_OPTIONS = [
     icon: "search-outline",
     label: "Buscando plaza",
     message: "Estoy buscando plaza para aparcar.",
+    blockedFrom: ["parked", "leaving"],
   },
   {
     key: "parked",
     icon: "car-sport-outline",
     label: "Ya aparqué",
     message: "Ya he aparcado.",
+    blockedFrom: ["leaving"],
   },
   {
     key: "leaving",
     icon: "exit-outline",
     label: "Voy a salir",
     message: "Voy a salir y dejo una plaza libre.",
+    blockedFrom: ["looking"],
   },
 ];
 
@@ -144,8 +117,8 @@ const CLEANUP_INTERVAL_MS = 60 * 1000;
 moment.locale("es");
 
 export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
-  const [activeCity, setActiveCity] = useState(DEFAULT_CITY);
-  const [activeZone, setActiveZone] = useState(DEFAULT_ZONE);
+  const [activeDestination, setActiveDestination] =
+    useState(DEFAULT_DESTINATION);
   const [activeUserId, setActiveUserId] = useState(userId || DEFAULT_USER_ID);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -171,40 +144,48 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
         }
       : null;
 
-  const zoneOptions = ZONE_OPTIONS_BY_CITY[activeCity] || [];
-
-  const activeCityLabel = useMemo(() => {
+  const activeDestinationData = useMemo(() => {
     return (
-      CITY_OPTIONS.find((city) => city.id === activeCity)?.label || activeCity
+      DESTINATION_OPTIONS.find((destination) => {
+        return destination.id === activeDestination;
+      }) || DESTINATION_OPTIONS[0]
     );
-  }, [activeCity]);
+  }, [activeDestination]);
 
-  const activeZoneData = useMemo(() => {
-    return zoneOptions.find((zone) => zone.id === activeZone) || zoneOptions[0];
-  }, [activeZone, zoneOptions]);
+  const activeDestinationLabel =
+    activeDestinationData?.label || activeDestination || "Sin destino";
 
-  const activeZoneLabel = activeZoneData?.label || activeZone;
+  const activeDestinationAddress = activeDestinationData?.address || "";
 
   const activeMapCenter = useMemo(() => {
     return {
-      lat: activeZoneData?.latitude || 43.5453,
-      lng: activeZoneData?.longitude || -5.6615,
+      lat: activeDestinationData?.latitude || 43.5453,
+      lng: activeDestinationData?.longitude || -5.6615,
     };
-  }, [activeZoneData]);
+  }, [activeDestinationData]);
 
   const displayCoords = currentGpsCoords || activeMapCenter;
 
+  /*
+    Para no cambiar el backend Convex:
+    - city queda fijo en "gijon"
+    - zone usa el destino seleccionado
+    Así cada destino funciona como una room independiente.
+  */
+  const convexCity = DEFAULT_CITY;
+  const convexZone = activeDestination;
+
   const messages = useQuery(api.parking.listParkingMessages, {
-    city: activeCity,
-    zone: activeZone,
+    city: convexCity,
+    zone: convexZone,
     limit: PARKING_MESSAGES_LIMIT,
   });
 
   const activeParkingSpotsResult = useQuery(
     api.parking.listActiveParkingSpots,
     {
-      city: activeCity,
-      zone: activeZone,
+      city: convexCity,
+      zone: convexZone,
       limit: 20,
     },
   );
@@ -249,13 +230,13 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     async function cleanupParkingData() {
       try {
         await deleteExpiredLookingMessages({
-          city: activeCity,
-          zone: activeZone,
+          city: convexCity,
+          zone: convexZone,
         });
 
         await expireOldFreeParkingSpots({
-          city: activeCity,
-          zone: activeZone,
+          city: convexCity,
+          zone: convexZone,
         });
       } catch (error) {
         console.error("Error limpiando datos de parking:", error);
@@ -272,8 +253,8 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
   }, [
     deleteExpiredLookingMessages,
     expireOldFreeParkingSpots,
-    activeCity,
-    activeZone,
+    convexCity,
+    convexZone,
   ]);
 
   useEffect(() => {
@@ -385,37 +366,52 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     return {
       lat: activeMapCenter.lat,
       lng: activeMapCenter.lng,
-      source: "zone",
+      source: "destination",
     };
   }
 
   async function cleanupParkingDataOnce() {
     try {
       await deleteExpiredLookingMessages({
-        city: activeCity,
-        zone: activeZone,
+        city: convexCity,
+        zone: convexZone,
       });
 
       await expireOldFreeParkingSpots({
-        city: activeCity,
-        zone: activeZone,
+        city: convexCity,
+        zone: convexZone,
       });
     } catch (error) {
       console.error("Error limpiando datos de parking:", error);
     }
   }
 
-  async function postMessage(messageText, statusKey = "") {
+  function buildMessageWithDestination(messageText) {
     const cleanText = String(messageText || "").trim();
-    const cleanUserId = activeUserId.trim() || DEFAULT_USER_ID;
 
-    if (!cleanText || sending) {
+    if (!cleanText) {
+      return "";
+    }
+
+    const destinationPrefix = `[Destino: ${activeDestinationLabel}]`;
+    const addressPrefix = activeDestinationAddress
+      ? `[Dirección: ${activeDestinationAddress}]`
+      : "";
+
+    return `${destinationPrefix} ${addressPrefix} ${cleanText}`.trim();
+  }
+
+  async function postMessage(messageText, statusKey = "") {
+    const cleanUserId = activeUserId.trim() || DEFAULT_USER_ID;
+    const finalText = buildMessageWithDestination(messageText);
+
+    if (!finalText || sending) {
       return;
     }
 
-    if (cleanText.length > MAX_POST_LENGTH) {
+    if (finalText.length > MAX_POST_LENGTH) {
       setErrorMessage(
-        `El mensaje supera el límite de ${MAX_POST_LENGTH} caracteres.`,
+        `El mensaje supera el límite de ${MAX_POST_LENGTH} caracteres. Prueba a escribir un aviso más corto.`,
       );
       return;
     }
@@ -437,10 +433,10 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
       }
 
       await sendParkingMessage({
-        city: activeCity,
-        zone: activeZone,
+        city: convexCity,
+        zone: convexZone,
         userId: cleanUserId,
-        text: cleanText,
+        text: finalText,
         status: statusKey || undefined,
         lat: messageCoords.lat,
         lng: messageCoords.lng,
@@ -471,28 +467,12 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     await postMessage(option.message, option.key);
   }
 
-  function handleSelectCity(nextCity) {
-    if (!nextCity || nextCity === activeCity) {
+  function handleSelectDestination(nextDestination) {
+    if (!nextDestination || nextDestination === activeDestination) {
       return;
     }
 
-    const nextZones = ZONE_OPTIONS_BY_CITY[nextCity] || [];
-    const firstZone = nextZones[0]?.id || DEFAULT_ZONE;
-
-    setActiveCity(nextCity);
-    setActiveZone(firstZone);
-    setSelectedStatus("");
-    setCurrentGpsCoords(null);
-    setShowMapPreview(false);
-    setErrorMessage("");
-  }
-
-  function handleSelectZone(nextZone) {
-    if (!nextZone || nextZone === activeZone) {
-      return;
-    }
-
-    setActiveZone(nextZone);
+    setActiveDestination(nextDestination);
     setSelectedStatus("");
     setCurrentGpsCoords(null);
     setShowMapPreview(false);
@@ -568,6 +548,23 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
       }
     } catch (error) {
       console.error("Error abriendo coordenadas en Google Maps:", error);
+    }
+  }
+
+  async function openAddressInGoogleMaps() {
+    const encodedAddress = encodeURIComponent(activeDestinationAddress);
+    const url = activeDestinationAddress
+      ? `https://www.google.com/maps/search/?api=1&query=${encodedAddress}`
+      : `https://www.google.com/maps/search/?api=1&query=${displayCoords.lat},${displayCoords.lng}`;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+
+      if (supported) {
+        await Linking.openURL(url);
+      }
+    } catch (error) {
+      console.error("Error abriendo dirección en Google Maps:", error);
     }
   }
 
@@ -662,52 +659,56 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
     );
   }
 
-  function renderCityButton(city) {
-    const selected = city.id === activeCity;
+  function renderDestinationButton(destination) {
+    const selected = destination.id === activeDestination;
 
     return (
       <Pressable
-        key={city.id}
-        onPress={() => handleSelectCity(city.id)}
+        key={destination.id}
+        onPress={() => handleSelectDestination(destination.id)}
         style={({ pressed }) => [
-          styles.selectorButton,
-          selected && styles.selectorButtonSelected,
+          styles.destinationButton,
+          selected && styles.destinationButtonSelected,
           pressed && styles.selectorButtonPressed,
         ]}
       >
-        <Text
-          style={[
-            styles.selectorButtonText,
-            selected && styles.selectorButtonTextSelected,
-          ]}
-        >
-          {city.label}
-        </Text>
-      </Pressable>
-    );
-  }
+        <View style={styles.destinationButtonIcon}>
+          <Ionicons
+            name={selected ? "navigate-circle" : "navigate-circle-outline"}
+            size={20}
+            color={selected ? "#ffffff" : "#15803d"}
+          />
+        </View>
 
-  function renderZoneButton(zone) {
-    const selected = zone.id === activeZone;
+        <View style={styles.destinationButtonTextBlock}>
+          <Text
+            style={[
+              styles.destinationButtonText,
+              selected && styles.destinationButtonTextSelected,
+            ]}
+          >
+            {destination.label}
+          </Text>
 
-    return (
-      <Pressable
-        key={zone.id}
-        onPress={() => handleSelectZone(zone.id)}
-        style={({ pressed }) => [
-          styles.selectorButton,
-          selected && styles.selectorButtonSelected,
-          pressed && styles.selectorButtonPressed,
-        ]}
-      >
-        <Text
-          style={[
-            styles.selectorButtonText,
-            selected && styles.selectorButtonTextSelected,
-          ]}
-        >
-          {zone.label}
-        </Text>
+          <Text
+            style={[
+              styles.destinationButtonMeta,
+              selected && styles.destinationButtonMetaSelected,
+            ]}
+          >
+            {destination.category}
+          </Text>
+
+          <Text
+            style={[
+              styles.destinationAddress,
+              selected && styles.destinationAddressSelected,
+            ]}
+            numberOfLines={2}
+          >
+            {destination.address}
+          </Text>
+        </View>
       </Pressable>
     );
   }
@@ -794,11 +795,15 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
           <View style={styles.locationCollapseTitleBlock}>
             <Ionicons name="location-outline" size={20} color="#14532d" />
 
-            <View>
+            <View style={styles.locationTitleTextBlock}>
               <Text style={styles.sectionLabel}>Ubicación</Text>
 
               <Text style={styles.locationCollapseSubtitle}>
-                {activeCityLabel} · {activeZoneLabel}
+                {activeDestinationLabel}
+              </Text>
+
+              <Text style={styles.locationCollapseAddress} numberOfLines={2}>
+                {activeDestinationAddress}
               </Text>
             </View>
           </View>
@@ -841,7 +846,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
                 label={
                   currentGpsCoords
                     ? "Coordenadas GPS actuales"
-                    : "Coordenadas de zona"
+                    : "Coordenadas del destino"
                 }
               />
             ) : null}
@@ -891,8 +896,8 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
               <Text style={styles.title}>Parking</Text>
 
               <Text style={styles.subtitle}>
-                Chat rápido para avisar de plazas libres, coordinar dónde
-                aparcar o indicar que vas a salir.
+                Chat rápido para avisar de plazas libres cerca del destino
+                seleccionado.
               </Text>
             </View>
 
@@ -912,18 +917,10 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
           {showSettingsPanel ? (
             <View style={styles.settingsPanel}>
               <View style={styles.fieldBlock}>
-                <Text style={styles.fieldLabel}>Ciudad</Text>
+                <Text style={styles.fieldLabel}>Destino</Text>
 
-                <View style={styles.selectorRow}>
-                  {CITY_OPTIONS.map(renderCityButton)}
-                </View>
-              </View>
-
-              <View style={styles.fieldBlock}>
-                <Text style={styles.fieldLabel}>Zona</Text>
-
-                <View style={styles.selectorRow}>
-                  {zoneOptions.map(renderZoneButton)}
+                <View style={styles.destinationGrid}>
+                  {DESTINATION_OPTIONS.map(renderDestinationButton)}
                 </View>
               </View>
 
@@ -943,19 +940,33 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
               </View>
 
               <Text style={styles.roomHint}>
-                Canal: parking · {activeCity} · {activeZone}
+                Canal: parking · destino: {activeDestination}
               </Text>
             </View>
           ) : null}
 
           <View style={styles.statusCard}>
             <View style={styles.statusHeader}>
-              <View>
+              <View style={styles.statusTitleBlock}>
                 <Text style={styles.cardTitle}>Estado actual</Text>
 
                 <Text style={styles.cardSubtitle}>
-                  {activeCityLabel} · {activeZoneLabel}
+                  {activeDestinationLabel}
                 </Text>
+
+                <Pressable
+                  onPress={openAddressInGoogleMaps}
+                  style={({ pressed }) => [
+                    styles.addressInlineButton,
+                    pressed && styles.addressInlineButtonPressed,
+                  ]}
+                >
+                  <Ionicons name="location-outline" size={14} color="#1a73e8" />
+
+                  <Text style={styles.cardAddress} numberOfLines={2}>
+                    {activeDestinationAddress}
+                  </Text>
+                </Pressable>
               </View>
 
               {sending ? (
@@ -975,8 +986,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
           <Text style={styles.chatTitle}>Chat de parking</Text>
 
           <Text style={styles.chatSubtitle}>
-            {activeCityLabel} · {activeZoneLabel} ·{" "}
-            {activeUserId.trim() || DEFAULT_USER_ID}
+            {activeDestinationLabel} · {activeUserId.trim() || DEFAULT_USER_ID}
           </Text>
         </View>
       </View>
@@ -1065,7 +1075,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
                     />
 
                     <Text style={styles.emptyText}>
-                      Todavía no hay mensajes de parking en esta zona.
+                      Todavía no hay mensajes de parking para este destino.
                     </Text>
                   </View>
                 }
@@ -1101,7 +1111,7 @@ export default function ParkingScreen({ userId = DEFAULT_USER_ID }) {
 
                 <View style={styles.composerFooter}>
                   <Text style={styles.composerHint}>
-                    Se permiten enlaces http:// y https://
+                    Se añadirá el destino seleccionado al mensaje.
                   </Text>
 
                   <Text
@@ -1256,40 +1266,73 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  selectorRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-
-  selectorButton: {
-    minHeight: 40,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  selectorButtonSelected: {
-    borderColor: "#15803d",
-    backgroundColor: "#14532d",
-  },
-
   selectorButtonPressed: {
     opacity: 0.75,
   },
 
-  selectorButtonText: {
-    color: "#374151",
-    fontSize: 15,
+  destinationGrid: {
+    gap: 8,
+  },
+
+  destinationButton: {
+    minHeight: 66,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  destinationButtonSelected: {
+    borderColor: "#15803d",
+    backgroundColor: "#14532d",
+  },
+
+  destinationButtonIcon: {
+    width: 28,
+    alignItems: "center",
+  },
+
+  destinationButtonTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  destinationButtonText: {
+    color: "#111827",
+    fontSize: 14,
     fontWeight: "900",
   },
 
-  selectorButtonTextSelected: {
+  destinationButtonTextSelected: {
     color: "#ffffff",
+  },
+
+  destinationButtonMeta: {
+    marginTop: 2,
+    color: "#6b7280",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  destinationButtonMetaSelected: {
+    color: "#dcfce7",
+  },
+
+  destinationAddress: {
+    marginTop: 3,
+    color: "#4b5563",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "700",
+  },
+
+  destinationAddressSelected: {
+    color: "#f0fdf4",
   },
 
   usernameInput: {
@@ -1322,8 +1365,14 @@ const styles = StyleSheet.create({
   statusHeader: {
     marginBottom: 10,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
+    gap: 10,
+  },
+
+  statusTitleBlock: {
+    flex: 1,
+    minWidth: 0,
   },
 
   cardTitle: {
@@ -1334,8 +1383,27 @@ const styles = StyleSheet.create({
 
   cardSubtitle: {
     marginTop: 2,
-    color: "#6b7280",
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  addressInlineButton: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 4,
+  },
+
+  addressInlineButtonPressed: {
+    opacity: 0.75,
+  },
+
+  cardAddress: {
+    flex: 1,
+    color: "#1a73e8",
     fontSize: 12,
+    lineHeight: 16,
     fontWeight: "700",
   },
 
@@ -1674,7 +1742,7 @@ const styles = StyleSheet.create({
   },
 
   sectionLabel: {
-    marginBottom: 8,
+    marginBottom: 2,
     color: "#14532d",
     fontSize: 17,
     fontWeight: "900",
@@ -1708,14 +1776,27 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 10,
+  },
+
+  locationTitleTextBlock: {
+    flex: 1,
+    minWidth: 0,
   },
 
   locationCollapseSubtitle: {
     marginTop: 2,
+    color: "#111827",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  locationCollapseAddress: {
+    marginTop: 2,
     color: "#6b7280",
     fontSize: 12,
+    lineHeight: 16,
     fontWeight: "700",
   },
 
