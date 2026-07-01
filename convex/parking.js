@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-const DEFAULT_CITY = "Gijón";
+const DEFAULT_CITY = "gijon";
 const DEFAULT_ZONE = "general";
 const DEFAULT_USER_ID = "anonymous";
 
@@ -15,6 +15,9 @@ const MAX_MESSAGE_LENGTH = 500;
 const MAX_MESSAGES_LIMIT = 200;
 const MAX_SPOTS_LIMIT = 300;
 
+const PRESENCE_TTL_MS = 10 * 60 * 1000;
+const MAX_PRESENCE_LIMIT = 200;
+
 const parkingMessageStatusValidator = v.union(
   v.literal("looking"),
   v.literal("parked"),
@@ -26,6 +29,13 @@ const parkingSpotStatusValidator = v.union(
   v.literal("occupied"),
   v.literal("unknown"),
   v.literal("expired"),
+);
+
+const parkingPresenceStatusValidator = v.union(
+  v.literal("heading"),
+  v.literal("looking"),
+  v.literal("parked"),
+  v.literal("leaving"),
 );
 
 function cleanText(value) {
@@ -148,6 +158,49 @@ function findNearestSpot(spots, lat, lng, maxDistanceMeters) {
   };
 }
 
+async function upsertParkingPresence(ctx, payload) {
+  const now = Date.now();
+
+  const city = cleanCity(payload.city);
+  const zone = cleanZone(payload.zone);
+  const userId = cleanUserId(payload.userId);
+  const status = payload.status || "heading";
+
+  const hasCoords = hasValidCoords(payload.lat, payload.lng);
+  const accuracy = safeAccuracy(payload.accuracy);
+  const locationSource = safeLocationSource(payload.locationSource);
+
+  const existingPresence = await ctx.db
+    .query("parkingPresence")
+    .withIndex("by_city_zone_userId", (q) =>
+      q.eq("city", city).eq("zone", zone).eq("userId", userId),
+    )
+    .first();
+
+  const presenceData = {
+    city,
+    zone,
+    userId,
+    status,
+
+    lat: hasCoords ? payload.lat : undefined,
+    lng: hasCoords ? payload.lng : undefined,
+    accuracy,
+    locationSource,
+
+    updatedAt: now,
+    expiresAt: now + PRESENCE_TTL_MS,
+  };
+
+  if (existingPresence) {
+    await ctx.db.patch(existingPresence._id, presenceData);
+
+    return existingPresence._id;
+  }
+
+  return await ctx.db.insert("parkingPresence", presenceData);
+}
+
 export const listParkingMessages = query({
   args: {
     city: v.string(),
@@ -235,6 +288,37 @@ export const listParkingSpots = query({
   },
 });
 
+export const listDestinationPresence = query({
+  args: {
+    city: v.string(),
+    zone: v.string(),
+    limit: v.optional(v.float64()),
+  },
+
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const city = cleanCity(args.city);
+    const zone = cleanZone(args.zone);
+    const limit = clampLimit(args.limit, 50, 1, MAX_PRESENCE_LIMIT);
+
+    const presence = await ctx.db
+      .query("parkingPresence")
+      .withIndex("by_city_zone_updatedAt", (q) =>
+        q
+          .eq("city", city)
+          .eq("zone", zone)
+          .gt("updatedAt", now - PRESENCE_TTL_MS),
+      )
+      .order("desc")
+      .take(limit);
+
+    return presence
+      .filter((item) => item.expiresAt > now)
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  },
+});
+
 export const sendParkingMessage = mutation({
   args: {
     city: v.string(),
@@ -288,6 +372,17 @@ export const sendParkingMessage = mutation({
       locationSource,
 
       createdAt: now,
+    });
+
+    await upsertParkingPresence(ctx, {
+      city,
+      zone,
+      userId,
+      status: args.status || "heading",
+      lat: args.lat,
+      lng: args.lng,
+      accuracy: args.accuracy,
+      locationSource: args.locationSource,
     });
 
     if (args.status === "leaving" && hasCoords) {
@@ -550,6 +645,74 @@ export const markParkingSpotFree = mutation({
 
     return {
       ok: true,
+    };
+  },
+});
+
+export const touchParkingPresence = mutation({
+  args: {
+    city: v.string(),
+    zone: v.string(),
+    userId: v.string(),
+
+    status: v.optional(parkingPresenceStatusValidator),
+
+    lat: v.optional(v.float64()),
+    lng: v.optional(v.float64()),
+    accuracy: v.optional(v.float64()),
+    locationSource: v.optional(v.string()),
+  },
+
+  handler: async (ctx, args) => {
+    const presenceId = await upsertParkingPresence(ctx, {
+      city: args.city,
+      zone: args.zone,
+      userId: args.userId,
+      status: args.status || "heading",
+      lat: args.lat,
+      lng: args.lng,
+      accuracy: args.accuracy,
+      locationSource: args.locationSource,
+    });
+
+    return {
+      ok: true,
+      presenceId,
+    };
+  },
+});
+
+export const deleteExpiredParkingPresence = mutation({
+  args: {
+    city: v.optional(v.string()),
+    zone: v.optional(v.string()),
+  },
+
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const expiredPresence = await ctx.db
+      .query("parkingPresence")
+      .withIndex("by_expiresAt", (q) => q.lte("expiresAt", now))
+      .collect();
+
+    const city = args.city ? cleanCity(args.city) : null;
+    const zone = args.zone ? cleanZone(args.zone) : null;
+
+    const filteredPresence = expiredPresence.filter((item) => {
+      const sameCity = city ? item.city === city : true;
+      const sameZone = zone ? item.zone === zone : true;
+
+      return sameCity && sameZone;
+    });
+
+    for (const item of filteredPresence) {
+      await ctx.db.delete(item._id);
+    }
+
+    return {
+      ok: true,
+      deleted: filteredPresence.length,
     };
   },
 });

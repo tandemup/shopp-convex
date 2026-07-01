@@ -5,6 +5,7 @@ import { ROUTES } from "@/navigation/ROUTES";
 import ChatScreen from "@/screens/chat/ChatScreen";
 import ChatScreenResponsive from "@/screens/chat/ChatScreenResponsive";
 import ParkingScreen from "@/screens/chat/ParkingScreen";
+import ParkingSettingsScreen from "@/screens/chat/ParkingSettingsScreen";
 import YesterdayNewsScreen from "@/screens/chat/YesterdayNewsScreen";
 
 const Stack = createNativeStackNavigator();
@@ -36,6 +37,7 @@ export default function ChatStack() {
         component={ChatScreenResponsive}
         options={{
           title: "Chat responsive",
+          headerShown: false,
         }}
       />
 
@@ -52,6 +54,20 @@ export default function ChatStack() {
         component={ParkingScreen}
         options={{
           title: "Parking",
+          headerShown: false,
+        }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.PARKING_SETTINGS}
+        component={ParkingSettingsScreen}
+        options={{
+          title: "Ajustes de parking",
+          presentation: "card",
+          headerShown: false,
+          contentStyle: {
+            backgroundColor: "#f8fafc",
+          },
         }}
       />
     </Stack.Navigator>

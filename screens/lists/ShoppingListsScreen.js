@@ -53,6 +53,16 @@ function MenuNavegacion2({
     });
   }, [navigation]);
 
+  /*    
+    {
+      key: "chat2",
+      label: "Chat2",
+      icon: "chatbox-ellipses-outline",
+      isNew: true,
+      variant: "purple",
+      onPress: openChatResponsive,
+    },
+ */
   const actions = [
     {
       key: "new",
@@ -91,14 +101,6 @@ function MenuNavegacion2({
       isNew: true,
       variant: "purple",
       onPress: openChat,
-    },
-    {
-      key: "chat2",
-      label: "Chat2",
-      icon: "chatbox-ellipses-outline",
-      isNew: true,
-      variant: "purple",
-      onPress: openChatResponsive,
     },
     {
       key: "parking",

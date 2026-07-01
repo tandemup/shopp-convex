@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-const DEFAULT_CITY = "Gijón";
+const DEFAULT_CITY = "gijon";
 const DEFAULT_PROVINCIA = "Asturias";
 const DEFAULT_ZIPCODE = 0;
 

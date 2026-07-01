@@ -469,6 +469,7 @@ export default function ChatScreen({ navigation }) {
         style={styles.screen}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
+        {/*
         <View style={styles.topBar}>
           <Pressable
             style={styles.backButton}
@@ -485,7 +486,7 @@ export default function ChatScreen({ navigation }) {
 
           <View style={styles.topRightSpace} />
         </View>
-
+ */}
         <View style={styles.page}>
           <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -638,7 +639,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 18,
+    paddingTop: 28,
+    paddingBottom: 16,
   },
 
   card: {
@@ -647,7 +649,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f8f8",
     borderRadius: 28,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 22,
+    paddingBottom: 20,
     shadowColor: "#000",
     shadowOpacity: 0.12,
     shadowRadius: 28,
@@ -656,6 +660,25 @@ const styles = StyleSheet.create({
       height: 12,
     },
     elevation: 6,
+  },
+
+  listContent: {
+    paddingTop: 14,
+    paddingBottom: 18,
+    gap: 12,
+  },
+
+  inputBlock: {
+    marginTop: 16,
+    marginBottom: 4,
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    padding: 14,
+    position: "relative",
+    paddingRight: 96,
+    minHeight: 104,
   },
 
   cardHeader: {
@@ -731,11 +754,6 @@ const styles = StyleSheet.create({
     borderTopColor: "#e5e7eb",
     borderBottomWidth: 1,
     borderBottomColor: "#e5e7eb",
-  },
-
-  listContent: {
-    paddingVertical: 12,
-    gap: 12,
   },
 
   emptyBlock: {
@@ -875,18 +893,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#9a6600",
     textAlign: "right",
-  },
-
-  inputBlock: {
-    marginTop: 12,
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    padding: 14,
-    position: "relative",
-    paddingRight: 96,
-    minHeight: 104,
   },
 
   input: {

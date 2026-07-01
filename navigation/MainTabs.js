@@ -1,33 +1,52 @@
 import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 
-import { ROUTES } from "./ROUTES";
-import ShoppingStack from "./ShoppingStack";
-import StoresStack from "./StoresStack";
-import ChatStack from "./ChatStack";
-import ScannerStack from "./ScannerStack";
-import MenuStack from "./MenuStack";
+import { ROUTES } from "@/navigation/ROUTES";
+import ShoppingStack from "@/navigation/ShoppingStack";
+import StoresStack from "@/navigation/StoresStack";
+import ChatStack from "@/navigation/ChatStack";
+import ScannerStack from "@/navigation/ScannerStack";
+import MenuStack from "@/navigation/MenuStack";
 
 const Tab = createBottomTabNavigator();
 
 const SCREEN_BACKGROUND = "#f8fafc";
+const TAB_BAR_HEIGHT = Platform.OS === "web" ? 64 : 72;
 
 export default function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+
         sceneStyle: {
+          flex: 1,
           backgroundColor: SCREEN_BACKGROUND,
+          paddingBottom: 0,
         },
+
         tabBarActiveTintColor: "#2563EB",
         tabBarInactiveTintColor: "#9CA3AF",
+
         tabBarStyle: {
+          height: TAB_BAR_HEIGHT,
+          paddingTop: 6,
+          paddingBottom: Platform.OS === "ios" ? 18 : 8,
           backgroundColor: "#FFFFFF",
           borderTopColor: "#E5E7EB",
           borderTopWidth: StyleSheet.hairlineWidth,
+          elevation: 8,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.08,
+          shadowRadius: 8,
+        },
+
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "700",
         },
       }}
     >

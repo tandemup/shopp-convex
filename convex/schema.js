@@ -38,6 +38,13 @@ const parkingMessageStatusValidator = v.union(
   v.literal("leaving"),
 );
 
+const parkingPresenceStatusValidator = v.union(
+  v.literal("heading"),
+  v.literal("looking"),
+  v.literal("parked"),
+  v.literal("leaving"),
+);
+
 const parkingSpotStatusValidator = v.union(
   v.literal("free"),
   v.literal("occupied"),
@@ -130,6 +137,31 @@ export default defineSchema({
       "status",
       "createdAt",
     ]),
+
+  parkingPresence: defineTable({
+    city: v.string(),
+    zone: v.string(),
+    userId: v.string(),
+
+    status: parkingPresenceStatusValidator,
+
+    lat: v.optional(v.number()),
+    lng: v.optional(v.number()),
+    accuracy: v.optional(v.number()),
+    locationSource: v.optional(v.string()),
+
+    updatedAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_city_zone_updatedAt", ["city", "zone", "updatedAt"])
+    .index("by_city_zone_userId", ["city", "zone", "userId"])
+    .index("by_city_zone_status_updatedAt", [
+      "city",
+      "zone",
+      "status",
+      "updatedAt",
+    ])
+    .index("by_expiresAt", ["expiresAt"]),
 
   parkingSpots: defineTable({
     city: v.string(),
