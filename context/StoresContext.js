@@ -6,9 +6,9 @@ import React, {
   useEffect,
 } from "react";
 import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { api } from "../convex/_generated/api";
 
-import { storage } from "@/src/storage/storage";
+import { storage } from "../src/storage/storage";
 
 const StoresContext = createContext();
 

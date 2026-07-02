@@ -18,7 +18,7 @@ import {
   getSearchSettings,
   DEFAULT_SEARCH_SETTINGS,
 } from "@/src/storage/settingsStorage";
-
+import { useAuthActions } from "@convex-dev/auth/react";
 import { SEARCH_ENGINES } from "@/constants/searchEngines";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -450,6 +450,8 @@ async function requestWebCameraPermission() {
 }
 
 export default function MenuScreen({ navigation }) {
+  const { signOut } = useAuthActions();
+
   const [nativeCameraPermission, requestNativeCameraPermission] =
     useCameraPermissions();
 
@@ -465,7 +467,18 @@ export default function MenuScreen({ navigation }) {
 
   const tabBarHeight = useBottomTabBarHeight();
   const { reloadStoresFromSeed } = useStores();
-
+  const handleSignOut = () => {
+    safeAlert("Cerrar sesión", "¿Quieres cerrar tu sesión de Shopp?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Cerrar sesión",
+        style: "destructive",
+        onPress: async () => {
+          await signOut();
+        },
+      },
+    ]);
+  };
   const headerConfig = useMemo(
     () =>
       buildHeaderConfig({
@@ -957,7 +970,17 @@ export default function MenuScreen({ navigation }) {
               )}
             </View>
           </View>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Cuenta</Text>
 
+            <SettingsCard
+              icon="log-out-outline"
+              title="Cerrar sesión"
+              subtitle="Salir de tu cuenta de Shopp en este dispositivo"
+              danger
+              onPress={handleSignOut}
+            />
+          </View>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Danger Zone</Text>
 
