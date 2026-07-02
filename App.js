@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Platform } from "react-native";
 
 import { ConvexProvider, ConvexReactClient } from "convex/react";
@@ -22,10 +22,13 @@ import { ProductLearningProvider } from "./context/ProductLearningContext";
    Screens
 ------------------------------ */
 import SplashScreen from "./screens/system/SplashScreen";
+
 /* -----------------------------
    Navigation
 ------------------------------ */
+import AuthStack from "./navigation/AuthStack";
 import MainTabs from "./navigation/MainTabs";
+
 /* -----------------------------
    Alert host
 ------------------------------ */
@@ -41,7 +44,10 @@ const convex = new ConvexReactClient(convexUrl || "");
 
 const RootStack = createNativeStackNavigator();
 
-export default function App() {
+/* -----------------------------
+   App Providers
+------------------------------ */
+function AppProviders({ children }) {
   return (
     <ConvexProvider client={convex}>
       <SafeAreaProvider>
@@ -51,25 +57,7 @@ export default function App() {
               <LocationProvider>
                 <ProductLearningProvider>
                   <ProductSuggestionsProvider>
-                    <NavigationContainer>
-                      <StatusBar
-                        style="light"
-                        translucent={false}
-                        backgroundColor={
-                          Platform.OS === "android" ? "#2563EB" : undefined
-                        }
-                      />
-                      <RootStack.Navigator
-                        screenOptions={{ headerShown: false }}
-                      >
-                        <RootStack.Screen
-                          name="Splash"
-                          component={SplashScreen}
-                        />
-                        <RootStack.Screen name="Main" component={MainTabs} />
-                      </RootStack.Navigator>
-                      <DialogHost />
-                    </NavigationContainer>
+                    {children}
                   </ProductSuggestionsProvider>
                 </ProductLearningProvider>
               </LocationProvider>
@@ -78,5 +66,69 @@ export default function App() {
         </StoresProvider>
       </SafeAreaProvider>
     </ConvexProvider>
+  );
+}
+
+/* -----------------------------
+   Status Bar
+------------------------------ */
+function AppStatusBar() {
+  return (
+    <StatusBar
+      style="light"
+      translucent={false}
+      backgroundColor={Platform.OS === "android" ? "#2563EB" : undefined}
+    />
+  );
+}
+
+/* -----------------------------
+   Auth / Main Selector
+------------------------------ */
+function AppShell({ isLoggedIn, setIsLoggedIn }) {
+  if (isLoggedIn) {
+    return <MainTabs setIsLoggedIn={setIsLoggedIn} />;
+  }
+
+  return <AuthStack setIsLoggedIn={setIsLoggedIn} />;
+}
+
+/* -----------------------------
+   Root Navigator
+------------------------------ */
+function RootNavigator({ isLoggedIn, setIsLoggedIn }) {
+  return (
+    <NavigationContainer>
+      <AppStatusBar />
+
+      <RootStack.Navigator
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <RootStack.Screen name="Splash" component={SplashScreen} />
+
+        <RootStack.Screen name="Main">
+          {() => (
+            <AppShell isLoggedIn={isLoggedIn} setIsLoggedIn={setIsLoggedIn} />
+          )}
+        </RootStack.Screen>
+      </RootStack.Navigator>
+
+      <DialogHost />
+    </NavigationContainer>
+  );
+}
+
+/* -----------------------------
+   App
+------------------------------ */
+export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  return (
+    <AppProviders>
+      <RootNavigator isLoggedIn={isLoggedIn} setIsLoggedIn={setIsLoggedIn} />
+    </AppProviders>
   );
 }

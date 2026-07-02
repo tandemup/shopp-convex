@@ -12,9 +12,11 @@ export const URL_STATUS = {
 
 export const TRUSTED_DOMAINS = [
   "wikipedia.org",
-  "es.wikipedia.org",
   "google.com",
-  "www.google.com",
+  "youtube.com",
+  "amazon.com",
+  "amazon.es",
+  "foxnews.com",
 ];
 
 export function normalizeUrl(rawUrl) {
