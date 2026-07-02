@@ -1,232 +1,153 @@
 import React, { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
+  View,
   Text,
   TextInput,
-  TouchableOpacity,
-  View,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
 } from "react-native";
-
+import { useAuthActions } from "@convex-dev/auth/react";
 import { safeAlert } from "@/components/ui/alert/safeAlert";
 
-export default function RegisterScreen({ navigation, setIsLoggedIn }) {
-  const [username, setUsername] = useState("");
+export default function RegisterScreen({ navigation }) {
+  const { signIn } = useAuthActions();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleRegister = () => {
-    const cleanUsername = username.trim();
+  const handleRegister = async () => {
     const cleanEmail = email.trim().toLowerCase();
 
-    if (!cleanUsername || !cleanEmail || !password || !repeatPassword) {
-      safeAlert(
-        "Datos incompletos",
-        "Completa todos los campos para crear tu cuenta.",
-      );
+    if (!cleanEmail || !password || !repeatPassword) {
+      safeAlert("Faltan datos", "Introduce email y contraseña.");
       return;
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       safeAlert(
-        "Contraseña demasiado corta",
-        "La contraseña debe tener al menos 6 caracteres.",
+        "Contraseña débil",
+        "La contraseña debe tener al menos 8 caracteres.",
       );
       return;
     }
 
     if (password !== repeatPassword) {
-      safeAlert(
-        "Contraseñas distintas",
-        "Las contraseñas introducidas no coinciden.",
-      );
+      safeAlert("Contraseñas distintas", "Las contraseñas no coinciden.");
       return;
     }
 
-    /*
-      Aquí irá más adelante el registro real:
-      - crear usuario
-      - validar email
-      - guardar sesión
-      - crear perfil de usuario
-    */
+    try {
+      setBusy(true);
 
-    safeAlert("Cuenta creada", "Tu cuenta se ha creado correctamente.", [
-      {
-        text: "Entrar",
-        onPress: () => setIsLoggedIn(true),
-      },
-    ]);
+      const formData = new FormData();
+      formData.append("email", cleanEmail);
+      formData.append("password", password);
+      formData.append("flow", "signUp");
+
+      await signIn("password", formData);
+    } catch (error) {
+      console.error(error);
+      safeAlert(
+        "No se pudo crear la cuenta",
+        "Prueba con otro email o revisa los datos.",
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardContainer}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <View style={styles.container}>
+      <Text style={styles.title}>Crear cuenta en Shopp</Text>
+
+      <TextInput
+        value={email}
+        onChangeText={setEmail}
+        placeholder="Email"
+        autoCapitalize="none"
+        keyboardType="email-address"
+        style={styles.input}
+      />
+
+      <TextInput
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Contraseña"
+        secureTextEntry
+        style={styles.input}
+      />
+
+      <TextInput
+        value={repeatPassword}
+        onChangeText={setRepeatPassword}
+        placeholder="Repetir contraseña"
+        secureTextEntry
+        style={styles.input}
+      />
+
+      <Pressable
+        onPress={handleRegister}
+        disabled={busy}
+        style={[styles.button, busy && styles.buttonDisabled]}
       >
-        <View style={styles.card}>
-          <Text style={styles.appName}>Shopp</Text>
-          <Text style={styles.title}>Crear cuenta</Text>
+        {busy ? (
+          <ActivityIndicator />
+        ) : (
+          <Text style={styles.buttonText}>Crear cuenta</Text>
+        )}
+      </Pressable>
 
-          <Text style={styles.label}>Usuario</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Tu alias"
-            placeholderTextColor="#9CA3AF"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="usuario@email.com"
-            placeholderTextColor="#9CA3AF"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-          />
-
-          <Text style={styles.label}>Contraseña</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Mínimo 6 caracteres"
-            placeholderTextColor="#9CA3AF"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-
-          <Text style={styles.label}>Repetir contraseña</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Repite tu contraseña"
-            placeholderTextColor="#9CA3AF"
-            value={repeatPassword}
-            onChangeText={setRepeatPassword}
-            secureTextEntry
-          />
-
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={handleRegister}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.primaryButtonText}>Crear cuenta</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.75}
-          >
-            <Text style={styles.secondaryButtonText}>
-              Ya tengo cuenta, iniciar sesión
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <Pressable onPress={() => navigation.navigate("Login")}>
+        <Text style={styles.link}>Ya tengo cuenta</Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardContainer: {
+  container: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
-  },
-
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 20,
-  },
-
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
     padding: 24,
-
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-
-    elevation: 4,
+    justifyContent: "center",
+    backgroundColor: "#fff",
   },
-
-  appName: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#2563EB",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "700",
-    color: "#111827",
+    marginBottom: 24,
     textAlign: "center",
-    marginBottom: 28,
   },
-
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 6,
-  },
-
   input: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    backgroundColor: "#F9FAFB",
+    borderColor: "#ddd",
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
+    marginBottom: 12,
     fontSize: 16,
-    color: "#111827",
-    marginBottom: 16,
   },
-
-  primaryButton: {
-    backgroundColor: "#2563EB",
+  button: {
+    backgroundColor: "#111827",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 8,
   },
-
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    color: "#fff",
     fontWeight: "700",
+    fontSize: 16,
   },
-
-  secondaryButton: {
-    marginTop: 18,
-    alignItems: "center",
-  },
-
-  secondaryButtonText: {
-    color: "#2563EB",
-    fontSize: 15,
-    fontWeight: "600",
+  link: {
     textAlign: "center",
+    marginTop: 18,
+    color: "#2563eb",
+    fontWeight: "600",
   },
 });

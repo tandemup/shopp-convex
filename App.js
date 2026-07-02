@@ -1,7 +1,13 @@
-import React, { useState } from "react";
+import React from "react";
 import { Platform } from "react-native";
 
-import { ConvexProvider, ConvexReactClient } from "convex/react";
+import {
+  Authenticated,
+  AuthLoading,
+  ConvexReactClient,
+  Unauthenticated,
+} from "convex/react";
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
 
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -49,7 +55,7 @@ const RootStack = createNativeStackNavigator();
 ------------------------------ */
 function AppProviders({ children }) {
   return (
-    <ConvexProvider client={convex}>
+    <ConvexAuthProvider client={convex}>
       <SafeAreaProvider>
         <StoresProvider>
           <ListsProvider>
@@ -65,7 +71,7 @@ function AppProviders({ children }) {
           </ListsProvider>
         </StoresProvider>
       </SafeAreaProvider>
-    </ConvexProvider>
+    </ConvexAuthProvider>
   );
 }
 
@@ -85,18 +91,28 @@ function AppStatusBar() {
 /* -----------------------------
    Auth / Main Selector
 ------------------------------ */
-function AppShell({ isLoggedIn, setIsLoggedIn }) {
-  if (isLoggedIn) {
-    return <MainTabs setIsLoggedIn={setIsLoggedIn} />;
-  }
+function AppShell() {
+  return (
+    <>
+      <AuthLoading>
+        <SplashScreen />
+      </AuthLoading>
 
-  return <AuthStack setIsLoggedIn={setIsLoggedIn} />;
+      <Unauthenticated>
+        <AuthStack />
+      </Unauthenticated>
+
+      <Authenticated>
+        <MainTabs />
+      </Authenticated>
+    </>
+  );
 }
 
 /* -----------------------------
    Root Navigator
 ------------------------------ */
-function RootNavigator({ isLoggedIn, setIsLoggedIn }) {
+function RootNavigator() {
   return (
     <NavigationContainer>
       <AppStatusBar />
@@ -106,13 +122,7 @@ function RootNavigator({ isLoggedIn, setIsLoggedIn }) {
           headerShown: false,
         }}
       >
-        <RootStack.Screen name="Splash" component={SplashScreen} />
-
-        <RootStack.Screen name="Main">
-          {() => (
-            <AppShell isLoggedIn={isLoggedIn} setIsLoggedIn={setIsLoggedIn} />
-          )}
-        </RootStack.Screen>
+        <RootStack.Screen name="Main" component={AppShell} />
       </RootStack.Navigator>
 
       <DialogHost />
@@ -124,11 +134,9 @@ function RootNavigator({ isLoggedIn, setIsLoggedIn }) {
    App
 ------------------------------ */
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
   return (
     <AppProviders>
-      <RootNavigator isLoggedIn={isLoggedIn} setIsLoggedIn={setIsLoggedIn} />
+      <RootNavigator />
     </AppProviders>
   );
 }

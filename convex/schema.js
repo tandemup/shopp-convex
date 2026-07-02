@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 const urlInfoValidator = v.object({
   originalUrl: v.string(),
@@ -53,6 +54,15 @@ const parkingSpotStatusValidator = v.union(
 );
 
 export default defineSchema({
+  ...authTables,
+
+  // Aquí conservas tus otras tablas:
+  // chatMessages: defineTable({...}),
+  // parkingUsers: defineTable({...}),
+  // parkingEvents: defineTable({...}),
+  // stores: defineTable({...}),
+  // scanHistory: defineTable({...}),
+
   stores: defineTable({
     id: v.string(),
     name: v.string(),

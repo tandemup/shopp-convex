@@ -2,6 +2,7 @@ import React from "react";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { Platform, StyleSheet } from "react-native";
+import { useAuthActions } from "@convex-dev/auth/react";
 
 import { ROUTES } from "@/navigation/ROUTES";
 import ShoppingStack from "@/navigation/ShoppingStack";
