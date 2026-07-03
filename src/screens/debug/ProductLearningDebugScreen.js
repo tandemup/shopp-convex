@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
 } from "react-native";
-import { useProductLearning } from "@/context/ProductLearningContext";
+import { useProductLearning } from "@/src/context/ProductLearningContext";
 
 /* -------------------------------------------------
    Screen

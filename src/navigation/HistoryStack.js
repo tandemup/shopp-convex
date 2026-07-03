@@ -2,8 +2,8 @@ import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ROUTES } from "./ROUTES";
 
-import PurchaseHistoryScreen from "@/screens/history/PurchaseHistoryScreen";
-import PurchaseDetailScreen from "@/screens/history/PurchaseDetailScreen";
+import PurchaseHistoryScreen from "@/src/screens/history/PurchaseHistoryScreen";
+import PurchaseDetailScreen from "@/src/screens/history/PurchaseDetailScreen";
 
 const Stack = createNativeStackNavigator();
 

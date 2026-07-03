@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useConfig } from "@/context/ConfigContext";
+import { useConfig } from "@/src/context/ConfigContext";
 
 export default function StoreCard({ store, onPress }) {
   const { isFavoriteStore, toggleFavoriteStore } = useConfig();
