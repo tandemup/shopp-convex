@@ -744,7 +744,6 @@ export default function MenuScreen({ navigation }) {
 
   const handleClearPurchaseHistory = async () => {
     await clearPurchaseHistory();
-    clearArchivedListsState();
     goToShoppingLists();
   };
 

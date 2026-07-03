@@ -14,6 +14,7 @@ import type * as http from "../http.js";
 import type * as parking from "../parking.js";
 import type * as scanHistory from "../scanHistory.js";
 import type * as stores from "../stores.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   parking: typeof parking;
   scanHistory: typeof scanHistory;
   stores: typeof stores;
+  users: typeof users;
 }>;
 
 /**

@@ -3,16 +3,13 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
-
 import { useAuthActions } from "@convex-dev/auth/react";
-
-import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 
 export default function LoginScreen({ navigation }) {
   const { signIn } = useAuthActions();
@@ -20,201 +17,201 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const [busy, setBusy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const canSubmit =
+    normalizedEmail.length > 0 && password.length > 0 && !submitting;
 
   const handleLogin = async () => {
-    const cleanEmail = email.trim().toLowerCase();
-
-    if (!cleanEmail || !password) {
-      safeAlert(
-        "Datos incompletos",
-        "Introduce email y contraseña para iniciar sesión.",
-      );
+    if (!canSubmit) {
       return;
     }
 
+    setSubmitting(true);
+    setErrorMessage("");
+
     try {
-      setBusy(true);
-
-      const formData = new FormData();
-      formData.append("email", cleanEmail);
-      formData.append("password", password);
-      formData.append("flow", "signIn");
-
-      await signIn("password", formData);
-
-      /*
-        No hace falta navegar manualmente.
-        App.js cambiará automáticamente a MainTabs mediante <Authenticated>.
-      */
+      await signIn("password", {
+        email: normalizedEmail,
+        password,
+        flow: "signIn",
+      });
     } catch (error) {
-      console.error("Error en login:", error);
-
-      safeAlert(
-        "No se pudo iniciar sesión",
-        "Revisa el email y la contraseña.",
+      console.error("Login error:", error);
+      setErrorMessage(
+        "No se pudo iniciar sesión. Revisa el email y la contraseña.",
       );
     } finally {
-      setBusy(false);
+      setSubmitting(false);
     }
   };
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.screen}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.card}>
-        <Text style={styles.appName}>Shopp</Text>
-        <Text style={styles.title}>Iniciar sesión</Text>
+        <Text style={styles.title}>Entrar en Shopp</Text>
 
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="usuario@email.com"
-          placeholderTextColor="#9CA3AF"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          editable={!busy}
-        />
+        <Text style={styles.subtitle}>Accede con tu email y contraseña.</Text>
 
-        <Text style={styles.label}>Contraseña</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Introduce tu contraseña"
-          placeholderTextColor="#9CA3AF"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          editable={!busy}
-        />
+        <View style={styles.field}>
+          <Text style={styles.label}>Email</Text>
 
-        <TouchableOpacity
-          style={[styles.primaryButton, busy && styles.disabledButton]}
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="tu@email.com"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            style={styles.input}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Contraseña</Text>
+
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Tu contraseña"
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="password"
+            style={styles.input}
+          />
+        </View>
+
+        {errorMessage ? (
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        ) : null}
+
+        <Pressable
+          style={[styles.primaryButton, !canSubmit && styles.disabledButton]}
           onPress={handleLogin}
-          activeOpacity={0.85}
-          disabled={busy}
+          disabled={!canSubmit}
         >
-          {busy ? (
-            <ActivityIndicator color="#FFFFFF" />
+          {submitting ? (
+            <ActivityIndicator color="#ffffff" />
           ) : (
             <Text style={styles.primaryButtonText}>Entrar</Text>
           )}
-        </TouchableOpacity>
+        </Pressable>
 
-        <TouchableOpacity
-          style={styles.secondaryButton}
+        <Pressable
+          style={styles.linkButton}
           onPress={() => navigation.navigate("Register")}
-          activeOpacity={0.75}
-          disabled={busy}
         >
-          <Text style={styles.secondaryButtonText}>Crear cuenta</Text>
-        </TouchableOpacity>
+          <Text style={styles.linkText}>No tengo cuenta. Crear una.</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backText}>Volver</Text>
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#f8fafc",
     justifyContent: "center",
     padding: 20,
   },
-
-  keyboardContainer: {
-    flex: 1,
-    backgroundColor: "#F3F4F6",
-  },
-
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 20,
-  },
-
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
     padding: 24,
-
-    shadowColor: "#000",
+    shadowColor: "#000000",
     shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
     elevation: 4,
   },
-
-  appName: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#2563EB",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-
   title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111827",
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#0f172a",
+    marginBottom: 8,
     textAlign: "center",
-    marginBottom: 28,
   },
-
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 6,
+  subtitle: {
+    fontSize: 15,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 24,
   },
-
-  input: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#111827",
+  field: {
     marginBottom: 16,
   },
-
-  primaryButton: {
-    backgroundColor: "#2563EB",
+  label: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#334155",
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "ios" ? 14 : 10,
+    fontSize: 16,
+    color: "#0f172a",
+  },
+  errorText: {
+    backgroundColor: "#fee2e2",
+    color: "#991b1b",
     borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  primaryButton: {
+    backgroundColor: "#2563eb",
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 4,
   },
-
   disabledButton: {
-    opacity: 0.65,
+    opacity: 0.55,
   },
-
   primaryButtonText: {
-    color: "#FFFFFF",
+    color: "#ffffff",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "900",
   },
-
-  secondaryButton: {
+  linkButton: {
     marginTop: 18,
     alignItems: "center",
   },
-
-  secondaryButtonText: {
-    color: "#2563EB",
+  linkText: {
+    color: "#2563eb",
     fontSize: 15,
-    fontWeight: "600",
-    textAlign: "center",
+    fontWeight: "800",
+  },
+  backButton: {
+    marginTop: 14,
+    alignItems: "center",
+  },
+  backText: {
+    color: "#64748b",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

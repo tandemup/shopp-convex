@@ -3,269 +3,229 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
+  Pressable,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
-
 import { useAuthActions } from "@convex-dev/auth/react";
-
-import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 
 export default function RegisterScreen({ navigation }) {
   const { signIn } = useAuthActions();
 
-  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [repeatPassword, setRepeatPassword] = useState("");
 
-  const [busy, setBusy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const emailIsValid = normalizedEmail.includes("@");
+  const passwordIsValid = password.length >= 8;
+
+  const canSubmit = emailIsValid && passwordIsValid && !submitting;
 
   const handleRegister = async () => {
-    const cleanUsername = username.trim();
-    const cleanEmail = email.trim().toLowerCase();
-
-    if (!cleanUsername || !cleanEmail || !password || !repeatPassword) {
-      safeAlert(
-        "Datos incompletos",
-        "Completa todos los campos para crear tu cuenta.",
-      );
+    if (!canSubmit) {
       return;
     }
 
-    if (password.length < 6) {
-      safeAlert(
-        "Contraseña demasiado corta",
-        "La contraseña debe tener al menos 6 caracteres.",
-      );
-      return;
-    }
-
-    if (password !== repeatPassword) {
-      safeAlert(
-        "Contraseñas distintas",
-        "Las contraseñas introducidas no coinciden.",
-      );
-      return;
-    }
+    setSubmitting(true);
+    setErrorMessage("");
 
     try {
-      setBusy(true);
-
-      const formData = new FormData();
-      formData.append("email", cleanEmail);
-      formData.append("password", password);
-      formData.append("name", cleanUsername);
-      formData.append("flow", "signUp");
-
-      await signIn("password", formData);
-
-      /*
-        No llamamos a setIsLoggedIn(true).
-        Convex Auth guarda la sesión y App.js mostrará MainTabs.
-      */
+      await signIn("password", {
+        email: normalizedEmail,
+        password,
+        flow: "signUp",
+      });
     } catch (error) {
-      console.error("Error en registro:", error);
-
-      safeAlert(
-        "No se pudo crear la cuenta",
-        "Prueba con otro email o revisa los datos.",
+      console.error("Register error:", error);
+      setErrorMessage(
+        "No se pudo crear la cuenta. Puede que el email ya esté registrado.",
       );
     } finally {
-      setBusy(false);
+      setSubmitting(false);
     }
   };
 
   return (
     <KeyboardAvoidingView
-      style={styles.keyboardContainer}
+      style={styles.screen}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.card}>
-          <Text style={styles.appName}>Shopp</Text>
-          <Text style={styles.title}>Crear cuenta</Text>
+      <View style={styles.card}>
+        <Text style={styles.title}>Crear cuenta</Text>
 
-          <Text style={styles.label}>Usuario</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Tu alias"
-            placeholderTextColor="#9CA3AF"
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-            editable={!busy}
-          />
+        <Text style={styles.subtitle}>
+          Regístrate para sincronizar tus datos de Shopp.
+        </Text>
 
+        <View style={styles.field}>
           <Text style={styles.label}>Email</Text>
+
           <TextInput
-            style={styles.input}
-            placeholder="usuario@email.com"
-            placeholderTextColor="#9CA3AF"
             value={email}
             onChangeText={setEmail}
+            placeholder="tu@email.com"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
-            editable={!busy}
-          />
-
-          <Text style={styles.label}>Contraseña</Text>
-          <TextInput
+            textContentType="emailAddress"
             style={styles.input}
-            placeholder="Mínimo 6 caracteres"
-            placeholderTextColor="#9CA3AF"
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Contraseña</Text>
+
+          <TextInput
             value={password}
             onChangeText={setPassword}
+            placeholder="Mínimo 8 caracteres"
             secureTextEntry
-            editable={!busy}
-          />
-
-          <Text style={styles.label}>Repetir contraseña</Text>
-          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="newPassword"
             style={styles.input}
-            placeholder="Repite tu contraseña"
-            placeholderTextColor="#9CA3AF"
-            value={repeatPassword}
-            onChangeText={setRepeatPassword}
-            secureTextEntry
-            editable={!busy}
           />
-
-          <TouchableOpacity
-            style={[styles.primaryButton, busy && styles.disabledButton]}
-            onPress={handleRegister}
-            activeOpacity={0.85}
-            disabled={busy}
-          >
-            {busy ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Crear cuenta</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.75}
-            disabled={busy}
-          >
-            <Text style={styles.secondaryButtonText}>
-              Ya tengo cuenta, iniciar sesión
-            </Text>
-          </TouchableOpacity>
         </View>
-      </ScrollView>
+
+        <Text style={styles.helperText}>
+          La contraseña debe tener al menos 8 caracteres.
+        </Text>
+
+        {errorMessage ? (
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        ) : null}
+
+        <Pressable
+          style={[styles.primaryButton, !canSubmit && styles.disabledButton]}
+          onPress={handleRegister}
+          disabled={!canSubmit}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Crear cuenta</Text>
+          )}
+        </Pressable>
+
+        <Pressable
+          style={styles.linkButton}
+          onPress={() => navigation.navigate("Login")}
+        >
+          <Text style={styles.linkText}>Ya tengo cuenta. Entrar.</Text>
+        </Pressable>
+
+        <Pressable
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backText}>Volver</Text>
+        </Pressable>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#f8fafc",
     justifyContent: "center",
     padding: 20,
   },
-
-  keyboardContainer: {
-    flex: 1,
-    backgroundColor: "#F3F4F6",
-  },
-
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 20,
-  },
-
   card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
     padding: 24,
-
-    shadowColor: "#000",
+    shadowColor: "#000000",
     shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
     elevation: 4,
   },
-
-  appName: {
-    fontSize: 34,
-    fontWeight: "800",
-    color: "#2563EB",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-
   title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111827",
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#0f172a",
+    marginBottom: 8,
     textAlign: "center",
-    marginBottom: 28,
   },
-
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 6,
+  subtitle: {
+    fontSize: 15,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 24,
   },
-
-  input: {
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: "#111827",
+  field: {
     marginBottom: 16,
   },
-
-  primaryButton: {
-    backgroundColor: "#2563EB",
+  label: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#334155",
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "ios" ? 14 : 10,
+    fontSize: 16,
+    color: "#0f172a",
+  },
+  helperText: {
+    fontSize: 13,
+    color: "#64748b",
+    marginTop: -6,
+    marginBottom: 16,
+  },
+  errorText: {
+    backgroundColor: "#fee2e2",
+    color: "#991b1b",
     borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  primaryButton: {
+    backgroundColor: "#2563eb",
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 4,
   },
-
   disabledButton: {
-    opacity: 0.65,
+    opacity: 0.55,
   },
-
   primaryButtonText: {
-    color: "#FFFFFF",
+    color: "#ffffff",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "900",
   },
-
-  secondaryButton: {
+  linkButton: {
     marginTop: 18,
     alignItems: "center",
   },
-
-  secondaryButtonText: {
-    color: "#2563EB",
+  linkText: {
+    color: "#2563eb",
     fontSize: 15,
-    fontWeight: "600",
-    textAlign: "center",
+    fontWeight: "800",
+  },
+  backButton: {
+    marginTop: 14,
+    alignItems: "center",
+  },
+  backText: {
+    color: "#64748b",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });
