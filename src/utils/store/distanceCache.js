@@ -1,5 +1,5 @@
-import { getItem, setItem } from "../storage";
-import { getDistanceKm, distanceMetersBetween } from "../math/distance";
+import { getItem, setItem } from "@/src/storage";
+import { distanceMetersBetween } from "@/src/utils/math/distance";
 
 const KEY = "stores_distance_cache";
 
@@ -12,4 +12,15 @@ export const setCachedStoreDistance = async (storeId, distanceKm) => {
   const cache = (await getItem(KEY)) || {};
   cache[storeId] = distanceKm;
   await setItem(KEY, cache);
+};
+
+export const calculateStoreDistanceKm = (origin, destination) => {
+  const meters = distanceMetersBetween(
+    origin?.lat,
+    origin?.lng,
+    destination?.lat,
+    destination?.lng,
+  );
+
+  return typeof meters === "number" ? meters / 1000 : null;
 };
