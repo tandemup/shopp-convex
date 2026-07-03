@@ -1,7 +1,7 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
-import LogoutButton from "../components/LogoutButton";
+import LogoutButton from "@/src/components/LogoutButton";
 
 export default function MenuScreen() {
   return (
