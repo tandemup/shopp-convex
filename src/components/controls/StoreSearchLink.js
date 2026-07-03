@@ -1,7 +1,7 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { openExternalUrl } from "@/utils/openExternalUrl";
+import { openExternalUrl } from "@/src/utils/openExternalUrl";
 
 export function StoreSearchLink({ store, onPressStore }) {
   if (!store) {

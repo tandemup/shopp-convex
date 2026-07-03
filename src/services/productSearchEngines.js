@@ -1,4 +1,4 @@
-import { openExternalUrl } from "@/utils/openExternalUrl";
+import { openExternalUrl } from "@/src/utils/openExternalUrl";
 
 export const PRODUCT_SEARCH_ENGINES = {
   GOOGLE: "google",

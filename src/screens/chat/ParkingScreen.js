@@ -23,8 +23,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { ROUTES } from "@/src/navigation/ROUTES";
 import * as Location from "expo-location";
 //import MapView, { Marker } from "react-native-maps";
-//import ParkingLeafletMap from "@/components/ParkingLeafletMap";
+//import ParkingLeafletMap from "@/src/components/ParkingLeafletMap";
 import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
+
 const PARKING_SETTINGS_STORAGE_KEY = "@shopp/parking/settings";
 const PARKING_LOCAL_EVENTS_STORAGE_KEY = "@shopp/parking/events";
 const PARKING_LOCAL_STATE_STORAGE_KEY = "@shopp/parking/current-state";

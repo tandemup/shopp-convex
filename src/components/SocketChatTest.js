@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Pressable, FlatList } from "react-native";
 
-import chatSocket from "@/services/chatSocket";
+import chatSocket from "@/src/services/chatSocket";
 
 export default function SocketChatTest() {
   const [connected, setConnected] = useState(false);
