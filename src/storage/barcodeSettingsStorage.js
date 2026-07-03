@@ -2,7 +2,7 @@
 
 import { storage } from "./storage";
 
-import { DEFAULT_BARCODE_SETTINGS } from "@/constants/barcodeFormats";
+import { DEFAULT_BARCODE_SETTINGS } from "@/src/constants/barcodeFormats";
 
 /* -------------------------------------------------
    Storage key

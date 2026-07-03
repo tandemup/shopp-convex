@@ -17,28 +17,28 @@ import { StatusBar } from "expo-status-bar";
 /* -----------------------------
    Context Providers
 ------------------------------ */
-import { StoresProvider } from "./context/StoresContext";
-import { ListsProvider } from "./context/ListsContext";
-import { PurchasesProvider } from "./context/PurchasesContext";
-import { LocationProvider } from "./context/LocationContext";
-import { ProductSuggestionsProvider } from "./context/ProductSuggestionsContext";
-import { ProductLearningProvider } from "./context/ProductLearningContext";
+import { StoresProvider } from "@/src/context/StoresContext";
+import { ListsProvider } from "@/src/context/ListsContext";
+import { PurchasesProvider } from "@/src/context/PurchasesContext";
+import { LocationProvider } from "@/src/context/LocationContext";
+import { ProductSuggestionsProvider } from "@/src/context/ProductSuggestionsContext";
+import { ProductLearningProvider } from "@/src/context/ProductLearningContext";
 
 /* -----------------------------
    Screens
 ------------------------------ */
-import SplashScreen from "./screens/system/SplashScreen";
+import SplashScreen from "@/src/screens/system/SplashScreen";
 
 /* -----------------------------
    Navigation
 ------------------------------ */
-import AuthStack from "./navigation/AuthStack";
-import MainTabs from "./navigation/MainTabs";
+import AuthStack from "@/src/navigation/AuthStack";
+import MainTabs from "@/src/navigation/MainTabs";
 
 /* -----------------------------
    Alert host
 ------------------------------ */
-import DialogHost from "./components/ui/alert/DialogHost";
+import DialogHost from "@/src/components/ui/alert/DialogHost";
 
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 
