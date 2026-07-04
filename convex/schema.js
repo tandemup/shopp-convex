@@ -58,6 +58,92 @@ export default defineSchema({
     .index("by_room_createdAt", ["room", "createdAt"])
     .index("by_expiresAt", ["expiresAt"]),
 
+  parkingPresence: defineTable({
+    userId: v.string(),
+
+    city: v.string(),
+    zone: v.string(),
+
+    alias: v.optional(v.string()),
+    destination: v.optional(v.string()),
+
+    status: v.optional(
+      v.union(
+        v.literal("looking"),
+        v.literal("parked"),
+        v.literal("leaving"),
+        v.literal("heading"),
+        v.literal("offline"),
+      ),
+    ),
+
+    lat: v.optional(v.float64()),
+    lng: v.optional(v.float64()),
+
+    locationSource: v.optional(v.string()),
+
+    location: v.optional(
+      v.object({
+        lat: v.float64(),
+        lng: v.float64(),
+        source: v.optional(v.string()),
+      }),
+    ),
+
+    createdAt: v.optional(v.float64()),
+    updatedAt: v.float64(),
+    expiresAt: v.optional(v.float64()),
+  })
+    .index("by_city_zone_userId", ["city", "zone", "userId"])
+    .index("by_city_zone_updatedAt", ["city", "zone", "updatedAt"])
+    .index("by_userId", ["userId"])
+    .index("by_city_zone", ["city", "zone"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  parkingSpots: defineTable({
+    userId: v.string(),
+
+    city: v.string(),
+    zone: v.string(),
+
+    status: v.optional(
+      v.union(
+        v.literal("looking"),
+        v.literal("parked"),
+        v.literal("leaving"),
+        v.literal("heading"),
+        v.literal("offline"),
+      ),
+    ),
+
+    alias: v.optional(v.string()),
+    destination: v.optional(v.string()),
+
+    lat: v.optional(v.float64()),
+    lng: v.optional(v.float64()),
+
+    location: v.optional(
+      v.object({
+        lat: v.float64(),
+        lng: v.float64(),
+        source: v.optional(v.string()),
+      }),
+    ),
+
+    createdAt: v.float64(),
+    updatedAt: v.optional(v.float64()),
+    expiresAt: v.optional(v.float64()),
+  })
+    .index("by_city_zone_status_expiresAt", [
+      "city",
+      "zone",
+      "status",
+      "expiresAt",
+    ])
+    .index("by_userId", ["userId"])
+    .index("by_city_zone", ["city", "zone"])
+    .index("by_expiresAt", ["expiresAt"]),
+
   parkingMessages: defineTable({
     // Formato nuevo / recomendado
     room: v.optional(v.string()),
