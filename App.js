@@ -5,6 +5,8 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 
 import { LocationProvider } from "@/src/context/LocationContext";
 import { ListsProvider } from "@/src/context/ListsContext";
+import { StoresProvider } from "@/src/context/StoresContext";
+
 import AppNavigator from "@/src/navigation/AppNavigator";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL);
@@ -13,11 +15,13 @@ export default function App() {
   return (
     <ConvexAuthProvider client={convex}>
       <ListsProvider>
-        <LocationProvider>
-          <NavigationContainer>
-            <AppNavigator />
-          </NavigationContainer>
-        </LocationProvider>
+        <StoresProvider>
+          <LocationProvider>
+            <NavigationContainer>
+              <AppNavigator />
+            </NavigationContainer>
+          </LocationProvider>
+        </StoresProvider>
       </ListsProvider>
     </ConvexAuthProvider>
   );

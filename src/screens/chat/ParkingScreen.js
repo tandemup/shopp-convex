@@ -8,7 +8,6 @@ import React, {
   useState,
 } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -18,6 +17,8 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { safeAlert } from "@/src/components/ui/alert/safeAlert";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { ROUTES } from "@/src/navigation/ROUTES";
@@ -559,7 +560,7 @@ export default function ParkingScreen({ navigation }) {
       PARKING_STATUS_LABELS[currentState.status] || currentState.status;
     const nextLabel = PARKING_STATUS_LABELS[nextStatus] || nextStatus;
 
-    Alert.alert(
+    safeAlert(
       "Cambio de estado no permitido",
       `No puedes pasar directamente de "${currentLabel}" a "${nextLabel}".`,
     );
@@ -572,7 +573,7 @@ export default function ParkingScreen({ navigation }) {
       const permission = await Location.requestForegroundPermissionsAsync();
 
       if (permission.status !== "granted") {
-        Alert.alert(
+        safeAlert(
           "Permiso de ubicación necesario",
           "Activa la ubicación para poder compartir coordenadas de parking.",
         );
@@ -601,7 +602,7 @@ export default function ParkingScreen({ navigation }) {
     } catch (error) {
       console.warn("[ParkingScreen] Error getting location:", error);
 
-      Alert.alert(
+      safeAlert(
         "Ubicación no disponible",
         "No se ha podido obtener la ubicación actual.",
       );
@@ -622,7 +623,7 @@ export default function ParkingScreen({ navigation }) {
 
   const publishStatus = async (nextStatus) => {
     if (!canPublish) {
-      Alert.alert(
+      safeAlert(
         "Configura Parking",
         "Antes de publicar tu estado, introduce un User ID y un destino en Ajustes.",
         [
@@ -717,7 +718,7 @@ export default function ParkingScreen({ navigation }) {
   };
 
   const clearLocalEvents = () => {
-    Alert.alert(
+    safeAlert(
       "Limpiar actividad",
       "¿Quieres borrar solo la actividad local de parking? Los ajustes no se borrarán.",
       [

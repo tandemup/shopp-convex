@@ -70,7 +70,7 @@ export default function ProductLearningDebugScreen() {
       <TouchableOpacity
         style={styles.resetAll}
         onPress={() => {
-          alert(
+          safeAlert(
             "Para limpiar el aprendizaje, borra AsyncStorage (@productLearning)",
           );
         }}
