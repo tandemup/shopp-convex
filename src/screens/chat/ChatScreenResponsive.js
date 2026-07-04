@@ -1,4 +1,7 @@
+// screens/ChatScreenResponsive.js
+
 import React, { useEffect, useMemo, useState } from "react";
+
 import {
   ActivityIndicator,
   FlatList,
@@ -13,9 +16,11 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+
 import { Audio } from "expo-av";
 import moment from "moment";
 import "moment/locale/es";
+
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
@@ -214,7 +219,7 @@ export default function ChatScreenResponsive({
             ) : (
               <FlatList
                 data={filteredMessages}
-                keyExtractor={(item) => item._id}
+                keyExtractor={(item) => String(item._id || item.id)}
                 contentContainerStyle={styles.messagesList}
                 keyboardShouldPersistTaps="handled"
                 renderItem={({ item }) => (
@@ -773,7 +778,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 15,
     padding: 0,
-    outlineStyle: "none",
+    outlineStyle: Platform.OS === "web" ? "none" : undefined,
   },
 
   chatPanel: {
@@ -890,7 +895,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     color: COLORS.text,
     fontWeight: "700",
-    outlineStyle: "none",
+    outlineStyle: Platform.OS === "web" ? "none" : undefined,
   },
 
   mobileRoomScroller: {
@@ -1122,7 +1127,7 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     color: COLORS.text,
     fontSize: 15,
-    outlineStyle: "none",
+    outlineStyle: Platform.OS === "web" ? "none" : undefined,
   },
 
   sendButton: {

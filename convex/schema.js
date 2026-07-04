@@ -7,8 +7,8 @@ export default defineSchema({
 
   chatMessages: defineTable({
     room: v.string(),
-    username: v.string(),
     text: v.string(),
+    username: v.string(),
     createdAt: v.float64(),
 
     status: v.optional(
@@ -37,10 +37,13 @@ export default defineSchema({
 
           status: v.optional(
             v.union(
+              v.literal("trusted"),
+              v.literal("safe"),
               v.literal("pending"),
-              v.literal("clean"),
+              v.literal("suspicious"),
+              v.literal("malicious"),
               v.literal("blocked"),
-              v.literal("warning"),
+              v.literal("unknown"),
             ),
           ),
         }),
@@ -50,9 +53,10 @@ export default defineSchema({
     checkedLocallyAt: v.optional(v.float64()),
     checkedExternallyAt: v.optional(v.float64()),
     expiresAt: v.optional(v.float64()),
+    blockedReason: v.optional(v.string()),
   })
-    .index("by_room", ["room"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_room_createdAt", ["room", "createdAt"])
+    .index("by_expiresAt", ["expiresAt"]),
 
   parkingMessages: defineTable({
     // Formato nuevo / recomendado

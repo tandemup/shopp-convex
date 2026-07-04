@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  ImageBackground,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -32,8 +31,10 @@ export default function LoginScreen({ navigation }) {
 
   const normalizedEmail = email.trim().toLowerCase();
 
-  const canSubmit =
-    normalizedEmail.length > 0 && password.length > 0 && !submitting;
+  const emailIsValid = normalizedEmail.includes("@");
+  const passwordIsValid = password.length > 0;
+
+  const canSubmit = emailIsValid && passwordIsValid && !submitting;
 
   const layoutStyles = useMemo(() => {
     return {
@@ -42,34 +43,48 @@ export default function LoginScreen({ navigation }) {
         isDesktop && styles.screenDesktop,
         isTablet && styles.screenTablet,
       ],
+
+      scrollContent: [
+        styles.scrollContent,
+        {
+          minHeight: height,
+        },
+        isDesktop && styles.scrollContentDesktop,
+        isSmallMobile && styles.scrollContentSmallMobile,
+      ],
+
       shell: [
         styles.shell,
         isDesktop && styles.shellDesktop,
         isTablet && styles.shellTablet,
       ],
+
       brandPanel: [
         styles.brandPanel,
         isDesktop && styles.brandPanelDesktop,
         !isDesktop && styles.brandPanelMobile,
       ],
+
       formPanel: [
         styles.formPanel,
         isDesktop && styles.formPanelDesktop,
         isTablet && styles.formPanelTablet,
         isSmallMobile && styles.formPanelSmallMobile,
       ],
+
       title: [
         styles.title,
         isDesktop && styles.titleDesktop,
         isSmallMobile && styles.titleSmallMobile,
       ],
+
       subtitle: [
         styles.subtitle,
         isDesktop && styles.subtitleDesktop,
         isSmallMobile && styles.subtitleSmallMobile,
       ],
     };
-  }, [isDesktop, isTablet, isSmallMobile]);
+  }, [height, isDesktop, isTablet, isSmallMobile]);
 
   const handleLogin = async () => {
     if (!canSubmit) {
@@ -104,13 +119,7 @@ export default function LoginScreen({ navigation }) {
       <ScrollView
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            minHeight: height,
-          },
-          isDesktop && styles.scrollContentDesktop,
-        ]}
+        contentContainerStyle={layoutStyles.scrollContent}
       >
         <View style={layoutStyles.shell}>
           <View style={layoutStyles.brandPanel}>
@@ -177,7 +186,12 @@ export default function LoginScreen({ navigation }) {
               <View style={styles.field}>
                 <Text style={styles.label}>Email</Text>
 
-                <View style={styles.inputBox}>
+                <View
+                  style={[
+                    styles.inputBox,
+                    email.length > 0 && !emailIsValid && styles.inputBoxError,
+                  ]}
+                >
                   <Ionicons
                     name="mail-outline"
                     size={20}
@@ -188,15 +202,22 @@ export default function LoginScreen({ navigation }) {
                   <TextInput
                     value={email}
                     onChangeText={setEmail}
-                    placeholder=""
+                    placeholder="tu@email.com"
                     placeholderTextColor="#94a3b8"
                     autoCapitalize="none"
                     autoCorrect={false}
                     keyboardType="email-address"
                     textContentType="emailAddress"
+                    autoComplete="email"
                     style={styles.input}
                   />
                 </View>
+
+                {email.length > 0 && !emailIsValid ? (
+                  <Text style={styles.fieldHintError}>
+                    Introduce un email válido.
+                  </Text>
+                ) : null}
               </View>
 
               <View style={styles.field}>
@@ -219,6 +240,7 @@ export default function LoginScreen({ navigation }) {
                     autoCapitalize="none"
                     autoCorrect={false}
                     textContentType="password"
+                    autoComplete="password"
                     style={styles.input}
                   />
                 </View>
@@ -292,6 +314,11 @@ const styles = StyleSheet.create({
   scrollContentDesktop: {
     paddingHorizontal: 48,
     paddingVertical: 48,
+  },
+
+  scrollContentSmallMobile: {
+    paddingHorizontal: 14,
+    paddingVertical: 20,
   },
 
   shell: {
@@ -488,6 +515,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
 
+  inputBoxError: {
+    borderColor: "#fca5a5",
+    backgroundColor: "#fff7f7",
+  },
+
   inputIcon: {
     marginRight: 10,
   },
@@ -499,6 +531,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#0f172a",
     outlineStyle: "none",
+  },
+
+  fieldHintError: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: "#dc2626",
   },
 
   errorBox: {

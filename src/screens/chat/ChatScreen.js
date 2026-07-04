@@ -10,6 +10,7 @@ import React, {
 
 import {
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -18,13 +19,16 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
+
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 import { Ionicons } from "@expo/vector-icons";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import {
-  buildUrlSafetyRecords,
   canOpenUrlByStatus,
   extractUrlsFromText,
   getInitialUrlStatus,
@@ -91,6 +95,19 @@ function formatRelativeTime(timestamp) {
   return `hace ${days} días`;
 }
 
+function formatClockTime(timestamp) {
+  if (!timestamp) return "";
+
+  try {
+    return new Date(timestamp).toLocaleTimeString("es-ES", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
 function formatTimeLeft(createdAt) {
   if (!createdAt) return "";
 
@@ -110,20 +127,6 @@ function formatTimeLeft(createdAt) {
   }
 
   return `Se borra en ${hours} h ${minutes} min`;
-}
-
-function isImageUrl(url) {
-  if (!url) return false;
-
-  const clean = url.toLowerCase().split("?")[0];
-
-  return (
-    clean.endsWith(".jpg") ||
-    clean.endsWith(".jpeg") ||
-    clean.endsWith(".png") ||
-    clean.endsWith(".gif") ||
-    clean.endsWith(".webp")
-  );
 }
 
 function splitTextWithUrls(text) {
@@ -161,6 +164,57 @@ function splitTextWithUrls(text) {
   }
 
   return parts;
+}
+
+function getYouTubeVideoId(url) {
+  if (!url) return null;
+
+  try {
+    const normalizedUrl = normalizeUrl(url);
+    const parsedUrl = new URL(normalizedUrl);
+
+    const hostname = parsedUrl.hostname.replace(/^www\./, "");
+
+    if (hostname === "youtube.com" || hostname === "m.youtube.com") {
+      const videoId = parsedUrl.searchParams.get("v");
+
+      if (videoId) {
+        return videoId;
+      }
+
+      const shortsMatch = parsedUrl.pathname.match(/^\/shorts\/([^/?#]+)/);
+
+      if (shortsMatch?.[1]) {
+        return shortsMatch[1];
+      }
+
+      const embedMatch = parsedUrl.pathname.match(/^\/embed\/([^/?#]+)/);
+
+      if (embedMatch?.[1]) {
+        return embedMatch[1];
+      }
+    }
+
+    if (hostname === "youtu.be") {
+      const videoId = parsedUrl.pathname.replace("/", "").split(/[?#]/)[0];
+
+      if (videoId) {
+        return videoId;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function getYouTubeThumbnailUrl(url) {
+  const videoId = getYouTubeVideoId(url);
+
+  if (!videoId) return null;
+
+  return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 }
 
 function UrlBadge({ status }) {
@@ -225,30 +279,146 @@ function MessageText({ message, onOpenUrl }) {
   );
 }
 
-function MessageCard({ item, onOpenUrl }) {
+function LayoutPanel({
+  rooms,
+  room,
+  setRoom,
+  username,
+  setUsername,
+  compact = false,
+}) {
+  return (
+    <View style={[styles.layoutPanel, compact && styles.layoutPanelCompact]}>
+      <Text style={styles.panelTitle}>Room</Text>
+
+      <View style={[styles.roomGrid, compact && styles.roomGridCompact]}>
+        {rooms.map((item) => {
+          const active = item.id === room;
+
+          return (
+            <Pressable
+              key={item.id}
+              onPress={() => setRoom(item.id)}
+              style={[styles.roomButton, active && styles.roomButtonActive]}
+            >
+              <Ionicons
+                name={item.icon}
+                size={18}
+                color={active ? "#ffffff" : "#111827"}
+              />
+
+              <Text
+                style={[
+                  styles.roomButtonText,
+                  active && styles.roomButtonTextActive,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.userBlock}>
+        <Text style={styles.panelTitle}>Usuario</Text>
+
+        <TextInput
+          value={username}
+          onChangeText={setUsername}
+          placeholder="anonymous"
+          placeholderTextColor="#9ca3af"
+          style={styles.usernameInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+    </View>
+  );
+}
+
+function YouTubeThumbnail({ url, onOpenUrl }) {
+  const thumbnailUrl = getYouTubeThumbnailUrl(url);
+
+  if (!thumbnailUrl) return null;
+
+  return (
+    <Pressable
+      style={styles.youtubePreview}
+      onPress={() => onOpenUrl(url, URL_STATUS.TRUSTED)}
+    >
+      <Image
+        source={{ uri: thumbnailUrl }}
+        style={styles.youtubeThumbnail}
+        resizeMode="cover"
+      />
+
+      <View style={styles.youtubePlayBadge}>
+        <Ionicons name="play" size={18} color="#ffffff" />
+      </View>
+    </Pressable>
+  );
+}
+
+function MessageCard({ item, onOpenUrl, compact = false }) {
   const urls = useMemo(() => {
     return extractUrlsFromText(item?.text || "");
   }, [item?.text]);
 
+  const createdAt = item.createdAt || item._creationTime;
+
   return (
-    <View style={styles.messageCard}>
+    <View style={[styles.messageCard, compact && styles.messageCardCompact]}>
       <View style={styles.messageHeader}>
-        <Text style={styles.messageUser}>
-          {item.username || DEFAULT_USERNAME}
-        </Text>
+        <View style={styles.messageUserBlock}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {(item.username || DEFAULT_USERNAME).slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+
+          <View style={styles.messageUserTextBox}>
+            <Text style={styles.messageUser} numberOfLines={1}>
+              {item.username || DEFAULT_USERNAME}
+            </Text>
+
+            <Text style={styles.messageRoom} numberOfLines={1}>
+              #{item.room || DEFAULT_ROOM}
+            </Text>
+          </View>
+        </View>
 
         <View style={styles.messageMeta}>
-          <Text style={styles.messageAge}>
-            {formatRelativeTime(item.createdAt)}
-          </Text>
+          <Text style={styles.messageAge}>{formatRelativeTime(createdAt)}</Text>
 
-          <Text style={styles.messageClock}>{item.displayTime || ""}</Text>
+          <Text style={styles.messageClock}>
+            {item.displayTime || formatClockTime(createdAt)}
+          </Text>
         </View>
       </View>
 
       <MessageText message={item} onOpenUrl={onOpenUrl} />
 
-      {urls.length > 0 && (
+      {urls.length > 0 ? (
+        <View style={styles.youtubePreviewBlock}>
+          {urls.map((url) => {
+            const normalizedUrl = normalizeUrl(url);
+            const thumbnailUrl = getYouTubeThumbnailUrl(normalizedUrl);
+
+            if (!thumbnailUrl) return null;
+
+            return (
+              <YouTubeThumbnail
+                key={`${item.id || item._id}-youtube-${normalizedUrl}`}
+                url={normalizedUrl}
+                onOpenUrl={onOpenUrl}
+              />
+            );
+          })}
+        </View>
+      ) : null}
+
+      {urls.length > 0 ? (
         <View style={styles.urlBadgesBlock}>
           {urls.map((url) => {
             const normalizedUrl = normalizeUrl(url);
@@ -262,89 +432,103 @@ function MessageCard({ item, onOpenUrl }) {
             );
           })}
         </View>
-      )}
+      ) : null}
 
-      <Text style={styles.selfDeleteText}>
-        {formatTimeLeft(item.createdAt)}
-      </Text>
+      <Text style={styles.selfDeleteText}>{formatTimeLeft(createdAt)}</Text>
     </View>
   );
 }
 
-export default function ChatScreen({ navigation }) {
+export default function ChatScreen() {
   const listRef = useRef(null);
+  const { width } = useWindowDimensions();
+
+  const isDesktop = width >= 900;
+  const isTablet = width >= 700 && width < 900;
+  const isSmallMobile = width < 390;
 
   const [room, setRoom] = useState(DEFAULT_ROOM);
   const [username, setUsername] = useState(DEFAULT_USERNAME);
   const [input, setInput] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  const [messages, setMessages] = useState([
-    {
-      id: "demo-1",
-      room: DEFAULT_ROOM,
-      username: "sam",
-      text: "https://es.wikipedia.org/wiki/Guglielmo_Marconi",
-      createdAt: Date.now() - 13 * 60 * 60 * 1000,
-      displayTime: "20:44",
-      urlSafety: [
-        {
-          url: "https://es.wikipedia.org/wiki/Guglielmo_Marconi",
-          status: URL_STATUS.TRUSTED,
-          checkedAt: Date.now() - 13 * 60 * 60 * 1000,
-        },
+  const activeRoom = room.trim() || DEFAULT_ROOM;
+
+  const convexMessages = useQuery(api.chat.listMessages, {
+    room: activeRoom,
+  });
+
+  const sendMessage = useMutation(api.chat.sendMessage);
+
+  const messages = useMemo(() => {
+    return Array.isArray(convexMessages) ? convexMessages : [];
+  }, [convexMessages]);
+
+  const isLoadingMessages = convexMessages === undefined;
+
+  const layoutStyles = useMemo(() => {
+    return {
+      page: [
+        styles.page,
+        isDesktop && styles.pageDesktop,
+        isTablet && styles.pageTablet,
+        isSmallMobile && styles.pageSmallMobile,
       ],
-    },
-    {
-      id: "demo-2",
-      room: DEFAULT_ROOM,
-      username: "sam",
-      text: "https://www.google.com/finance/beta?hl=es",
-      createdAt: Date.now() - 13 * 60 * 60 * 1000,
-      displayTime: "20:46",
-      urlSafety: [
-        {
-          url: "https://www.google.com/finance/beta?hl=es",
-          status: URL_STATUS.PENDING,
-          checkedAt: null,
-        },
+
+      card: [
+        styles.card,
+        isDesktop && styles.cardDesktop,
+        isTablet && styles.cardTablet,
+        isSmallMobile && styles.cardSmallMobile,
       ],
-    },
-  ]);
+
+      cardHeader: [styles.cardHeader, !isDesktop && styles.cardHeaderMobile],
+
+      title: [
+        styles.title,
+        isDesktop && styles.titleDesktop,
+        isSmallMobile && styles.titleSmallMobile,
+      ],
+
+      subtitle: [styles.subtitle, isSmallMobile && styles.subtitleSmallMobile],
+
+      inputBlock: [
+        styles.inputBlock,
+        isDesktop && styles.inputBlockDesktop,
+        isSmallMobile && styles.inputBlockSmallMobile,
+      ],
+
+      listContent: [
+        styles.listContent,
+        isDesktop && styles.listContentDesktop,
+        isSmallMobile && styles.listContentSmallMobile,
+      ],
+    };
+  }, [isDesktop, isTablet, isSmallMobile]);
 
   const filteredMessages = useMemo(() => {
-    const activeRoom = room.trim() || DEFAULT_ROOM;
-
     return messages
       .filter((message) => {
         return (message.room || DEFAULT_ROOM) === activeRoom;
       })
       .filter((message) => {
-        if (!message.createdAt) return true;
+        const createdAt = message.createdAt || message._creationTime;
 
-        return now() - message.createdAt < SELF_DELETE_MS;
+        if (!createdAt) return true;
+
+        return now() - createdAt < SELF_DELETE_MS;
       })
       .sort((a, b) => {
-        return (a.createdAt || 0) - (b.createdAt || 0);
+        const createdAtA = a.createdAt || a._creationTime || 0;
+        const createdAtB = b.createdAt || b._creationTime || 0;
+
+        return createdAtA - createdAtB;
       });
-  }, [messages, room]);
+  }, [messages, activeRoom]);
 
   const remainingChars = MAX_MESSAGE_LENGTH - input.length;
-  const canPost = input.trim().length > 0 && remainingChars >= 0;
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMessages((prev) => {
-        return prev.filter((message) => {
-          if (!message.createdAt) return true;
-
-          return now() - message.createdAt < SELF_DELETE_MS;
-        });
-      });
-    }, 60000);
-
-    return () => clearInterval(interval);
-  }, []);
+  const canPost = input.trim().length > 0 && remainingChars >= 0 && !sending;
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -385,10 +569,10 @@ export default function ChatScreen({ navigation }) {
     }
   }, []);
 
-  const handlePost = useCallback(() => {
+  const handlePost = useCallback(async () => {
     const cleanText = input.trim();
 
-    if (!cleanText) return;
+    if (!cleanText || sending) return;
 
     if (cleanText.length > MAX_MESSAGE_LENGTH) {
       safeAlert(
@@ -398,69 +582,46 @@ export default function ChatScreen({ navigation }) {
       return;
     }
 
-    const createdAt = Date.now();
-    const urlSafety = buildUrlSafetyRecords(cleanText);
+    const cleanRoom = room.trim() || DEFAULT_ROOM;
+    const cleanUsername = username.trim() || DEFAULT_USERNAME;
 
-    const newMessage = {
-      id: `local-${createdAt}`,
-      room: room.trim() || DEFAULT_ROOM,
-      username: username.trim() || DEFAULT_USERNAME,
-      text: cleanText,
-      createdAt,
-      displayTime: new Date(createdAt).toLocaleTimeString("es-ES", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      urlSafety,
-    };
+    setSending(true);
 
-    setMessages((prev) => [...prev, newMessage]);
-    setInput("");
+    try {
+      await sendMessage({
+        room: cleanRoom,
+        username: cleanUsername,
+        text: cleanText,
+      });
 
-    setTimeout(() => {
-      listRef.current?.scrollToEnd?.({ animated: true });
-    }, 100);
-  }, [input, room, username]);
+      setInput("");
+
+      setTimeout(() => {
+        listRef.current?.scrollToEnd?.({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error("Error guardando mensaje en Convex:", error);
+
+      safeAlert(
+        "Error",
+        error?.message || "No se pudo guardar el mensaje en la base de datos.",
+      );
+    } finally {
+      setSending(false);
+    }
+  }, [input, room, username, sending, sendMessage]);
 
   const renderItem = useCallback(
     ({ item }) => {
-      return <MessageCard item={item} onOpenUrl={handleOpenUrl} />;
-    },
-    [handleOpenUrl],
-  );
-
-  const renderRoomOption = useCallback(
-    (option) => {
-      const selected = room === option.id;
-
       return (
-        <Pressable
-          key={option.id}
-          onPress={() => setRoom(option.id)}
-          style={({ pressed }) => [
-            styles.roomOption,
-            selected && styles.roomOptionSelected,
-            pressed && styles.roomOptionPressed,
-          ]}
-        >
-          <Ionicons
-            name={option.icon}
-            size={18}
-            color={selected ? "#ffffff" : "#111827"}
-          />
-
-          <Text
-            style={[
-              styles.roomOptionText,
-              selected && styles.roomOptionTextSelected,
-            ]}
-          >
-            {option.label}
-          </Text>
-        </Pressable>
+        <MessageCard
+          item={item}
+          onOpenUrl={handleOpenUrl}
+          compact={isSmallMobile}
+        />
       );
     },
-    [room],
+    [handleOpenUrl, isSmallMobile],
   );
 
   return (
@@ -469,125 +630,165 @@ export default function ChatScreen({ navigation }) {
         style={styles.screen}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/*
-        <View style={styles.topBar}>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => {
-              if (navigation?.goBack) {
-                navigation.goBack();
-              }
-            }}
-          >
-            <Ionicons name="arrow-back" size={26} color="#111827" />
-          </Pressable>
-
-          <Text style={styles.topTitle}>Chat</Text>
-
-          <View style={styles.topRightSpace} />
-        </View>
- */}
-        <View style={styles.page}>
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
+        <View style={layoutStyles.page}>
+          <View style={layoutStyles.card}>
+            <View style={layoutStyles.cardHeader}>
               <View style={styles.cardTitleBlock}>
-                <Text style={styles.title}>Chat</Text>
-                <Text style={styles.subtitle}>
+                <View style={styles.titleRow}>
+                  <View style={styles.titleIconBox}>
+                    <Ionicons
+                      name="chatbubbles-outline"
+                      size={22}
+                      color="#2563eb"
+                    />
+                  </View>
+
+                  <Text style={layoutStyles.title}>Chat</Text>
+                </View>
+
+                <Text style={layoutStyles.subtitle} numberOfLines={2}>
                   Room: {room || DEFAULT_ROOM} · Usuario:{" "}
                   {username || DEFAULT_USERNAME}
                 </Text>
               </View>
 
               <Pressable
-                style={styles.settingsButton}
+                style={({ pressed }) => [
+                  styles.settingsButton,
+                  showSettings && styles.settingsButtonActive,
+                  pressed && styles.settingsButtonPressed,
+                ]}
                 onPress={() => setShowSettings((prev) => !prev)}
               >
-                <Text style={styles.settingsButtonText}>
+                <Ionicons
+                  name={showSettings ? "close-outline" : "settings-outline"}
+                  size={18}
+                  color={showSettings ? "#ffffff" : "#111827"}
+                />
+
+                <Text
+                  style={[
+                    styles.settingsButtonText,
+                    showSettings && styles.settingsButtonTextActive,
+                  ]}
+                >
                   {showSettings ? "Ocultar" : "Ajustes"}
                 </Text>
               </Pressable>
             </View>
 
-            {showSettings && (
-              <View style={styles.settingsPanel}>
-                <Text style={styles.settingsLabel}>Room</Text>
-
-                <View style={styles.roomPicker}>
-                  {ROOM_OPTIONS.map(renderRoomOption)}
-                </View>
-                <Text style={styles.settingsLabel}>Usuario</Text>
-                <TextInput
-                  value={username}
-                  onChangeText={setUsername}
-                  placeholder="anonymous"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  style={styles.settingsInput}
+            <View
+              style={[
+                styles.contentLayout,
+                !isDesktop && styles.contentLayoutMobile,
+              ]}
+            >
+              {showSettings ? (
+                <LayoutPanel
+                  rooms={ROOM_OPTIONS}
+                  room={room}
+                  setRoom={setRoom}
+                  username={username}
+                  setUsername={setUsername}
+                  compact={!isDesktop}
                 />
-              </View>
-            )}
+              ) : null}
 
-            <FlatList
-              ref={listRef}
-              data={filteredMessages}
-              keyExtractor={(item) => String(item.id || item._id)}
-              renderItem={renderItem}
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator
-              ListEmptyComponent={
-                <View style={styles.emptyBlock}>
-                  <Text style={styles.emptyTitle}>Todavía no hay mensajes</Text>
-                  <Text style={styles.emptyText}>
-                    Publica un mensaje para iniciar el chat.
-                  </Text>
-                </View>
-              }
-            />
-
-            <View style={styles.inputBlock}>
-              <TextInput
-                value={input}
-                onChangeText={(text) => {
-                  if (text.length <= MAX_MESSAGE_LENGTH) {
-                    setInput(text);
-                  } else {
-                    setInput(text.slice(0, MAX_MESSAGE_LENGTH));
-                  }
-                }}
-                placeholder="¿Qué está pasando en la compra?"
-                placeholderTextColor="#8a8a8a"
-                multiline
-                maxLength={MAX_MESSAGE_LENGTH}
-                style={styles.input}
-              />
-
-              <View style={styles.inputFooter}>
-                <Text style={styles.inputHint}>
-                  Se permiten enlaces e imágenes por URL http:// o https://
-                </Text>
-
-                <Text
-                  style={[
-                    styles.counter,
-                    remainingChars < 20 && styles.counterWarning,
+              <View style={styles.chatContent}>
+                <FlatList
+                  ref={listRef}
+                  data={filteredMessages}
+                  keyExtractor={(item) => String(item.id || item._id)}
+                  renderItem={renderItem}
+                  style={styles.list}
+                  contentContainerStyle={[
+                    layoutStyles.listContent,
+                    filteredMessages.length === 0 && styles.listContentEmpty,
                   ]}
-                >
-                  {input.length}/{MAX_MESSAGE_LENGTH}
-                </Text>
-              </View>
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={isDesktop}
+                  ListEmptyComponent={
+                    <View style={styles.emptyBlock}>
+                      <View style={styles.emptyIconBox}>
+                        <Ionicons
+                          name="chatbubble-ellipses-outline"
+                          size={34}
+                          color="#94a3b8"
+                        />
+                      </View>
 
-              <Pressable
-                style={[
-                  styles.postButton,
-                  !canPost && styles.postButtonDisabled,
-                ]}
-                disabled={!canPost}
-                onPress={handlePost}
-              >
-                <Text style={styles.postButtonText}>Post</Text>
-              </Pressable>
+                      <Text style={styles.emptyTitle}>
+                        {isLoadingMessages
+                          ? "Cargando mensajes"
+                          : "Todavía no hay mensajes"}
+                      </Text>
+
+                      <Text style={styles.emptyText}>
+                        {isLoadingMessages
+                          ? "Sincronizando con Convex..."
+                          : "Publica un mensaje para iniciar el chat."}
+                      </Text>
+                    </View>
+                  }
+                />
+
+                <View style={layoutStyles.inputBlock}>
+                  <View style={styles.inputMainRow}>
+                    <View style={styles.inputTextColumn}>
+                      <TextInput
+                        value={input}
+                        onChangeText={(text) => {
+                          if (text.length <= MAX_MESSAGE_LENGTH) {
+                            setInput(text);
+                          } else {
+                            setInput(text.slice(0, MAX_MESSAGE_LENGTH));
+                          }
+                        }}
+                        placeholder="¿Qué está pasando en la compra?"
+                        placeholderTextColor="#8a8a8a"
+                        multiline
+                        maxLength={MAX_MESSAGE_LENGTH}
+                        style={styles.input}
+                      />
+
+                      <Text style={styles.inputHint} numberOfLines={1}>
+                        Se permiten enlaces e imágenes por URL http:// o
+                        https://
+                      </Text>
+                    </View>
+
+                    <View style={styles.inputActionsColumn}>
+                      <Text
+                        style={[
+                          styles.counter,
+                          remainingChars < 20 && styles.counterWarning,
+                        ]}
+                      >
+                        {input.length}/{MAX_MESSAGE_LENGTH}
+                      </Text>
+
+                      <Pressable
+                        style={[
+                          styles.postButton,
+                          !canPost && styles.postButtonDisabled,
+                        ]}
+                        disabled={!canPost}
+                        onPress={handlePost}
+                      >
+                        <Text style={styles.postButtonText}>
+                          {sending ? "..." : "Post"}
+                        </Text>
+
+                        <Ionicons
+                          name="send-outline"
+                          size={16}
+                          color="#ffffff"
+                        />
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              </View>
             </View>
           </View>
         </View>
@@ -607,51 +808,42 @@ const styles = StyleSheet.create({
     backgroundColor: "#f3f4f6",
   },
 
-  topBar: {
-    height: 72,
-    backgroundColor: "#fff1d6",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 18,
-  },
-
-  backButton: {
-    width: 42,
-    height: 42,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  topTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#111827",
-  },
-
-  topRightSpace: {
-    width: 42,
-  },
-
   page: {
     flex: 1,
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 28,
-    paddingBottom: 16,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+
+  pageTablet: {
+    paddingHorizontal: 22,
+    paddingTop: 20,
+    paddingBottom: 18,
+  },
+
+  pageDesktop: {
+    paddingHorizontal: 36,
+    paddingTop: 30,
+    paddingBottom: 28,
+    backgroundColor: "#e2e8f0",
+  },
+
+  pageSmallMobile: {
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
 
   card: {
     width: "100%",
-    maxWidth: 540,
+    maxWidth: 560,
     flex: 1,
     backgroundColor: "#f8f8f8",
-    borderRadius: 28,
-    paddingHorizontal: 16,
-    paddingTop: 22,
-    paddingBottom: 20,
+    borderRadius: 26,
+    paddingHorizontal: 14,
+    paddingTop: 18,
+    paddingBottom: 16,
     shadowColor: "#000",
     shadowOpacity: 0.12,
     shadowRadius: 28,
@@ -662,56 +854,110 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 
-  listContent: {
-    paddingTop: 14,
-    paddingBottom: 18,
-    gap: 12,
+  cardTablet: {
+    maxWidth: 680,
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 20,
   },
 
-  inputBlock: {
-    marginTop: 16,
-    marginBottom: 4,
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    padding: 14,
-    position: "relative",
-    paddingRight: 96,
-    minHeight: 104,
+  cardDesktop: {
+    maxWidth: 1120,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 24,
+    borderRadius: 30,
+  },
+
+  cardSmallMobile: {
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 12,
   },
 
   cardHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 10,
+    gap: 14,
+    marginBottom: 12,
+  },
+
+  cardHeaderMobile: {
+    alignItems: "center",
   },
 
   cardTitleBlock: {
     flex: 1,
+    minWidth: 0,
+  },
+
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  titleIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#dbeafe",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   title: {
     fontSize: 28,
+    lineHeight: 34,
     fontWeight: "900",
     color: "#111827",
   },
 
+  titleDesktop: {
+    fontSize: 32,
+    lineHeight: 38,
+  },
+
+  titleSmallMobile: {
+    fontSize: 24,
+    lineHeight: 30,
+  },
+
   subtitle: {
-    marginTop: 2,
+    marginTop: 5,
     fontSize: 14,
+    lineHeight: 20,
     color: "#555",
+    fontWeight: "600",
+  },
+
+  subtitleSmallMobile: {
+    fontSize: 12,
+    lineHeight: 17,
   },
 
   settingsButton: {
+    minHeight: 42,
     borderWidth: 1,
     borderColor: "#d1d5db",
     backgroundColor: "#fff",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  settingsButtonActive: {
+    backgroundColor: "#111827",
+    borderColor: "#111827",
+  },
+
+  settingsButtonPressed: {
+    opacity: 0.75,
   },
 
   settingsButtonText: {
@@ -720,23 +966,91 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
 
-  settingsPanel: {
+  settingsButtonTextActive: {
+    color: "#ffffff",
+  },
+
+  contentLayout: {
+    flex: 1,
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 16,
+    minHeight: 0,
+  },
+
+  contentLayoutMobile: {
+    flexDirection: "column",
+    gap: 12,
+  },
+
+  layoutPanel: {
+    width: 260,
+    flexShrink: 0,
     backgroundColor: "#ffffff",
     borderRadius: 18,
-    padding: 14,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#e5e7eb",
-    marginBottom: 12,
+    alignSelf: "stretch",
   },
 
-  settingsLabel: {
+  layoutPanelCompact: {
+    width: "100%",
+    alignSelf: "auto",
+    padding: 14,
+  },
+
+  panelTitle: {
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
     color: "#374151",
-    marginBottom: 6,
+    marginBottom: 8,
   },
 
-  settingsInput: {
+  roomGrid: {
+    gap: 8,
+  },
+
+  roomGridCompact: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+
+  roomButton: {
+    minHeight: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+
+  roomButtonActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+
+  roomButtonText: {
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  roomButtonTextActive: {
+    color: "#ffffff",
+  },
+
+  userBlock: {
+    marginTop: 16,
+  },
+
+  usernameInput: {
+    minHeight: 44,
     backgroundColor: "#f9fafb",
     borderWidth: 1,
     borderColor: "#d1d5db",
@@ -745,7 +1059,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     color: "#111827",
-    marginBottom: 12,
+    outlineStyle: Platform.OS === "web" ? "none" : undefined,
+  },
+
+  chatContent: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
   },
 
   list: {
@@ -756,9 +1076,42 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e5e7eb",
   },
 
+  listContent: {
+    paddingTop: 14,
+    paddingBottom: 18,
+    gap: 12,
+  },
+
+  listContentDesktop: {
+    paddingHorizontal: 8,
+    paddingTop: 18,
+    paddingBottom: 22,
+  },
+
+  listContentSmallMobile: {
+    paddingTop: 12,
+    paddingBottom: 14,
+    gap: 10,
+  },
+
+  listContentEmpty: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
+
   emptyBlock: {
     padding: 24,
     alignItems: "center",
+  },
+
+  emptyIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
   },
 
   emptyTitle: {
@@ -782,6 +1135,11 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
 
+  messageCardCompact: {
+    padding: 13,
+    borderRadius: 16,
+  },
+
   messageHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -790,11 +1148,45 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  messageUser: {
+  messageUserBlock: {
     flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+
+  avatarText: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#2563eb",
+  },
+
+  messageUserTextBox: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  messageUser: {
     fontSize: 15,
     fontWeight: "900",
     color: "#111827",
+  },
+
+  messageRoom: {
+    marginTop: 1,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
   },
 
   messageMeta: {
@@ -815,7 +1207,7 @@ const styles = StyleSheet.create({
 
   messageText: {
     fontSize: 16,
-    lineHeight: 22,
+    lineHeight: 23,
     color: "#111827",
     fontWeight: "500",
   },
@@ -895,33 +1287,68 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
+  inputBlock: {
+    marginTop: 10,
+    marginBottom: 2,
+    backgroundColor: "#ffffff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    minHeight: 58,
+  },
+
+  inputBlockDesktop: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+
+  inputBlockSmallMobile: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 14,
+  },
+
+  inputMainRow: {
+    minHeight: 42,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  inputTextColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  inputActionsColumn: {
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 5,
+  },
+
   input: {
-    minHeight: 56,
-    maxHeight: 120,
-    fontSize: 16,
+    minHeight: 22,
+    maxHeight: 38,
+    fontSize: 15,
+    lineHeight: 20,
     color: "#111827",
     textAlignVertical: "top",
     padding: 0,
     outlineStyle: Platform.OS === "web" ? "none" : undefined,
   },
 
-  inputFooter: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-
   inputHint: {
-    flex: 1,
-    fontSize: 12,
+    marginTop: 3,
+    fontSize: 11,
     color: "#6b7280",
-    lineHeight: 16,
+    lineHeight: 14,
   },
 
   counter: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "800",
     color: "#6b7280",
   },
@@ -931,15 +1358,15 @@ const styles = StyleSheet.create({
   },
 
   postButton: {
-    position: "absolute",
-    right: 14,
-    bottom: 14,
-    width: 68,
-    height: 54,
-    borderRadius: 999,
-    backgroundColor: "#111827",
+    minHeight: 34,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 17,
+    backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
   },
 
   postButtonDisabled: {
@@ -947,46 +1374,44 @@ const styles = StyleSheet.create({
   },
 
   postButtonText: {
-    color: "#fff",
-    fontSize: 15,
+    color: "#ffffff",
+    fontSize: 14,
     fontWeight: "900",
   },
-  roomPicker: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 12,
+
+  youtubePreviewBlock: {
+    marginTop: 12,
+    gap: 10,
   },
 
-  roomOption: {
-    minHeight: 40,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
+  youtubePreview: {
+    width: "100%",
+    maxWidth: 360,
+    aspectRatio: 16 / 9,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#111827",
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
-    flexDirection: "row",
+    borderColor: "#e5e7eb",
+    position: "relative",
+  },
+
+  youtubeThumbnail: {
+    width: "100%",
+    height: "100%",
+  },
+
+  youtubePlayBadge: {
+    position: "absolute",
+    left: "50%",
+    top: "50%",
+    width: 46,
+    height: 46,
+    marginLeft: -23,
+    marginTop: -23,
+    borderRadius: 23,
+    backgroundColor: "rgba(0, 0, 0, 0.65)",
     alignItems: "center",
-    gap: 6,
-  },
-
-  roomOptionSelected: {
-    backgroundColor: "#2563eb",
-    borderColor: "#2563eb",
-  },
-
-  roomOptionPressed: {
-    opacity: 0.75,
-  },
-
-  roomOptionText: {
-    color: "#111827",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  roomOptionTextSelected: {
-    color: "#ffffff",
+    justifyContent: "center",
   },
 });
