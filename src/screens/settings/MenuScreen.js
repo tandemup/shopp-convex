@@ -14,11 +14,15 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
+import { useAuthActions } from "@convex-dev/auth/react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+
 import {
   getSearchSettings,
   DEFAULT_SEARCH_SETTINGS,
 } from "@/src/storage/settingsStorage";
-import { useAuthActions } from "@convex-dev/auth/react";
+
 import { SEARCH_ENGINES } from "@/src/constants/searchEngines";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -50,6 +54,8 @@ const EXPORT_STORAGE_KEYS = {
   purchaseHistory: "purchase_history",
   scanHistory: "scanned_history",
 };
+
+const CAMERA_GRANTED_STORAGE_KEY = "shopp:web-camera-access-granted";
 
 function buildProductSearchEngineSubtitle(settings) {
   const engineId =
@@ -344,7 +350,38 @@ function SettingsCard({
   );
 }
 
-const CAMERA_GRANTED_STORAGE_KEY = "shopp:web-camera-access-granted";
+function UserAccountCard({ user }) {
+  const isLoading = user === undefined;
+
+  const displayName =
+    user?.name || user?.email || user?._id || "Usuario autenticado";
+
+  const displayEmail = user?.email || "Email no disponible";
+
+  return (
+    <View style={styles.userCard}>
+      <View style={styles.userAvatar}>
+        <Ionicons name="person-outline" size={26} color="#2563eb" />
+      </View>
+
+      <View style={styles.userTextBox}>
+        <Text style={styles.userName} numberOfLines={1}>
+          {isLoading ? "Cargando usuario..." : displayName}
+        </Text>
+
+        <Text style={styles.userEmail} numberOfLines={1}>
+          {isLoading ? "Obteniendo datos de Convex Auth" : displayEmail}
+        </Text>
+
+        {!isLoading && user?._id ? (
+          <Text style={styles.userId} numberOfLines={1}>
+            ID: {String(user._id)}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
 
 async function getWebCameraPermissionStatus() {
   if (Platform.OS !== "web") {
@@ -451,6 +488,7 @@ async function requestWebCameraPermission() {
 
 export default function MenuScreen({ navigation }) {
   const { signOut } = useAuthActions();
+  const currentUser = useQuery(api.users.current);
 
   const [nativeCameraPermission, requestNativeCameraPermission] =
     useCameraPermissions();
@@ -467,6 +505,7 @@ export default function MenuScreen({ navigation }) {
 
   const tabBarHeight = useBottomTabBarHeight();
   const { reloadStoresFromSeed } = useStores();
+
   const handleSignOut = () => {
     safeAlert("Cerrar sesión", "¿Quieres cerrar tu sesión de Shopp?", [
       { text: "Cancelar", style: "cancel" },
@@ -479,6 +518,7 @@ export default function MenuScreen({ navigation }) {
       },
     ]);
   };
+
   const headerConfig = useMemo(
     () =>
       buildHeaderConfig({
@@ -841,6 +881,20 @@ export default function MenuScreen({ navigation }) {
           </View>
 
           <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Cuenta</Text>
+
+            <UserAccountCard user={currentUser} />
+
+            <SettingsCard
+              icon="log-out-outline"
+              title="Cerrar sesión"
+              subtitle="Salir de tu cuenta de Shopp en este dispositivo"
+              danger
+              onPress={handleSignOut}
+            />
+          </View>
+
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>Búsqueda</Text>
 
             <SettingsCard
@@ -968,17 +1022,6 @@ export default function MenuScreen({ navigation }) {
                 </Text>
               )}
             </View>
-          </View>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Cuenta</Text>
-
-            <SettingsCard
-              icon="log-out-outline"
-              title="Cerrar sesión"
-              subtitle="Salir de tu cuenta de Shopp en este dispositivo"
-              danger
-              onPress={handleSignOut}
-            />
           </View>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Danger Zone</Text>
@@ -1237,6 +1280,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "800",
     color: "#0369a1",
+  },
+
+  userCard: {
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#0f172a",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  userTextBox: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  userName: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  userEmail: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#475569",
+  },
+
+  userId: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#94a3b8",
   },
 
   permissionsCard: {

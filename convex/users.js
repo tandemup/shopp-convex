@@ -18,9 +18,16 @@ export const current = query({
 
     return {
       _id: user._id,
+      _creationTime: user._creationTime,
+
       name: user.name ?? null,
       email: user.email ?? null,
       image: user.image ?? null,
+
+      emailVerificationTime: user.emailVerificationTime ?? null,
+      phone: user.phone ?? null,
+      phoneVerificationTime: user.phoneVerificationTime ?? null,
+      isAnonymous: user.isAnonymous ?? false,
     };
   },
 });
