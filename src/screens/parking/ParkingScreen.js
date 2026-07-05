@@ -17,6 +17,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -27,6 +28,10 @@ import * as Location from "expo-location";
 //import ParkingLeafletMap from "@/src/components/ParkingLeafletMap";
 import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
 
+import moment from "moment";
+import "moment/locale/es";
+moment.locale("es");
+
 const PARKING_SETTINGS_STORAGE_KEY = "@shopp/parking/settings";
 const PARKING_LOCAL_EVENTS_STORAGE_KEY = "@shopp/parking/events";
 const PARKING_LOCAL_STATE_STORAGE_KEY = "@shopp/parking/current-state";
@@ -35,12 +40,16 @@ const PARKING_STATUS = {
   LOOKING: "looking",
   PARKED: "parked",
   LEAVING: "leaving",
+  ABANDONED: "abandoned",
+  CANCELLED: "cancelled",
 };
 
 const PARKING_STATUS_LABELS = {
   [PARKING_STATUS.LOOKING]: "Buscando plaza",
   [PARKING_STATUS.PARKED]: "Aparqué",
   [PARKING_STATUS.LEAVING]: "Salí / dejo plaza",
+  [PARKING_STATUS.ABANDONED]: "Búsqueda abandonada",
+  [PARKING_STATUS.CANCELLED]: "Búsqueda cancelada",
 };
 
 const PARKING_STATUS_DESCRIPTIONS = {
@@ -49,12 +58,17 @@ const PARKING_STATUS_DESCRIPTIONS = {
     "Has aparcado. Puedes compartir la posición aproximada de la plaza.",
   [PARKING_STATUS.LEAVING]:
     "Estás saliendo y puedes avisar de que esa plaza queda libre.",
+  [PARKING_STATUS.ABANDONED]:
+    "Has abandonado la búsqueda porque no encontraste aparcamiento.",
+  [PARKING_STATUS.CANCELLED]: "Has cancelado una búsqueda iniciada por error.",
 };
 
 const PARKING_STATUS_COLORS = {
   [PARKING_STATUS.LOOKING]: "#2563eb",
   [PARKING_STATUS.PARKED]: "#16a34a",
   [PARKING_STATUS.LEAVING]: "#f97316",
+  [PARKING_STATUS.ABANDONED]: "#7c3aed",
+  [PARKING_STATUS.CANCELLED]: "#6b7280",
 };
 
 const DEFAULT_REGION = {
@@ -86,20 +100,30 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
-function formatDateTime(timestamp) {
-  if (!timestamp) return "Sin actualizar";
+const capitalizeFirst = (text) => {
+  if (!text) return "";
+  return text.charAt(0).toUpperCase() + text.slice(1);
+};
 
-  try {
-    return new Intl.DateTimeFormat("es-ES", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(timestamp));
-  } catch {
-    return new Date(timestamp).toLocaleString();
-  }
-}
+const formatDateTime = (value) => {
+  if (!value) return "Sin datos";
+
+  const date = moment(value);
+
+  if (!date.isValid()) return "Fecha no válida";
+
+  return capitalizeFirst(date.format("ddd D MMM HH:mm"));
+};
+
+const formatElapsedTime = (value) => {
+  if (!value) return "Sin datos";
+
+  const date = moment(value);
+
+  if (!date.isValid()) return "Fecha no válida";
+
+  return date.fromNow();
+};
 
 function getDisplayUserId(settings) {
   const userId = normalizeText(settings?.userId);
@@ -116,13 +140,19 @@ function getDisplayDestination(settings) {
 function getAvailableNextStatuses(currentStatus) {
   switch (currentStatus) {
     case PARKING_STATUS.LOOKING:
-      return [PARKING_STATUS.PARKED];
+      return [
+        PARKING_STATUS.PARKED,
+        PARKING_STATUS.ABANDONED,
+        PARKING_STATUS.CANCELLED,
+      ];
 
     case PARKING_STATUS.PARKED:
       return [PARKING_STATUS.LEAVING];
 
     case PARKING_STATUS.LEAVING:
-      return [];
+    case PARKING_STATUS.ABANDONED:
+    case PARKING_STATUS.CANCELLED:
+      return [PARKING_STATUS.LOOKING];
 
     default:
       return [PARKING_STATUS.LOOKING];
@@ -147,6 +177,14 @@ function buildEventMessage(status, destination) {
 
   if (status === PARKING_STATUS.LEAVING) {
     return `Estoy saliendo. Puede quedar una plaza libre cerca de ${destination}.`;
+  }
+
+  if (status === PARKING_STATUS.ABANDONED) {
+    return `Abandono la búsqueda porque no encontré aparcamiento cerca de ${destination}.`;
+  }
+
+  if (status === PARKING_STATUS.CANCELLED) {
+    return `Cancelo la búsqueda iniciada por error cerca de ${destination}.`;
   }
 
   return `Estado actualizado cerca de ${destination}.`;
@@ -241,9 +279,6 @@ function LocationSection({
   userCoords,
   activeParkingSpots,
 }) {
-  const hasLocation =
-    typeof latitude === "number" && typeof longitude === "number";
-
   return (
     <View style={styles.card}>
       <Pressable style={styles.collapsibleHeader} onPress={onToggle}>
@@ -287,6 +322,7 @@ function LocationSection({
                 : "Actualizar ubicación"}
             </Text>
           </Pressable>
+
           <View style={styles.mapContainer}>
             <StoreMapPreview
               key={`parking-map-${selectedDestination}-${mapCenter.lat}-${mapCenter.lng}`}
@@ -794,6 +830,11 @@ export default function ParkingScreen({ navigation }) {
     );
   };
 
+  const canShowRestartButton =
+    currentState.status === PARKING_STATUS.LEAVING ||
+    currentState.status === PARKING_STATUS.ABANDONED ||
+    currentState.status === PARKING_STATUS.CANCELLED;
+
   return (
     <KeyboardAvoidingView
       style={styles.screen}
@@ -809,8 +850,8 @@ export default function ParkingScreen({ navigation }) {
           <View style={styles.headerText}>
             <Text style={styles.title}>Parking</Text>
             <Text style={styles.subtitle}>
-              Comparte si estás buscando plaza, si aparcaste o si dejas una
-              plaza libre.
+              Comparte si estás buscando plaza, si aparcaste, si dejas una plaza
+              libre o si abandonas la búsqueda.
             </Text>
           </View>
 
@@ -829,7 +870,7 @@ export default function ParkingScreen({ navigation }) {
           <View style={styles.currentHeader}>
             <View>
               <Text style={styles.cardEyebrow}>Estado actual</Text>
-              <Text style={styles.currentUser}>{displayUserId} (Tú)</Text>
+              <Text style={styles.currentUser}>{displayUserId}</Text>
             </View>
 
             <StatusBadge status={currentState.status} />
@@ -854,6 +895,12 @@ export default function ParkingScreen({ navigation }) {
               <Text style={styles.infoValue}>
                 {formatDateTime(currentState.updatedAt)}
               </Text>
+
+              {currentState.updatedAt ? (
+                <Text style={styles.infoExtra}>
+                  {formatElapsedTime(currentState.updatedAt)}
+                </Text>
+              ) : null}
             </View>
           </View>
 
@@ -882,9 +929,14 @@ export default function ParkingScreen({ navigation }) {
             {renderStatusButton(PARKING_STATUS.LOOKING, "search-outline")}
             {renderStatusButton(PARKING_STATUS.PARKED, "car-outline")}
             {renderStatusButton(PARKING_STATUS.LEAVING, "exit-outline")}
+            {renderStatusButton(PARKING_STATUS.ABANDONED, "walk-outline")}
+            {renderStatusButton(
+              PARKING_STATUS.CANCELLED,
+              "close-circle-outline",
+            )}
           </View>
 
-          {currentState.status === PARKING_STATUS.LEAVING ? (
+          {canShowRestartButton ? (
             <Pressable style={styles.resetButton} onPress={resetFlow}>
               <Ionicons name="refresh-outline" size={18} color="#2563eb" />
               <Text style={styles.resetButtonText}>
@@ -1375,6 +1427,7 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
+
   mapContainer: {
     marginTop: 12,
     height: 220,
@@ -1384,6 +1437,7 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
     backgroundColor: "#e5e7eb",
   },
+
   activityHeader: {
     flexDirection: "row",
     alignItems: "center",

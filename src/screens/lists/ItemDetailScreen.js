@@ -1211,6 +1211,14 @@ export default function ItemDetailScreen() {
             {activeView === "basic" ? (
               <>
                 <ProductHero name={name} barcode={barcode} />
+                <Categorias
+                  selectedCategoryId={selectedCategoryId}
+                  selectedSubcategoryId={selectedSubcategoryId}
+                  expanded={categoryExpanded}
+                  onExpandedChange={setCategoryExpanded}
+                  onChangeCategory={handleChangeCategory}
+                  onChangeSubcategory={handleChangeSubcategory}
+                />
 
                 <CardNombreBarcode
                   nameItem={name}
@@ -1244,15 +1252,6 @@ export default function ItemDetailScreen() {
               </>
             ) : (
               <>
-                <Categorias
-                  selectedCategoryId={selectedCategoryId}
-                  selectedSubcategoryId={selectedSubcategoryId}
-                  expanded={categoryExpanded}
-                  onExpandedChange={setCategoryExpanded}
-                  onChangeCategory={handleChangeCategory}
-                  onChangeSubcategory={handleChangeSubcategory}
-                />
-
                 <UnidadCard
                   unit={pricing.unit}
                   onChangeUnit={handleChangeUnit}

@@ -3,6 +3,36 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import LogoutButton from "@/src/screens/auth/LogoutButton";
 
+function getGrantedPermissionMessage() {
+  if (Platform.OS === "web") {
+    return "El permiso ya está concedido. Para volver a preguntar, revócalo desde los permisos del sitio: pulsa el icono junto a la URL, cambia el permiso a bloquear o preguntar, y recarga la página.";
+  }
+
+  return "El permiso ya está concedido. Android/iOS no permiten anularlo desde la app para volver a mostrar el diálogo del sistema. Puedes revocarlo manualmente desde Ajustes y después volver a tocar esta opción.";
+}
+
+async function handlePermissionPress(permission, requestPermission, label) {
+  if (permission?.granted) {
+    safeAlert(
+      `${label} concedido`,
+      getGrantedPermissionMessage(),
+      getOpenSettingsButtons(),
+    );
+    return;
+  }
+
+  if (permission?.canAskAgain === false) {
+    safeAlert(
+      "Permiso bloqueado",
+      getBlockedPermissionMessage(),
+      getOpenSettingsButtons(),
+    );
+    return;
+  }
+
+  await requestPermission();
+}
+
 export default function MenuScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>

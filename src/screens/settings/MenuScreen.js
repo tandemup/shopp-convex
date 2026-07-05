@@ -223,43 +223,65 @@ async function exportUserDataToJsonFile() {
   };
 }
 
+function getGrantedPermissionMessage() {
+  if (Platform.OS === "web") {
+    return "El permiso ya está concedido. Para volver a preguntar, revócalo desde los permisos del sitio: pulsa el icono junto a la URL, cambia el permiso a bloquear o preguntar, y recarga la página.";
+  }
+
+  return "El permiso ya está concedido. Android/iOS no permiten anularlo desde la app para volver a mostrar el diálogo del sistema. Puedes revocarlo manualmente desde Ajustes y después volver a tocar esta opción.";
+}
+
+function getBlockedPermissionMessage() {
+  if (Platform.OS === "web") {
+    return "El permiso está bloqueado en el navegador. Para cambiarlo, pulsa el icono de permisos junto a la URL y habilita el acceso desde los ajustes del sitio.";
+  }
+
+  return "El permiso está bloqueado para Shopp. Para cambiarlo, abre los ajustes del sistema y habilita el permiso manualmente.";
+}
+
+function getOpenSettingsButtons() {
+  if (Platform.OS === "web") {
+    return [];
+  }
+
+  return [
+    { text: "Cancelar", style: "cancel" },
+    {
+      text: "Abrir ajustes",
+      onPress: async () => {
+        await Linking.openSettings();
+      },
+    },
+  ];
+}
+
+function showDestructiveConfirm(title, message, confirmText, onConfirm) {
+  safeAlert(title, message, [
+    { text: "Cancelar", style: "cancel" },
+    {
+      text: confirmText,
+      style: "destructive",
+      onPress: onConfirm,
+    },
+  ]);
+}
+
 async function handlePermissionPress(permission, requestPermission, label) {
   if (permission?.granted) {
-    if (Platform.OS === "web") {
-      safeAlert(
-        `${label} concedido`,
-        "El permiso ya está concedido. Para volver a preguntar, revócalo desde los permisos del sitio: pulsa el icono junto a la URL, cambia el permiso a bloquear o preguntar, y recarga la página.",
-      );
-      return;
-    }
-
     safeAlert(
       `${label} concedido`,
-      "El permiso ya está concedido. Android/iOS no permiten anularlo desde la app para volver a mostrar el diálogo del sistema. Puedes revocarlo manualmente desde Ajustes y después volver a tocar esta opción.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Abrir ajustes",
-          onPress: async () => {
-            await Linking.openSettings();
-          },
-        },
-      ],
+      getGrantedPermissionMessage(),
+      getOpenSettingsButtons(),
     );
-
     return;
   }
 
   if (permission?.canAskAgain === false) {
-    if (Platform.OS === "web") {
-      safeAlert(
-        "Permiso bloqueado",
-        "El permiso está bloqueado en el navegador. Para cambiarlo, pulsa el icono de permisos junto a la URL y habilita el acceso desde los ajustes del sitio.",
-      );
-      return;
-    }
-
-    await Linking.openSettings();
+    safeAlert(
+      "Permiso bloqueado",
+      getBlockedPermissionMessage(),
+      getOpenSettingsButtons(),
+    );
     return;
   }
 
@@ -737,27 +759,13 @@ export default function MenuScreen({ navigation }) {
       setExportingUserData(true);
 
       const result = await exportUserDataToJsonFile();
+      const exportMessage = result.shared
+        ? `Se ha generado el fichero ${result.filename}.`
+        : result.platform === "web"
+          ? `Se ha descargado el fichero ${result.filename}.`
+          : `Se ha guardado el fichero ${result.filename} en el almacenamiento local de la app.`;
 
-      if (Platform.OS === "web") {
-        safeAlert(
-          "Exportación completada",
-          `Se ha descargado el fichero ${result.filename}.`,
-        );
-        return;
-      }
-
-      if (result.shared) {
-        safeAlert(
-          "Exportación completada",
-          `Se ha generado el fichero ${result.filename}.`,
-        );
-        return;
-      }
-
-      safeAlert(
-        "Exportación completada",
-        `Se ha guardado el fichero ${result.filename} en el almacenamiento local de la app.`,
-      );
+      safeAlert("Exportación completada", exportMessage);
     } catch (error) {
       console.warn("[MenuScreen] export user data error", error);
 
@@ -1032,14 +1040,12 @@ export default function MenuScreen({ navigation }) {
               subtitle="Elimina las listas de compra que todavía no están archivadas"
               danger
               onPress={() =>
-                safeAlert("Borrar listas activas", "¿Seguro?", [
-                  { text: "Cancelar", style: "cancel" },
-                  {
-                    text: "Borrar",
-                    style: "destructive",
-                    onPress: handleClearActiveLists,
-                  },
-                ])
+                showDestructiveConfirm(
+                  "Borrar listas activas",
+                  "¿Seguro?",
+                  "Borrar",
+                  handleClearActiveLists,
+                )
               }
             />
 
@@ -1049,14 +1055,12 @@ export default function MenuScreen({ navigation }) {
               subtitle="Elimina las listas guardadas como archivadas"
               danger
               onPress={() =>
-                safeAlert("Borrar listas archivadas", "¿Seguro?", [
-                  { text: "Cancelar", style: "cancel" },
-                  {
-                    text: "Borrar",
-                    style: "destructive",
-                    onPress: handleClearArchivedLists,
-                  },
-                ])
+                showDestructiveConfirm(
+                  "Borrar listas archivadas",
+                  "¿Seguro?",
+                  "Borrar",
+                  handleClearArchivedLists,
+                )
               }
             />
 
@@ -1066,14 +1070,12 @@ export default function MenuScreen({ navigation }) {
               subtitle="Limpia los registros generados a partir de compras anteriores"
               danger
               onPress={() =>
-                safeAlert("Borrar historial de compras", "¿Seguro?", [
-                  { text: "Cancelar", style: "cancel" },
-                  {
-                    text: "Borrar",
-                    style: "destructive",
-                    onPress: handleClearPurchaseHistory,
-                  },
-                ])
+                showDestructiveConfirm(
+                  "Borrar historial de compras",
+                  "¿Seguro?",
+                  "Borrar",
+                  handleClearPurchaseHistory,
+                )
               }
             />
 
@@ -1083,14 +1085,12 @@ export default function MenuScreen({ navigation }) {
               subtitle="Elimina productos y códigos guardados desde el scanner"
               danger
               onPress={() =>
-                safeAlert("Borrar historial de escaneos", "¿Seguro?", [
-                  { text: "Cancelar", style: "cancel" },
-                  {
-                    text: "Borrar",
-                    style: "destructive",
-                    onPress: handleClearScannedHistory,
-                  },
-                ])
+                showDestructiveConfirm(
+                  "Borrar historial de escaneos",
+                  "¿Seguro?",
+                  "Borrar",
+                  handleClearScannedHistory,
+                )
               }
             />
 

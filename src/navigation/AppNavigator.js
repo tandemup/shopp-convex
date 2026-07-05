@@ -2,8 +2,8 @@ import React from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 
-import AuthStack from "./AuthStack";
-import MainTabs from "./MainTabs";
+import AuthStack from "@/src/navigation/AuthStack";
+import MainTabs from "@/src/navigation/MainTabs";
 
 export default function AppNavigator() {
   return (

@@ -537,3 +537,293 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 });
+
+const styles1 = StyleSheet.create({
+  container: {
+    flexDirection: "row",
+    alignItems: "center",
+
+    minHeight: 136,
+    marginBottom: 12,
+
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 18,
+
+    backgroundColor: "#ffffff",
+
+    ...Platform.select({
+      web: {
+        boxShadow: "0 4px 12px rgba(15, 23, 42, 0.08)",
+      },
+      default: {
+        shadowColor: "#000000",
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 3,
+      },
+    }),
+  },
+
+  containerInactive: {
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    opacity: 0.82,
+  },
+
+  checkbox: {
+    flexShrink: 0,
+    marginRight: 12,
+    alignSelf: "center",
+  },
+
+  content: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 6,
+  },
+
+  badgesRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginBottom: 8,
+  },
+
+  categoryBadge: {
+    maxWidth: 140,
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    borderRadius: 999,
+    backgroundColor: "#eff6ff",
+  },
+
+  categoryBadgeText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d4ed8",
+  },
+
+  subcategoryBadge: {
+    maxWidth: 130,
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    borderRadius: 999,
+    backgroundColor: "#f0fdf4",
+  },
+
+  subcategoryBadgeText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#15803d",
+  },
+
+  badgeInactive: {
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f1f5f9",
+  },
+
+  badgeTextInactive: {
+    color: "#94a3b8",
+  },
+
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+
+  name: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#111827",
+    letterSpacing: -0.2,
+  },
+
+  nameInactive: {
+    color: "#94a3b8",
+  },
+
+  compactRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 14,
+  },
+
+  compactInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  infoLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+
+  label: {
+    width: 82,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#64748b",
+  },
+
+  value: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#334155",
+  },
+
+  offerValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#ea580c",
+  },
+
+  noOfferValue: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#94a3b8",
+  },
+
+  totalBlock: {
+    flexShrink: 0,
+    minWidth: 104,
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+  },
+
+  totalLabel: {
+    marginBottom: 2,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    color: "#94a3b8",
+  },
+
+  total: {
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+    color: "#15803d",
+    letterSpacing: -0.6,
+  },
+
+  tableBox: {
+    gap: 5,
+  },
+
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  tableLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#64748b",
+  },
+
+  tableValue: {
+    flexShrink: 0,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#334155",
+  },
+
+  savingsValue: {
+    flexShrink: 0,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#15803d",
+  },
+
+  tableTotalRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+
+    marginTop: 6,
+    paddingTop: 8,
+
+    borderTopWidth: 1,
+    borderTopColor: "#e5e7eb",
+  },
+
+  tableTotalLabel: {
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+    color: "#64748b",
+  },
+
+  tableTotalValue: {
+    fontSize: 28,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+    color: "#15803d",
+  },
+
+  stackedBox: {
+    gap: 7,
+  },
+
+  stackedItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  stackedLabel: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#64748b",
+  },
+
+  stackedValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#334155",
+  },
+
+  stackedTotal: {
+    alignItems: "flex-end",
+    marginTop: 8,
+  },
+
+  textInactive: {
+    color: "#94a3b8",
+  },
+
+  subtotalInactive: {
+    color: "#94a3b8",
+  },
+
+  chevron: {
+    flexShrink: 0,
+    marginLeft: 4,
+    padding: 4,
+    alignSelf: "center",
+  },
+});

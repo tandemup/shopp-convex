@@ -21,7 +21,7 @@ import {
   DEFAULT_PARKING_USER_ID,
   loadParkingPreferences,
   saveParkingPreferences,
-} from "@/src/utils/parkingPreferences";
+} from "@/src/screens/parking/parkingPreferences";
 
 const PARKING_SETTINGS_STORAGE_KEY = "@shopp/parking/settings";
 const DEFAULT_CITY = "gijon";
@@ -77,21 +77,26 @@ const DESTINATION_OPTIONS = [
     latitude: 43.541062,
     longitude: -5.650062,
   },
-  {
-    id: "nuevayork",
-    label: "New York",
-    category: "City",
-    address: "",
-    latitude: 40.712778,
-    longitude: -74.006111,
-  },
 ];
+
+function blurActiveElement() {
+  if (Platform.OS !== "web") return;
+
+  if (
+    typeof document !== "undefined" &&
+    document.activeElement &&
+    typeof document.activeElement.blur === "function"
+  ) {
+    document.activeElement.blur();
+  }
+}
 
 export default function ParkingSettingsScreen({ navigation, route }) {
   const [selectedDestination, setSelectedDestination] = useState(
     route?.params?.activeDestination || DEFAULT_PARKING_DESTINATION,
   );
-
+  const [destinationPickerVisible, setDestinationPickerVisible] =
+    useState(false);
   const [draftUserId, setDraftUserId] = useState(
     route?.params?.activeUserId || DEFAULT_PARKING_USER_ID,
   );
@@ -184,6 +189,8 @@ export default function ParkingSettingsScreen({ navigation, route }) {
   const trafficInfo = getTrafficLevel(activeFriendsCount);
 
   async function handleSave() {
+    blurActiveElement();
+
     const cleanUserId = draftUserId.trim() || DEFAULT_PARKING_USER_ID;
 
     const nextSettings = {
@@ -221,6 +228,7 @@ export default function ParkingSettingsScreen({ navigation, route }) {
       activeUserId: cleanUserId,
     });
   }
+
   function formatSpotTimeLeft(expiresAt) {
     if (!expiresAt) {
       return "";
@@ -247,7 +255,11 @@ export default function ParkingSettingsScreen({ navigation, route }) {
     return (
       <Pressable
         key={destination.id}
-        onPress={() => setSelectedDestination(destination.id)}
+        onPress={() => {
+          blurActiveElement();
+          setSelectedDestination(destination.id);
+          setDestinationPickerVisible(false);
+        }}
         style={({ pressed }) => [
           styles.destinationButton,
           selected && styles.destinationButtonSelected,
@@ -256,8 +268,8 @@ export default function ParkingSettingsScreen({ navigation, route }) {
       >
         <View style={styles.destinationButtonIcon}>
           <Ionicons
-            name={selected ? "navigate-circle" : "navigate-circle-outline"}
-            size={20}
+            name={selected ? "checkmark-circle" : "navigate-circle-outline"}
+            size={22}
             color={selected ? "#ffffff" : "#15803d"}
           />
         </View>
@@ -288,10 +300,77 @@ export default function ParkingSettingsScreen({ navigation, route }) {
             ]}
             numberOfLines={2}
           >
-            {destination.address}
+            {destination.address || "Sin dirección definida"}
           </Text>
         </View>
       </Pressable>
+    );
+  }
+
+  function renderSelectedDestinationCard() {
+    return (
+      <View style={styles.selectedDestinationCard}>
+        <View style={styles.selectedDestinationIcon}>
+          <Ionicons name="navigate-circle" size={24} color="#15803d" />
+        </View>
+
+        <View style={styles.selectedDestinationTextBlock}>
+          <Text style={styles.selectedDestinationLabel}>
+            {activeDestinationData.label}
+          </Text>
+
+          <Text style={styles.selectedDestinationCategory}>
+            {activeDestinationData.category}
+          </Text>
+
+          <Text style={styles.selectedDestinationAddress} numberOfLines={2}>
+            {activeDestinationData.address || "Sin dirección definida"}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  function renderDestinationPickerScreen() {
+    if (!destinationPickerVisible) {
+      return null;
+    }
+
+    return (
+      <View style={styles.pickerOverlay}>
+        <View style={styles.pickerContainer}>
+          <View style={styles.pickerHeader}>
+            <Pressable
+              onPress={() => {
+                blurActiveElement();
+                setDestinationPickerVisible(false);
+              }}
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && styles.backButtonPressed,
+              ]}
+            >
+              <Ionicons name="chevron-back" size={22} color="#14532d" />
+              <Text style={styles.backButtonText}>Ajustes</Text>
+            </Pressable>
+
+            <Text style={styles.pickerTitle}>Elegir destino</Text>
+
+            <Text style={styles.pickerSubtitle}>
+              Selecciona el lugar al que vas para revisar actividad y plazas
+              recientes.
+            </Text>
+          </View>
+
+          <ScrollView
+            style={styles.pickerScroll}
+            contentContainerStyle={styles.pickerScrollContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {DESTINATION_OPTIONS.map(renderDestinationButton)}
+          </ScrollView>
+        </View>
+      </View>
     );
   }
 
@@ -372,7 +451,10 @@ export default function ParkingSettingsScreen({ navigation, route }) {
         <View style={styles.container}>
           <View style={styles.header}>
             <Pressable
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                blurActiveElement();
+                navigation.goBack();
+              }}
               style={({ pressed }) => [
                 styles.backButton,
                 pressed && styles.backButtonPressed,
@@ -397,11 +479,27 @@ export default function ParkingSettingsScreen({ navigation, route }) {
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.card}>
-              <Text style={styles.fieldLabel}>Destino</Text>
+              <View style={styles.destinationHeader}>
+                <Text style={styles.fieldLabel}>Destino</Text>
 
-              <View style={styles.destinationGrid}>
-                {DESTINATION_OPTIONS.map(renderDestinationButton)}
+                <Pressable
+                  onPress={() => {
+                    blurActiveElement();
+                    setDestinationPickerVisible(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.changeDestinationButton,
+                    pressed && styles.selectorButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.changeDestinationButtonText}>
+                    Cambiar
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color="#15803d" />
+                </Pressable>
               </View>
+
+              {renderSelectedDestinationCard()}
             </View>
 
             <View style={styles.card}>
@@ -471,7 +569,10 @@ export default function ParkingSettingsScreen({ navigation, route }) {
 
           <View style={styles.footer}>
             <Pressable
-              onPress={() => navigation.goBack()}
+              onPress={() => {
+                blurActiveElement();
+                navigation.goBack();
+              }}
               style={({ pressed }) => [
                 styles.cancelButton,
                 pressed && styles.footerButtonPressed,
@@ -494,6 +595,7 @@ export default function ParkingSettingsScreen({ navigation, route }) {
           </View>
         </View>
       </View>
+      {renderDestinationPickerScreen()}
     </SafeAreaView>
   );
 }
@@ -881,5 +983,122 @@ const styles = StyleSheet.create({
 
   footerButtonPressed: {
     opacity: 0.8,
+  },
+
+  destinationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  changeDestinationButton: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+
+  changeDestinationButtonText: {
+    color: "#15803d",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  selectedDestinationCard: {
+    minHeight: 78,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  selectedDestinationIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#ecfdf5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  selectedDestinationTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  selectedDestinationLabel: {
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
+  selectedDestinationCategory: {
+    marginTop: 2,
+    color: "#6b7280",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  selectedDestinationAddress: {
+    marginTop: 3,
+    color: "#4b5563",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
+
+  pickerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#f8fafc",
+    zIndex: 50,
+  },
+
+  pickerContainer: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+
+  pickerHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#d1d5db",
+  },
+
+  pickerTitle: {
+    color: "#111827",
+    fontSize: 25,
+    fontWeight: "900",
+  },
+
+  pickerSubtitle: {
+    marginTop: 4,
+    color: "#6b7280",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+
+  pickerScroll: {
+    flex: 1,
+  },
+
+  pickerScrollContent: {
+    padding: 14,
+    paddingBottom: 32,
+    gap: 10,
   },
 });

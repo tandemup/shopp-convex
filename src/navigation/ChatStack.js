@@ -4,9 +4,9 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { ROUTES } from "@/src/navigation/ROUTES";
 import ChatScreen from "@/src/screens/chat/ChatScreen";
 import ChatScreenResponsive from "@/src/screens/chat/ChatScreenResponsive";
-import ParkingScreen from "@/src/screens/chat/ParkingScreen";
-import ParkingSettingsScreen from "@/src/screens/chat/ParkingSettingsScreen";
 import YesterdayNewsScreen from "@/src/screens/chat/YesterdayNewsScreen";
+import ParkingScreen from "@/src/screens/parking/ParkingScreen";
+import ParkingSettingsScreen from "@/src/screens/parking/ParkingSettingsScreen";
 
 const Stack = createNativeStackNavigator();
 

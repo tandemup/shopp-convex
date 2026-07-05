@@ -6,7 +6,7 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { LocationProvider } from "@/src/context/LocationContext";
 import { ListsProvider } from "@/src/context/ListsContext";
 import { StoresProvider } from "@/src/context/StoresContext";
-
+import DialogHost from "@/src/components/ui/alert/DialogHost";
 import AppNavigator from "@/src/navigation/AppNavigator";
 
 const convex = new ConvexReactClient(process.env.EXPO_PUBLIC_CONVEX_URL);
@@ -20,6 +20,7 @@ export default function App() {
             <NavigationContainer>
               <AppNavigator />
             </NavigationContainer>
+            <DialogHost />
           </LocationProvider>
         </StoresProvider>
       </ListsProvider>
