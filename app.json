@@ -31,7 +31,9 @@
       },
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -52,6 +54,12 @@
           "microphonePermission": "Permitir que Shopp use el micrófono.",
           "recordAudioAndroid": true,
           "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Shopp usa tu ubicación mientras buscas aparcamiento cerca de tu destino."
         }
       ],
       "expo-web-browser"

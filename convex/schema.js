@@ -69,17 +69,17 @@ export default defineSchema({
 
     status: v.optional(
       v.union(
+        v.literal("heading"),
         v.literal("looking"),
         v.literal("parked"),
         v.literal("leaving"),
-        v.literal("heading"),
         v.literal("offline"),
       ),
     ),
 
     lat: v.optional(v.float64()),
     lng: v.optional(v.float64()),
-
+    accuracy: v.optional(v.float64()),
     locationSource: v.optional(v.string()),
 
     location: v.optional(
@@ -101,13 +101,19 @@ export default defineSchema({
     .index("by_expiresAt", ["expiresAt"]),
 
   parkingSpots: defineTable({
-    userId: v.string(),
+    userId: v.optional(v.string()),
 
     city: v.string(),
     zone: v.string(),
 
     status: v.optional(
       v.union(
+        v.literal("free"),
+        v.literal("occupied"),
+        v.literal("unknown"),
+        v.literal("expired"),
+
+        // Compatibilidad con documentos antiguos.
         v.literal("looking"),
         v.literal("parked"),
         v.literal("leaving"),
@@ -121,6 +127,8 @@ export default defineSchema({
 
     lat: v.optional(v.float64()),
     lng: v.optional(v.float64()),
+    accuracy: v.optional(v.float64()),
+    locationSource: v.optional(v.string()),
 
     location: v.optional(
       v.object({
@@ -130,7 +138,15 @@ export default defineSchema({
       }),
     ),
 
-    createdAt: v.float64(),
+    revealedBy: v.optional(v.string()),
+    revealedAt: v.optional(v.float64()),
+
+    occupiedBy: v.optional(v.string()),
+    occupiedAt: v.optional(v.float64()),
+
+    sourceMessageId: v.optional(v.id("parkingMessages")),
+
+    createdAt: v.optional(v.float64()),
     updatedAt: v.optional(v.float64()),
     expiresAt: v.optional(v.float64()),
   })
@@ -140,15 +156,20 @@ export default defineSchema({
       "status",
       "expiresAt",
     ])
+    .index("by_city_zone_status_updatedAt", [
+      "city",
+      "zone",
+      "status",
+      "updatedAt",
+    ])
+    .index("by_city_zone_updatedAt", ["city", "zone", "updatedAt"])
     .index("by_userId", ["userId"])
     .index("by_city_zone", ["city", "zone"])
     .index("by_expiresAt", ["expiresAt"]),
 
   parkingMessages: defineTable({
-    // Formato nuevo / recomendado
     room: v.optional(v.string()),
 
-    // Formato existente en tus documentos actuales
     city: v.optional(v.string()),
     zone: v.optional(v.string()),
 
@@ -156,36 +177,28 @@ export default defineSchema({
     text: v.string(),
     createdAt: v.float64(),
 
-    // En tus documentos actuales status contiene:
-    // "looking", "parked", "leaving"
-    //
-    // En versiones anteriores también puede haberse usado como estado visual:
-    // "visible", "hidden", "blocked"
-    //
-    // Por compatibilidad, se aceptan ambos grupos.
     status: v.optional(
       v.union(
         v.literal("looking"),
         v.literal("parked"),
         v.literal("leaving"),
+
+        // Compatibilidad con documentos antiguos de tipo chat.
         v.literal("visible"),
         v.literal("hidden"),
         v.literal("blocked"),
       ),
     ),
 
-    // Campo recomendado para parking en versiones nuevas.
     parkingStatus: v.optional(
       v.union(v.literal("looking"), v.literal("parked"), v.literal("leaving")),
     ),
 
-    // Coordenadas planas, como las que ya existen en tus documentos.
     lat: v.optional(v.float64()),
     lng: v.optional(v.float64()),
     accuracy: v.optional(v.float64()),
     locationSource: v.optional(v.string()),
 
-    // Coordenadas anidadas, por si alguna pantalla nueva las usa.
     location: v.optional(
       v.object({
         lat: v.float64(),
@@ -208,7 +221,15 @@ export default defineSchema({
     .index("by_city", ["city"])
     .index("by_zone", ["zone"])
     .index("by_city_zone", ["city", "zone"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_city_zone_createdAt", ["city", "zone", "createdAt"])
+    .index("by_city_zone_status_createdAt", [
+      "city",
+      "zone",
+      "status",
+      "createdAt",
+    ])
+    .index("by_status_createdAt", ["status", "createdAt"]),
 
   stores: defineTable({
     id: v.string(),
@@ -229,6 +250,7 @@ export default defineSchema({
       }),
     ),
   })
+    .index("by_storeId", ["id"])
     .index("by_city", ["city"])
     .index("by_name", ["name"]),
 
@@ -238,12 +260,17 @@ export default defineSchema({
     name: v.optional(v.string()),
     brand: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
+    category: v.optional(v.string()),
     productUrl: v.optional(v.string()),
+
+    source: v.optional(v.string()),
+    rawData: v.optional(v.any()),
 
     createdAt: v.float64(),
     updatedAt: v.optional(v.float64()),
-    source: v.optional(v.string()),
   })
     .index("by_barcode", ["barcode"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_updatedAt", ["updatedAt"])
+    .index("by_barcode_updatedAt", ["barcode", "updatedAt"]),
 });

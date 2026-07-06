@@ -42,7 +42,6 @@ const PARKING_STATUS = {
   LEAVING: "leaving",
   ABANDONED: "abandoned",
   CANCELLED: "cancelled",
-  INACTIVE: "inactive",
 };
 
 const PARKING_STATUS_LABELS = {
@@ -51,7 +50,6 @@ const PARKING_STATUS_LABELS = {
   [PARKING_STATUS.LEAVING]: "Salí / dejo plaza",
   [PARKING_STATUS.ABANDONED]: "Búsqueda abandonada",
   [PARKING_STATUS.CANCELLED]: "Búsqueda cancelada",
-  [PARKING_STATUS.INACTIVE]: "Inactivo",
 };
 
 const PARKING_STATUS_DESCRIPTIONS = {
@@ -63,7 +61,6 @@ const PARKING_STATUS_DESCRIPTIONS = {
   [PARKING_STATUS.ABANDONED]:
     "Has abandonado la búsqueda porque no encontraste aparcamiento.",
   [PARKING_STATUS.CANCELLED]: "Has cancelado una búsqueda iniciada por error.",
-  [PARKING_STATUS.INACTIVE]: "No estás compartiendo actividad de parking.",
 };
 
 const PARKING_STATUS_COLORS = {
@@ -72,28 +69,7 @@ const PARKING_STATUS_COLORS = {
   [PARKING_STATUS.LEAVING]: "#f97316",
   [PARKING_STATUS.ABANDONED]: "#7c3aed",
   [PARKING_STATUS.CANCELLED]: "#6b7280",
-  [PARKING_STATUS.INACTIVE]: "#6b7280",
 };
-
-const LOCATION_WATCH_OPTIONS = {
-  accuracy: Location.Accuracy.Balanced,
-  timeInterval: 60000,
-  distanceInterval: 75,
-};
-
-const LOCATION_SINGLE_OPTIONS = {
-  accuracy: Location.Accuracy.Balanced,
-};
-
-const TRACKING_STATUSES = new Set([PARKING_STATUS.LOOKING]);
-
-const STOPPED_STATUSES = new Set([
-  PARKING_STATUS.PARKED,
-  PARKING_STATUS.LEAVING,
-  PARKING_STATUS.ABANDONED,
-  PARKING_STATUS.CANCELLED,
-  PARKING_STATUS.INACTIVE,
-]);
 
 const DEFAULT_REGION = {
   latitude: 43.5322,
@@ -176,7 +152,6 @@ function getAvailableNextStatuses(currentStatus) {
     case PARKING_STATUS.LEAVING:
     case PARKING_STATUS.ABANDONED:
     case PARKING_STATUS.CANCELLED:
-    case PARKING_STATUS.INACTIVE:
       return [PARKING_STATUS.LOOKING];
 
     default:
@@ -212,10 +187,6 @@ function buildEventMessage(status, destination) {
     return `Cancelo la búsqueda iniciada por error cerca de ${destination}.`;
   }
 
-  if (status === PARKING_STATUS.INACTIVE) {
-    return `Estoy inactivo en Parking cerca de ${destination}.`;
-  }
-
   return `Estado actualizado cerca de ${destination}.`;
 }
 
@@ -245,27 +216,6 @@ function createLocalEvent({
   };
 }
 
-function normalizeExpoLocation(location) {
-  if (!location?.coords) return null;
-
-  const latitude = Number(location.coords.latitude);
-  const longitude = Number(location.coords.longitude);
-
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return null;
-  }
-
-  return {
-    latitude,
-    longitude,
-    accuracy:
-      typeof location.coords.accuracy === "number"
-        ? location.coords.accuracy
-        : null,
-    updatedAt: Date.now(),
-  };
-}
-
 function StatusBadge({ status }) {
   const color = PARKING_STATUS_COLORS[status] || "#6b7280";
 
@@ -279,102 +229,39 @@ function StatusBadge({ status }) {
   );
 }
 
-function LocationSummary({
-  userLatitude,
-  userLongitude,
-  userAccuracy,
-  destinationName,
-  destinationAddress,
-  destinationLatitude,
-  destinationLongitude,
-}) {
-  const hasUserLocation =
-    typeof userLatitude === "number" && typeof userLongitude === "number";
+function LocationSummary({ latitude, longitude, accuracy }) {
+  const hasLocation =
+    typeof latitude === "number" && typeof longitude === "number";
 
-  const hasDestinationLocation =
-    typeof destinationLatitude === "number" &&
-    typeof destinationLongitude === "number";
+  if (!hasLocation) {
+    return (
+      <View style={styles.locationEmpty}>
+        <Ionicons name="location-outline" size={18} color="#6b7280" />
+        <Text style={styles.locationEmptyText}>
+          Todavía no hay coordenadas guardadas.
+        </Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.locationSummaryBlock}>
-      <Text style={styles.locationSummaryTitle}>Coordenadas del usuario</Text>
+    <View style={styles.coordsBox}>
+      <View style={styles.coordRow}>
+        <Text style={styles.coordLabel}>Latitud</Text>
+        <Text style={styles.coordValue}>{latitude.toFixed(6)}</Text>
+      </View>
 
-      {hasUserLocation ? (
-        <View style={styles.coordsBox}>
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Latitud usuario</Text>
-            <Text style={styles.coordValue}>{userLatitude.toFixed(6)}</Text>
-          </View>
+      <View style={styles.coordRow}>
+        <Text style={styles.coordLabel}>Longitud</Text>
+        <Text style={styles.coordValue}>{longitude.toFixed(6)}</Text>
+      </View>
 
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Longitud usuario</Text>
-            <Text style={styles.coordValue}>{userLongitude.toFixed(6)}</Text>
-          </View>
-
-          {typeof userAccuracy === "number" ? (
-            <View style={styles.coordRow}>
-              <Text style={styles.coordLabel}>Precisión</Text>
-              <Text style={styles.coordValue}>
-                {Math.round(userAccuracy)} m
-              </Text>
-            </View>
-          ) : null}
+      {typeof accuracy === "number" ? (
+        <View style={styles.coordRow}>
+          <Text style={styles.coordLabel}>Precisión</Text>
+          <Text style={styles.coordValue}>{Math.round(accuracy)} m</Text>
         </View>
-      ) : (
-        <View style={styles.locationEmpty}>
-          <Ionicons name="location-outline" size={18} color="#6b7280" />
-          <Text style={styles.locationEmptyText}>
-            Todavía no hay coordenadas del usuario.
-          </Text>
-        </View>
-      )}
-
-      <Text
-        style={[styles.locationSummaryTitle, styles.locationSummaryTitleSpaced]}
-      >
-        Coordenadas del destino
-      </Text>
-
-      {hasDestinationLocation ? (
-        <View style={styles.coordsBox}>
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Destino</Text>
-            <Text style={styles.coordValue} numberOfLines={1}>
-              {destinationName || "Destino"}
-            </Text>
-          </View>
-
-          {destinationAddress ? (
-            <View style={styles.coordRow}>
-              <Text style={styles.coordLabel}>Dirección</Text>
-              <Text style={styles.coordValue} numberOfLines={2}>
-                {destinationAddress}
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Latitud destino</Text>
-            <Text style={styles.coordValue}>
-              {destinationLatitude.toFixed(6)}
-            </Text>
-          </View>
-
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Longitud destino</Text>
-            <Text style={styles.coordValue}>
-              {destinationLongitude.toFixed(6)}
-            </Text>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.locationEmpty}>
-          <Ionicons name="navigate-outline" size={18} color="#6b7280" />
-          <Text style={styles.locationEmptyText}>
-            Todavía no hay coordenadas del destino.
-          </Text>
-        </View>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -388,9 +275,6 @@ function LocationSection({
   onRefreshLocation,
   loadingLocation,
   selectedDestination,
-  selectedDestinationName,
-  selectedDestinationAddress,
-  destinationCoords,
   mapCenter,
   userCoords,
   activeParkingSpots,
@@ -419,13 +303,9 @@ function LocationSection({
       {expanded ? (
         <View style={styles.locationContent}>
           <LocationSummary
-            userLatitude={latitude}
-            userLongitude={longitude}
-            userAccuracy={accuracy}
-            destinationName={selectedDestinationName}
-            destinationAddress={selectedDestinationAddress}
-            destinationLatitude={destinationCoords?.lat}
-            destinationLongitude={destinationCoords?.lng}
+            latitude={latitude}
+            longitude={longitude}
+            accuracy={accuracy}
           />
 
           <Pressable
@@ -447,7 +327,7 @@ function LocationSection({
 
           <View style={styles.mapContainer}>
             <StoreMapPreview
-              key={`parking-map-${selectedDestination || "no-destination"}-${mapCenter.lat}-${mapCenter.lng}-${userCoords?.lat || "no-user"}-${userCoords?.lng || "no-user"}`}
+              key={`parking-map-${selectedDestination}-${mapCenter.lat}-${mapCenter.lng}`}
               lat={mapCenter.lat}
               lng={mapCenter.lng}
               userLat={userCoords?.lat}
@@ -518,10 +398,6 @@ function EventCard({ event, isOwnUser }) {
 
 export default function ParkingScreen({ navigation }) {
   const scrollRef = useRef(null);
-  const locationWatcherRef = useRef(null);
-  const currentStateRef = useRef(DEFAULT_CURRENT_STATE);
-  const latestUserLocationRef = useRef(null);
-  const parkedSpotLocationRef = useRef(null);
 
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [currentState, setCurrentState] = useState(DEFAULT_CURRENT_STATE);
@@ -530,33 +406,6 @@ export default function ParkingScreen({ navigation }) {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [locationExpanded, setLocationExpanded] = useState(false);
-  const [locationPermissionStatus, setLocationPermissionStatus] =
-    useState(null);
-
-  useEffect(() => {
-    currentStateRef.current = currentState;
-
-    if (
-      typeof currentState.latitude === "number" &&
-      typeof currentState.longitude === "number"
-    ) {
-      latestUserLocationRef.current = {
-        latitude: currentState.latitude,
-        longitude: currentState.longitude,
-        accuracy: currentState.accuracy,
-        updatedAt: currentState.updatedAt,
-      };
-
-      if (currentState.status === PARKING_STATUS.PARKED) {
-        parkedSpotLocationRef.current = {
-          latitude: currentState.latitude,
-          longitude: currentState.longitude,
-          accuracy: currentState.accuracy,
-          updatedAt: currentState.updatedAt,
-        };
-      }
-    }
-  }, [currentState]);
 
   const displayUserId = useMemo(() => getDisplayUserId(settings), [settings]);
 
@@ -634,6 +483,7 @@ export default function ParkingScreen({ navigation }) {
         createdAt: event.createdAt,
       }));
   }, [events]);
+
   const availableNextStatuses = useMemo(
     () => getAvailableNextStatuses(currentState.status),
     [currentState.status],
@@ -648,216 +498,6 @@ export default function ParkingScreen({ navigation }) {
   }, [displayDestination]);
 
   const canPublish = hasUserSettings && hasDestination;
-
-  const persistCurrentState = useCallback(async (nextState) => {
-    currentStateRef.current = nextState;
-    setCurrentState(nextState);
-
-    try {
-      await AsyncStorage.setItem(
-        PARKING_LOCAL_STATE_STORAGE_KEY,
-        JSON.stringify(nextState),
-      );
-    } catch (error) {
-      console.warn("[ParkingScreen] Error saving current state:", error);
-    }
-  }, []);
-
-  const persistEvents = useCallback(async (nextEvents) => {
-    setEvents(nextEvents);
-
-    try {
-      await AsyncStorage.setItem(
-        PARKING_LOCAL_EVENTS_STORAGE_KEY,
-        JSON.stringify(nextEvents),
-      );
-    } catch (error) {
-      console.warn("[ParkingScreen] Error saving events:", error);
-    }
-  }, []);
-
-  const requestLocationPermission = useCallback(async () => {
-    const permission = await Location.requestForegroundPermissionsAsync();
-    setLocationPermissionStatus(permission.status);
-
-    if (permission.status !== "granted") {
-      safeAlert(
-        "Permiso de ubicación necesario",
-        "Activa la ubicación para poder compartir coordenadas de parking.",
-      );
-
-      return false;
-    }
-
-    return true;
-  }, []);
-
-  const stopLocationWatcher = useCallback(() => {
-    const subscription = locationWatcherRef.current;
-    locationWatcherRef.current = null;
-
-    if (!subscription) {
-      return;
-    }
-
-    try {
-      if (typeof subscription.remove === "function") {
-        subscription.remove();
-      }
-    } catch (error) {
-      console.warn(
-        "[ParkingScreen] Error stopping location watcher:",
-        error?.message || error,
-      );
-    }
-  }, []);
-
-  const applyLocationToCurrentState = useCallback(
-    async (location, options = {}) => {
-      if (!location) return null;
-
-      const nextState = {
-        ...currentStateRef.current,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        accuracy: location.accuracy,
-        updatedAt: location.updatedAt || Date.now(),
-      };
-
-      latestUserLocationRef.current = {
-        latitude: nextState.latitude,
-        longitude: nextState.longitude,
-        accuracy: nextState.accuracy,
-        updatedAt: nextState.updatedAt,
-      };
-
-      if (options.saveAsParkedSpot) {
-        parkedSpotLocationRef.current = latestUserLocationRef.current;
-      }
-
-      await persistCurrentState(nextState);
-
-      return latestUserLocationRef.current;
-    },
-    [persistCurrentState],
-  );
-
-  const getCurrentLocation = useCallback(
-    async ({ persist = true, saveAsParkedSpot = false } = {}) => {
-      try {
-        setLoadingLocation(true);
-
-        const hasPermission = await requestLocationPermission();
-
-        if (!hasPermission) {
-          return null;
-        }
-
-        const position = await Location.getCurrentPositionAsync(
-          LOCATION_SINGLE_OPTIONS,
-        );
-
-        const normalizedLocation = normalizeExpoLocation(position);
-
-        if (!normalizedLocation) {
-          return null;
-        }
-
-        latestUserLocationRef.current = normalizedLocation;
-
-        if (saveAsParkedSpot) {
-          parkedSpotLocationRef.current = normalizedLocation;
-        }
-
-        if (persist) {
-          await applyLocationToCurrentState(normalizedLocation, {
-            saveAsParkedSpot,
-          });
-        }
-
-        return normalizedLocation;
-      } catch (error) {
-        console.warn("[ParkingScreen] Error getting location:", error);
-
-        safeAlert(
-          "Ubicación no disponible",
-          "No se ha podido obtener la ubicación actual.",
-        );
-
-        return null;
-      } finally {
-        setLoadingLocation(false);
-      }
-    },
-    [applyLocationToCurrentState, requestLocationPermission],
-  );
-
-  const startLocationWatcher = useCallback(async () => {
-    if (Platform.OS === "web") {
-      await getCurrentLocation({ persist: true });
-      return;
-    }
-
-    if (locationWatcherRef.current) {
-      return;
-    }
-
-    const hasPermission = await requestLocationPermission();
-
-    if (!hasPermission) {
-      return;
-    }
-
-    try {
-      const initialPosition = await Location.getCurrentPositionAsync(
-        LOCATION_SINGLE_OPTIONS,
-      );
-
-      const initialLocation = normalizeExpoLocation(initialPosition);
-
-      if (initialLocation) {
-        await applyLocationToCurrentState(initialLocation);
-      }
-    } catch (error) {
-      console.warn("[ParkingScreen] Error getting initial location:", error);
-    }
-
-    try {
-      const subscription = await Location.watchPositionAsync(
-        LOCATION_WATCH_OPTIONS,
-        async (position) => {
-          const watchedLocation = normalizeExpoLocation(position);
-
-          if (!watchedLocation) {
-            return;
-          }
-
-          const activeStatus = currentStateRef.current?.status;
-
-          if (activeStatus !== PARKING_STATUS.LOOKING) {
-            stopLocationWatcher();
-            return;
-          }
-
-          await applyLocationToCurrentState(watchedLocation);
-        },
-      );
-
-      locationWatcherRef.current = subscription;
-    } catch (error) {
-      console.warn("[ParkingScreen] Error starting location watcher:", error);
-
-      safeAlert(
-        "Ubicación no disponible",
-        "No se ha podido iniciar el seguimiento de ubicación.",
-      );
-    }
-  }, [
-    applyLocationToCurrentState,
-    getCurrentLocation,
-    requestLocationPermission,
-    stopLocationWatcher,
-  ]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -888,13 +528,10 @@ export default function ParkingScreen({ navigation }) {
 
       if (rawState) {
         const parsedState = JSON.parse(rawState);
-        const nextState = {
+        setCurrentState({
           ...DEFAULT_CURRENT_STATE,
           ...parsedState,
-        };
-
-        currentStateRef.current = nextState;
-        setCurrentState(nextState);
+        });
       }
 
       if (rawEvents) {
@@ -919,22 +556,31 @@ export default function ParkingScreen({ navigation }) {
     return unsubscribe;
   }, [navigation, loadSettings]);
 
-  useEffect(() => {
-    if (TRACKING_STATUSES.has(currentState.status)) {
-      startLocationWatcher();
-      return;
-    }
+  const persistCurrentState = async (nextState) => {
+    setCurrentState(nextState);
 
-    if (STOPPED_STATUSES.has(currentState.status)) {
-      stopLocationWatcher();
+    try {
+      await AsyncStorage.setItem(
+        PARKING_LOCAL_STATE_STORAGE_KEY,
+        JSON.stringify(nextState),
+      );
+    } catch (error) {
+      console.warn("[ParkingScreen] Error saving current state:", error);
     }
-  }, [currentState.status, startLocationWatcher, stopLocationWatcher]);
+  };
 
-  useEffect(() => {
-    return () => {
-      stopLocationWatcher();
-    };
-  }, [stopLocationWatcher]);
+  const persistEvents = async (nextEvents) => {
+    setEvents(nextEvents);
+
+    try {
+      await AsyncStorage.setItem(
+        PARKING_LOCAL_EVENTS_STORAGE_KEY,
+        JSON.stringify(nextEvents),
+      );
+    } catch (error) {
+      console.warn("[ParkingScreen] Error saving events:", error);
+    }
+  };
 
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
@@ -959,11 +605,55 @@ export default function ParkingScreen({ navigation }) {
     );
   };
 
+  const getCurrentLocation = async () => {
+    try {
+      setLoadingLocation(true);
+
+      const permission = await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== "granted") {
+        safeAlert(
+          "Permiso de ubicación necesario",
+          "Activa la ubicación para poder compartir coordenadas de parking.",
+        );
+        return null;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const nextLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      };
+
+      const nextState = {
+        ...currentState,
+        ...nextLocation,
+        updatedAt: Date.now(),
+      };
+
+      await persistCurrentState(nextState);
+
+      return nextLocation;
+    } catch (error) {
+      console.warn("[ParkingScreen] Error getting location:", error);
+
+      safeAlert(
+        "Ubicación no disponible",
+        "No se ha podido obtener la ubicación actual.",
+      );
+
+      return null;
+    } finally {
+      setLoadingLocation(false);
+    }
+  };
+
   const updateLocationOnly = async () => {
-    const location = await getCurrentLocation({
-      persist: true,
-      saveAsParkedSpot: currentState.status === PARKING_STATUS.PARKED,
-    });
+    const location = await getCurrentLocation();
 
     if (location) {
       setLocationExpanded(true);
@@ -998,59 +688,17 @@ export default function ParkingScreen({ navigation }) {
       latitude: currentState.latitude,
       longitude: currentState.longitude,
       accuracy: currentState.accuracy,
-      updatedAt: currentState.updatedAt,
     };
 
-    if (nextStatus === PARKING_STATUS.LOOKING) {
-      await startLocationWatcher();
-
-      const freshLocation =
-        latestUserLocationRef.current ||
-        (await getCurrentLocation({ persist: true }));
-
-      if (freshLocation) {
-        nextLocation = freshLocation;
-      }
-    }
-
-    if (nextStatus === PARKING_STATUS.PARKED) {
-      const parkedLocation =
-        latestUserLocationRef.current ||
-        (await getCurrentLocation({
-          persist: false,
-          saveAsParkedSpot: true,
-        }));
-
-      if (parkedLocation) {
-        nextLocation = parkedLocation;
-        parkedSpotLocationRef.current = parkedLocation;
-      }
-
-      stopLocationWatcher();
-    }
-
-    if (nextStatus === PARKING_STATUS.LEAVING) {
-      stopLocationWatcher();
-
-      const releasedSpotLocation =
-        parkedSpotLocationRef.current ||
-        latestUserLocationRef.current ||
-        nextLocation;
-
-      if (
-        typeof releasedSpotLocation?.latitude === "number" &&
-        typeof releasedSpotLocation?.longitude === "number"
-      ) {
-        nextLocation = releasedSpotLocation;
-      }
-    }
-
     if (
-      nextStatus === PARKING_STATUS.ABANDONED ||
-      nextStatus === PARKING_STATUS.CANCELLED ||
-      nextStatus === PARKING_STATUS.INACTIVE
+      nextStatus === PARKING_STATUS.PARKED ||
+      nextStatus === PARKING_STATUS.LEAVING
     ) {
-      stopLocationWatcher();
+      const location = await getCurrentLocation();
+
+      if (location) {
+        nextLocation = location;
+      }
     }
 
     const cleanedNote = normalizeText(note);
@@ -1074,8 +722,10 @@ export default function ParkingScreen({ navigation }) {
       updatedAt: Date.now(),
     };
 
+    const nextEvents = [event, ...events].slice(0, 100);
+
     await persistCurrentState(nextState);
-    await persistEvents([event, ...events].slice(0, 100));
+    await persistEvents(nextEvents);
 
     setNote("");
     setLocationExpanded(true);
@@ -1083,30 +733,13 @@ export default function ParkingScreen({ navigation }) {
   };
 
   const resetFlow = async () => {
-    const latestLocation =
-      latestUserLocationRef.current ||
-      (await getCurrentLocation({ persist: false }));
-
     const nextState = {
       ...currentState,
       status: PARKING_STATUS.LOOKING,
-      latitude:
-        typeof latestLocation?.latitude === "number"
-          ? latestLocation.latitude
-          : currentState.latitude,
-      longitude:
-        typeof latestLocation?.longitude === "number"
-          ? latestLocation.longitude
-          : currentState.longitude,
-      accuracy:
-        typeof latestLocation?.accuracy === "number"
-          ? latestLocation.accuracy
-          : currentState.accuracy,
       updatedAt: Date.now(),
     };
 
     await persistCurrentState(nextState);
-    await startLocationWatcher();
 
     const event = createLocalEvent({
       userId: displayUserId,
@@ -1114,9 +747,9 @@ export default function ParkingScreen({ navigation }) {
       destinationName: displayDestination,
       destinationAddress,
       note: buildEventMessage(PARKING_STATUS.LOOKING, displayDestination),
-      latitude: nextState.latitude,
-      longitude: nextState.longitude,
-      accuracy: nextState.accuracy,
+      latitude: currentState.latitude,
+      longitude: currentState.longitude,
+      accuracy: currentState.accuracy,
     });
 
     await persistEvents([event, ...events].slice(0, 100));
@@ -1204,8 +837,7 @@ export default function ParkingScreen({ navigation }) {
   const canShowRestartButton =
     currentState.status === PARKING_STATUS.LEAVING ||
     currentState.status === PARKING_STATUS.ABANDONED ||
-    currentState.status === PARKING_STATUS.CANCELLED ||
-    currentState.status === PARKING_STATUS.INACTIVE;
+    currentState.status === PARKING_STATUS.CANCELLED;
 
   return (
     <KeyboardAvoidingView
@@ -1226,7 +858,6 @@ export default function ParkingScreen({ navigation }) {
               libre o si abandonas la búsqueda.
             </Text>
           </View>
-
           <Pressable style={styles.settingsButton} onPress={openSettings}>
             <Ionicons name="settings-outline" size={22} color="#111827" />
           </Pressable>
@@ -1275,16 +906,6 @@ export default function ParkingScreen({ navigation }) {
               ) : null}
             </View>
           </View>
-
-          {locationPermissionStatus === "denied" ? (
-            <View style={styles.warningBox}>
-              <Ionicons name="warning-outline" size={18} color="#b45309" />
-              <Text style={styles.warningText}>
-                El permiso de ubicación está denegado. Puedes seguir usando
-                Parking, pero no se actualizará tu posición.
-              </Text>
-            </View>
-          ) : null}
 
           {!hasUserSettings || !hasDestination ? (
             <View style={styles.warningBox}>
@@ -1360,9 +981,6 @@ export default function ParkingScreen({ navigation }) {
           onRefreshLocation={updateLocationOnly}
           loadingLocation={loadingLocation}
           selectedDestination={settings.destinationId}
-          selectedDestinationName={displayDestination}
-          selectedDestinationAddress={destinationAddress}
-          destinationCoords={destinationCoords}
           mapCenter={mapCenter}
           userCoords={userCoords}
           activeParkingSpots={activeParkingSpots}
@@ -1941,20 +1559,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#15803d",
     fontWeight: "900",
-  },
-
-  locationSummaryBlock: {
-    gap: 8,
-  },
-
-  locationSummaryTitle: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
-  locationSummaryTitleSpaced: {
-    marginTop: 10,
   },
 });
 

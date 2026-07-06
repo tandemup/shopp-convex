@@ -70,12 +70,13 @@ const DESTINATION_OPTIONS = [
     longitude: -5.606614,
   },
   {
-    id: "playa-san-lorenzo",
-    label: "Playa de San Lorenzo",
-    category: "Ocio",
-    address: "Avda. Rufo García Rendueles, Paseo Marítimo, Gijón, Asturias",
-    latitude: 43.541062,
-    longitude: -5.650062,
+    id: "iglesia-san-julian",
+    label: "Iglesia de San Julian",
+    category: "Iglesia",
+    address:
+      "Iglesia de San Julián de Somió, Av. Dionisio Cifuentes, 19, Periurbano - Rural, 33203 Gijón, Asturias",
+    latitude: 43.535538,
+    longitude: -5.62342,
   },
 ];
 
