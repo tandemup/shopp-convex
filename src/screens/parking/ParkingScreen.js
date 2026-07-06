@@ -85,6 +85,9 @@ const LOCATION_SINGLE_OPTIONS = {
   accuracy: Location.Accuracy.Balanced,
 };
 
+const WEB_LOCATION_POLL_INTERVAL_MS = 60000;
+const WEB_LOCATION_DISTANCE_INTERVAL_METERS = 75;
+
 const TRACKING_STATUSES = new Set([PARKING_STATUS.LOOKING]);
 
 const STOPPED_STATUSES = new Set([
@@ -264,6 +267,36 @@ function normalizeExpoLocation(location) {
         : null,
     updatedAt: Date.now(),
   };
+}
+
+function getDistanceMeters(fromLocation, toLocation) {
+  if (
+    typeof fromLocation?.latitude !== "number" ||
+    typeof fromLocation?.longitude !== "number" ||
+    typeof toLocation?.latitude !== "number" ||
+    typeof toLocation?.longitude !== "number"
+  ) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const earthRadiusMeters = 6371000;
+  const toRadians = (value) => (value * Math.PI) / 180;
+
+  const lat1 = toRadians(fromLocation.latitude);
+  const lat2 = toRadians(toLocation.latitude);
+  const deltaLat = toRadians(toLocation.latitude - fromLocation.latitude);
+  const deltaLng = toRadians(toLocation.longitude - fromLocation.longitude);
+
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(deltaLng / 2) *
+      Math.sin(deltaLng / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return earthRadiusMeters * c;
 }
 
 function StatusBadge({ status }) {
@@ -742,6 +775,14 @@ export default function ParkingScreen({ navigation }) {
     [persistCurrentState],
   );
 
+  const readCurrentLocation = useCallback(async () => {
+    const position = await Location.getCurrentPositionAsync(
+      LOCATION_SINGLE_OPTIONS,
+    );
+
+    return normalizeExpoLocation(position);
+  }, []);
+
   const getCurrentLocation = useCallback(
     async ({ persist = true, saveAsParkedSpot = false } = {}) => {
       try {
@@ -793,11 +834,6 @@ export default function ParkingScreen({ navigation }) {
   );
 
   const startLocationWatcher = useCallback(async () => {
-    if (Platform.OS === "web") {
-      await getCurrentLocation({ persist: true });
-      return;
-    }
-
     if (locationWatcherRef.current) {
       return;
     }
@@ -805,6 +841,73 @@ export default function ParkingScreen({ navigation }) {
     const hasPermission = await requestLocationPermission();
 
     if (!hasPermission) {
+      return;
+    }
+
+    if (Platform.OS === "web") {
+      try {
+        const initialLocation = await readCurrentLocation();
+
+        if (initialLocation) {
+          await applyLocationToCurrentState(initialLocation);
+        }
+      } catch (error) {
+        console.warn(
+          "[ParkingScreen] Error getting initial web location:",
+          error,
+        );
+      }
+
+      const intervalId = setInterval(async () => {
+        try {
+          const activeStatus = currentStateRef.current?.status;
+
+          if (activeStatus !== PARKING_STATUS.LOOKING) {
+            stopLocationWatcher();
+            return;
+          }
+
+          const nextLocation = await readCurrentLocation();
+
+          if (!nextLocation) {
+            return;
+          }
+
+          const previousLocation =
+            latestUserLocationRef.current ||
+            (typeof currentStateRef.current?.latitude === "number" &&
+            typeof currentStateRef.current?.longitude === "number"
+              ? {
+                  latitude: currentStateRef.current.latitude,
+                  longitude: currentStateRef.current.longitude,
+                  accuracy: currentStateRef.current.accuracy,
+                  updatedAt: currentStateRef.current.updatedAt,
+                }
+              : null);
+
+          const distanceMeters = getDistanceMeters(
+            previousLocation,
+            nextLocation,
+          );
+
+          if (
+            !previousLocation ||
+            distanceMeters >= WEB_LOCATION_DISTANCE_INTERVAL_METERS
+          ) {
+            await applyLocationToCurrentState(nextLocation);
+          }
+        } catch (error) {
+          console.warn(
+            "[ParkingScreen] Error polling web location:",
+            error?.message || error,
+          );
+        }
+      }, WEB_LOCATION_POLL_INTERVAL_MS);
+
+      locationWatcherRef.current = {
+        remove: () => clearInterval(intervalId),
+      };
+
       return;
     }
 
@@ -854,7 +957,7 @@ export default function ParkingScreen({ navigation }) {
     }
   }, [
     applyLocationToCurrentState,
-    getCurrentLocation,
+    readCurrentLocation,
     requestLocationPermission,
     stopLocationWatcher,
   ]);
