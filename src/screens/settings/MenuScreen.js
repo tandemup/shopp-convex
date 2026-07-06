@@ -12,7 +12,6 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
 
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
