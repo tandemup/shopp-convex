@@ -7,7 +7,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-
 import {
   KeyboardAvoidingView,
   Platform,
@@ -19,17 +18,18 @@ import {
   View,
 } from "react-native";
 
+import { safeAlert } from "@/src/components/ui/alert/safeAlert";
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { ROUTES } from "@/src/navigation/ROUTES";
 import * as Location from "expo-location";
+//import MapView, { Marker } from "react-native-maps";
+//import ParkingLeafletMap from "@/src/components/ParkingLeafletMap";
+import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
 
 import moment from "moment";
 import "moment/locale/es";
-
-import { safeAlert } from "@/src/components/ui/alert/safeAlert";
-import { ROUTES } from "@/src/navigation/ROUTES";
-import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
-
 moment.locale("es");
 
 const PARKING_SETTINGS_STORAGE_KEY = "@shopp/parking/settings";
@@ -284,7 +284,6 @@ function LocationSection({
       <Pressable style={styles.collapsibleHeader} onPress={onToggle}>
         <View style={styles.sectionHeaderLeft}>
           <Ionicons name="map-outline" size={22} color="#2563eb" />
-
           <View>
             <Text style={styles.sectionTitle}>Ubicación</Text>
             <Text style={styles.sectionSubtitle}>
@@ -317,7 +316,6 @@ function LocationSection({
             disabled={loadingLocation}
           >
             <Ionicons name="locate-outline" size={18} color="#2563eb" />
-
             <Text style={styles.secondaryActionButtonText}>
               {loadingLocation
                 ? "Obteniendo ubicación..."
@@ -354,7 +352,6 @@ function EventCard({ event, isOwnUser }) {
             {event.userId}
             {isOwnUser ? " (Tú)" : ""}
           </Text>
-
           <Text style={styles.eventDate}>
             {formatDateTime(event.createdAt)}
           </Text>
@@ -798,7 +795,6 @@ export default function ParkingScreen({ navigation }) {
           !allowed && styles.statusButtonDisabled,
         ]}
         onPress={() => publishStatus(status)}
-        disabled={!allowed}
       >
         <Ionicons
           name={iconName}
@@ -858,6 +854,7 @@ export default function ParkingScreen({ navigation }) {
               libre o si abandonas la búsqueda.
             </Text>
           </View>
+
           <Pressable style={styles.settingsButton} onPress={openSettings}>
             <Ionicons name="settings-outline" size={22} color="#111827" />
           </Pressable>
@@ -990,7 +987,6 @@ export default function ParkingScreen({ navigation }) {
           <View style={styles.activityHeader}>
             <View style={styles.sectionHeaderLeft}>
               <Ionicons name="time-outline" size={22} color="#2563eb" />
-
               <View>
                 <Text style={styles.sectionTitle}>Actividad</Text>
                 <Text style={styles.sectionSubtitle}>
@@ -1416,6 +1412,20 @@ const styles = StyleSheet.create({
 
   actionButtonDisabled: {
     opacity: 0.6,
+  },
+
+  mapWrapper: {
+    marginTop: 12,
+    height: 220,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#e5e7eb",
+  },
+
+  map: {
+    flex: 1,
   },
 
   mapContainer: {
