@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Mercadona La Calzada",
+    "address": "Avenida de la Argentina 132",
+    "city": "gijon",
+    "provincia": "Asturias",
+    "zipcode": 33213,
+    "location": {
+      "lat": 43.535,
+      "lng": -5.699,
+      "source": "manual"
+    }
+  },
+  {
+    "name": "Carrefour Los Fresnos",
+    "address": "Calle Río de Oro 3",
+    "city": "gijon",
+    "provincia": "Asturias",
+    "zipcode": 33209,
+    "location": {
+      "lat": 43.532,
+      "lng": -5.657,
+      "source": "manual"
+    }
+  }
+]

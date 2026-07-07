@@ -2,6 +2,9 @@
   "license": "MIT",
   "main": "index.js",
   "scripts": {
+    "factory:export": "node scripts/factory/exportFactoryData.mjs",
+    "factory:import": "node scripts/factory/importFactoryData.mjs",
+    "factory:reset": "node scripts/factory/resetFactoryData.mjs",
     "start": "expo start",
     "start:clean": "expo start -c",
     "android": "expo run:android",

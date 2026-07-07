@@ -78,6 +78,15 @@ const DESTINATION_OPTIONS = [
     latitude: 43.535538,
     longitude: -5.62342,
   },
+  {
+    id: "iglesia-san-julian2",
+    label: "Iglesia de San Julian",
+    category: "Iglesia",
+    address:
+      "Iglesia de San Julián de Somió, Av. Dionisio Cifuentes, 19, Periurbano - Rural, 33203 Gijón, Asturias",
+    latitude: 43.535488789235345,
+    longitude: -5.624319460817051,
+  },
 ];
 
 function blurActiveElement() {

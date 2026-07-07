@@ -20,7 +20,7 @@ export const ROUTES = {
   STORE_MAP: "Store Map",
   STORES_NEARBY: "Stores Nearby",
   STORE_INFO: "Store Info",
-
+  CARREFOUR_TEST: "Carrefour test",
   // Archive
   ARCHIVED_LISTS: "Archived Lists",
   ARCHIVED_LIST_DETAIL: "Archived List Detail",

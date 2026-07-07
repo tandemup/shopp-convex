@@ -1,0 +1,24 @@
+[
+  {
+    "id": "item_aceite_oliva_1l",
+    "name": "Aceite de oliva virgen extra 1L",
+    "category": "Alimentación",
+    "subcategory": "Aceites",
+    "brand": "Hacendado",
+    "barcode": "8480000000011",
+    "unit": "ud",
+    "image": "",
+    "createdFrom": "factory"
+  },
+  {
+    "id": "item_leche_entera_1l",
+    "name": "Leche entera 1L",
+    "category": "Lácteos",
+    "subcategory": "Leche",
+    "brand": "Central Lechera Asturiana",
+    "barcode": "8410000000012",
+    "unit": "ud",
+    "image": "",
+    "createdFrom": "factory"
+  }
+]

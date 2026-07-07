@@ -53,6 +53,11 @@ function MenuNavegacion2({
     });
   }, [navigation]);
 
+  const openCarrefourTest = React.useCallback(() => {
+    navigation.navigate(ROUTES.SHOPPING_TAB, {
+      screen: ROUTES.CARREFOUR_TEST,
+    });
+  }, [navigation]);
   /*    
     {
       key: "chat2",
@@ -93,6 +98,14 @@ function MenuNavegacion2({
       tab: ROUTES.SCANNER_TAB,
       route: ROUTES.SCANNED_HISTORY,
       badge: scannedCount,
+    },
+    {
+      key: "carrefour",
+      label: "Carrefour",
+      icon: "cart-outline",
+      isNew: true,
+      variant: "green",
+      onPress: openCarrefourTest,
     },
     {
       key: "chat",

@@ -1,5 +1,4 @@
 // screens/ParkingScreen.js
-
 import React, {
   useCallback,
   useEffect,
@@ -29,6 +28,7 @@ import "moment/locale/es";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import { ROUTES } from "@/src/navigation/ROUTES";
 import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
+import { useMap } from "react-leaflet";
 
 moment.locale("es");
 
@@ -312,6 +312,25 @@ function StatusBadge({ status }) {
   );
 }
 
+function InfoRow({ label, value }) {
+  return (
+    <View style={styles.infoRow}>
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue}>{value}</Text>
+    </View>
+  );
+}
+
+function formatCoordinate(value) {
+  const numberValue = Number(value);
+
+  if (!Number.isFinite(numberValue)) {
+    return "No disponible";
+  }
+
+  return numberValue.toFixed(6);
+}
+
 function LocationSummary({
   userLatitude,
   userLongitude,
@@ -321,93 +340,122 @@ function LocationSummary({
   destinationLatitude,
   destinationLongitude,
 }) {
-  const hasUserLocation =
-    typeof userLatitude === "number" && typeof userLongitude === "number";
+  const [userCoordsExpanded, setUserCoordsExpanded] = useState(false);
+  const [destinationCoordsExpanded, setDestinationCoordsExpanded] =
+    useState(false);
 
-  const hasDestinationLocation =
-    typeof destinationLatitude === "number" &&
-    typeof destinationLongitude === "number";
+  const userCoordsText =
+    Number.isFinite(Number(userLatitude)) &&
+    Number.isFinite(Number(userLongitude))
+      ? `${formatCoordinate(userLatitude)}, ${formatCoordinate(userLongitude)}`
+      : "Ubicación del usuario no disponible";
+
+  const destinationCoordsText =
+    Number.isFinite(Number(destinationLatitude)) &&
+    Number.isFinite(Number(destinationLongitude))
+      ? `${formatCoordinate(destinationLatitude)}, ${formatCoordinate(
+          destinationLongitude,
+        )}`
+      : "Coordenadas del destino no disponibles";
 
   return (
-    <View style={styles.locationSummaryBlock}>
-      <Text style={styles.locationSummaryTitle}>Coordenadas del usuario</Text>
-
-      {hasUserLocation ? (
-        <View style={styles.coordsBox}>
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Latitud usuario</Text>
-            <Text style={styles.coordValue}>{userLatitude.toFixed(6)}</Text>
-          </View>
-
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Longitud usuario</Text>
-            <Text style={styles.coordValue}>{userLongitude.toFixed(6)}</Text>
-          </View>
-
-          {typeof userAccuracy === "number" ? (
-            <View style={styles.coordRow}>
-              <Text style={styles.coordLabel}>Precisión</Text>
-              <Text style={styles.coordValue}>
-                {Math.round(userAccuracy)} m
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.locationEmpty}>
-          <Ionicons name="location-outline" size={18} color="#6b7280" />
-          <Text style={styles.locationEmptyText}>
-            Todavía no hay coordenadas del usuario.
-          </Text>
-        </View>
-      )}
-
-      <Text
-        style={[styles.locationSummaryTitle, styles.locationSummaryTitleSpaced]}
+    <View style={styles.locationSummary}>
+      <Pressable
+        style={styles.coordsToggleHeader}
+        onPress={() => setUserCoordsExpanded((value) => !value)}
       >
-        Coordenadas del destino
-      </Text>
+        <View style={styles.coordsToggleTitleRow}>
+          <Ionicons name="navigate-outline" size={18} color="#2563eb" />
 
-      {hasDestinationLocation ? (
-        <View style={styles.coordsBox}>
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Destino</Text>
-            <Text style={styles.coordValue} numberOfLines={1}>
-              {destinationName || "Destino"}
+          <View style={styles.coordsToggleTextBlock}>
+            <Text style={styles.locationSummaryTitle}>
+              Coordenadas del usuario
             </Text>
-          </View>
 
-          {destinationAddress ? (
-            <View style={styles.coordRow}>
-              <Text style={styles.coordLabel}>Dirección</Text>
-              <Text style={styles.coordValue} numberOfLines={2}>
-                {destinationAddress}
-              </Text>
-            </View>
-          ) : null}
-
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Latitud destino</Text>
-            <Text style={styles.coordValue}>
-              {destinationLatitude.toFixed(6)}
-            </Text>
-          </View>
-
-          <View style={styles.coordRow}>
-            <Text style={styles.coordLabel}>Longitud destino</Text>
-            <Text style={styles.coordValue}>
-              {destinationLongitude.toFixed(6)}
+            <Text style={styles.coordsCollapsedText} numberOfLines={1}>
+              {userCoordsText}
             </Text>
           </View>
         </View>
-      ) : (
-        <View style={styles.locationEmpty}>
-          <Ionicons name="navigate-outline" size={18} color="#6b7280" />
-          <Text style={styles.locationEmptyText}>
-            Todavía no hay coordenadas del destino.
-          </Text>
+
+        <Ionicons
+          name={userCoordsExpanded ? "chevron-up" : "chevron-down"}
+          size={20}
+          color="#111827"
+        />
+      </Pressable>
+
+      {userCoordsExpanded ? (
+        <View style={styles.coordsDetailsBox}>
+          <InfoRow
+            label="Latitud usuario"
+            value={formatCoordinate(userLatitude)}
+          />
+
+          <InfoRow
+            label="Longitud usuario"
+            value={formatCoordinate(userLongitude)}
+          />
+
+          <InfoRow
+            label="Precisión"
+            value={
+              userAccuracy != null && Number.isFinite(Number(userAccuracy))
+                ? `${Math.round(Number(userAccuracy))} m`
+                : "No disponible"
+            }
+          />
         </View>
-      )}
+      ) : null}
+
+      <Pressable
+        style={[styles.coordsToggleHeader, styles.coordsToggleHeaderSpaced]}
+        onPress={() => setDestinationCoordsExpanded((value) => !value)}
+      >
+        <View style={styles.coordsToggleTitleRow}>
+          <Ionicons name="flag-outline" size={18} color="#2563eb" />
+
+          <View style={styles.coordsToggleTextBlock}>
+            <Text style={styles.locationSummaryTitle}>
+              Coordenadas del destino
+            </Text>
+
+            <Text style={styles.coordsCollapsedText} numberOfLines={1}>
+              {destinationName || destinationCoordsText}
+            </Text>
+          </View>
+        </View>
+
+        <Ionicons
+          name={destinationCoordsExpanded ? "chevron-up" : "chevron-down"}
+          size={20}
+          color="#111827"
+        />
+      </Pressable>
+
+      {destinationCoordsExpanded ? (
+        <View style={styles.coordsDetailsBox}>
+          <InfoRow
+            label="Destino"
+            value={destinationName || "No seleccionado"}
+          />
+
+          <InfoRow
+            label="Dirección"
+            value={destinationAddress || "No disponible"}
+          />
+
+          <InfoRow
+            label="Latitud destino"
+            value={formatCoordinate(destinationLatitude)}
+          />
+
+          <InfoRow
+            label="Longitud destino"
+            value={formatCoordinate(destinationLongitude)}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -427,6 +475,7 @@ function LocationSection({
   mapCenter,
   userCoords,
   activeParkingSpots,
+  mapRefreshKey,
 }) {
   return (
     <View style={styles.card}>
@@ -480,9 +529,17 @@ function LocationSection({
 
           <View style={styles.mapContainer}>
             <StoreMapPreview
-              key={`parking-map-${selectedDestination || "no-destination"}-${mapCenter.lat}-${mapCenter.lng}-${userCoords?.lat || "no-user"}-${userCoords?.lng || "no-user"}`}
-              lat={mapCenter.lat}
-              lng={mapCenter.lng}
+              key={[
+                "parking-map",
+                mapRefreshKey,
+                selectedDestination || "no-destination",
+                mapCenter?.lat || "no-map-lat",
+                mapCenter?.lng || "no-map-lng",
+                userCoords?.lat || "no-user-lat",
+                userCoords?.lng || "no-user-lng",
+              ].join("-")}
+              lat={mapCenter?.lat}
+              lng={mapCenter?.lng}
               userLat={userCoords?.lat}
               userLng={userCoords?.lng}
               parkingSpots={activeParkingSpots}
@@ -563,6 +620,8 @@ export default function ParkingScreen({ navigation }) {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [locationExpanded, setLocationExpanded] = useState(false);
+  const [mapFocusCoords, setMapFocusCoords] = useState(null);
+  const [mapRefreshKey, setMapRefreshKey] = useState(0);
   const [locationPermissionStatus, setLocationPermissionStatus] =
     useState(null);
 
@@ -615,6 +674,13 @@ export default function ParkingScreen({ navigation }) {
   }, [settings.destinationLatitude, settings.destinationLongitude]);
 
   const mapCenter = useMemo(() => {
+    if (
+      typeof mapFocusCoords?.lat === "number" &&
+      typeof mapFocusCoords?.lng === "number"
+    ) {
+      return mapFocusCoords;
+    }
+
     if (destinationCoords) {
       return destinationCoords;
     }
@@ -633,7 +699,12 @@ export default function ParkingScreen({ navigation }) {
       lat: DEFAULT_REGION.latitude,
       lng: DEFAULT_REGION.longitude,
     };
-  }, [destinationCoords, currentState.latitude, currentState.longitude]);
+  }, [
+    mapFocusCoords,
+    destinationCoords,
+    currentState.latitude,
+    currentState.longitude,
+  ]);
 
   const userCoords = useMemo(() => {
     if (
@@ -667,6 +738,7 @@ export default function ParkingScreen({ navigation }) {
         createdAt: event.createdAt,
       }));
   }, [events]);
+
   const availableNextStatuses = useMemo(
     () => getAvailableNextStatuses(currentState.status),
     [currentState.status],
@@ -1039,6 +1111,11 @@ export default function ParkingScreen({ navigation }) {
     };
   }, [stopLocationWatcher]);
 
+  useEffect(() => {
+    setMapFocusCoords(null);
+    setMapRefreshKey((prev) => prev + 1);
+  }, [settings.destinationId]);
+
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToEnd?.({ animated: true });
@@ -1182,6 +1259,7 @@ export default function ParkingScreen({ navigation }) {
 
     setNote("");
     setLocationExpanded(true);
+    setMapRefreshKey((prev) => prev + 1);
     scrollToBottom();
   };
 
@@ -1223,6 +1301,7 @@ export default function ParkingScreen({ navigation }) {
     });
 
     await persistEvents([event, ...events].slice(0, 100));
+    setMapRefreshKey((prev) => prev + 1);
     scrollToBottom();
   };
 
@@ -1469,6 +1548,7 @@ export default function ParkingScreen({ navigation }) {
           mapCenter={mapCenter}
           userCoords={userCoords}
           activeParkingSpots={activeParkingSpots}
+          mapRefreshKey={mapRefreshKey}
         />
 
         <View style={styles.card}>
@@ -2058,6 +2138,150 @@ const styles = StyleSheet.create({
 
   locationSummaryTitleSpaced: {
     marginTop: 10,
+  },
+  locationSummary: {
+    gap: 8,
+  },
+
+  coordsToggleHeader: {
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    backgroundColor: "#eff6ff",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  coordsToggleHeaderSpaced: {
+    marginTop: 4,
+  },
+
+  coordsToggleTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+
+  locationSummaryTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  coordsDetailsBox: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#f9fafb",
+  },
+
+  coordsCollapsedText: {
+    paddingHorizontal: 12,
+    paddingBottom: 6,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  infoRow: {
+    minHeight: 38,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e5e7eb",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  infoLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+
+  infoValue: {
+    flex: 1.4,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#111827",
+    textAlign: "right",
+  },
+
+  locationContent: {
+    marginTop: 14,
+    gap: 12,
+  },
+
+  locationSummary: {
+    gap: 8,
+  },
+
+  coordsToggleHeader: {
+    minHeight: 52,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    backgroundColor: "#eff6ff",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  coordsToggleHeaderSpaced: {
+    marginTop: 4,
+  },
+
+  coordsToggleTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+
+  coordsToggleTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  locationSummaryTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#111827",
+  },
+
+  coordsDetailsBox: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#f9fafb",
+  },
+
+  coordsCollapsedText: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+
+  mapContainer: {
+    marginTop: 12,
+    height: 220,
+    borderRadius: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#e5e7eb",
   },
 });
 

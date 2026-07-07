@@ -10,9 +10,13 @@
 
 import type * as auth from "../auth.js";
 import type * as chat from "../chat.js";
+import type * as factory from "../factory.js";
 import type * as http from "../http.js";
+import type * as items from "../items.js";
+import type * as migrations from "../migrations.js";
 import type * as parking from "../parking.js";
 import type * as scanHistory from "../scanHistory.js";
+import type * as storeFavorites from "../storeFavorites.js";
 import type * as stores from "../stores.js";
 import type * as users from "../users.js";
 
@@ -25,9 +29,13 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   chat: typeof chat;
+  factory: typeof factory;
   http: typeof http;
+  items: typeof items;
+  migrations: typeof migrations;
   parking: typeof parking;
   scanHistory: typeof scanHistory;
+  storeFavorites: typeof storeFavorites;
   stores: typeof stores;
   users: typeof users;
 }>;

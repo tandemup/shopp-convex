@@ -6,20 +6,21 @@ const DEFAULT_PROVINCIA = "Asturias";
 const DEFAULT_ZIPCODE = 0;
 
 const storeValidator = v.object({
-  id: v.string(),
+  id: v.optional(v.string()),
+
   name: v.string(),
   city: v.string(),
-  provincia: v.string(),
+  provincia: v.optional(v.string()),
   address: v.string(),
-  zipcode: v.number(),
+  zipcode: v.optional(v.union(v.string(), v.float64())),
 
-  location: v.object({
-    lat: v.number(),
-    lng: v.number(),
-    source: v.string(),
-  }),
-
-  favorite: v.boolean(),
+  location: v.optional(
+    v.object({
+      lat: v.float64(),
+      lng: v.float64(),
+      source: v.optional(v.string()),
+    }),
+  ),
 });
 
 function cleanText(value) {
@@ -50,6 +51,57 @@ function cleanLocationSource(value) {
   return cleanText(value) || "manual";
 }
 
+function normalizeForHash(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function createDeterministicStoreId({
+  name,
+  address,
+  city,
+  provincia,
+  zipcode,
+}) {
+  const normalizedName = normalizeForHash(name);
+  const normalizedAddress = normalizeForHash(address);
+  const normalizedCity = normalizeForHash(city);
+  const normalizedProvincia = normalizeForHash(provincia);
+  const normalizedZipcode = normalizeForHash(zipcode);
+
+  const source = [
+    normalizedName,
+    normalizedAddress,
+    normalizedCity,
+    normalizedProvincia,
+    normalizedZipcode,
+  ].join("|");
+
+  let hash = 2166136261;
+
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return `store_${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function normalizeNumber(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return null;
+  }
+
+  return number;
+}
+
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -63,49 +115,72 @@ function isValidLongitude(value) {
 }
 
 function normalizeZipcode(value) {
-  if (!isFiniteNumber(value)) {
+  const zipcode = normalizeNumber(value);
+
+  if (zipcode === null) {
     return DEFAULT_ZIPCODE;
   }
 
-  return Math.trunc(value);
+  return Math.trunc(zipcode);
 }
 
-function normalizeStore(store) {
-  const id = cleanStoreId(store.id);
-  const name = cleanStoreName(store.name);
-
-  if (!id) {
-    throw new Error("La tienda no tiene id.");
+function normalizeLocation(location, storeName) {
+  if (!location) {
+    return undefined;
   }
 
-  if (!name) {
-    throw new Error(`La tienda ${id} no tiene nombre.`);
-  }
-
-  const lat = store.location?.lat;
-  const lng = store.location?.lng;
+  const lat = normalizeNumber(location.lat);
+  const lng = normalizeNumber(location.lng);
 
   if (!isValidLatitude(lat) || !isValidLongitude(lng)) {
-    throw new Error(`La tienda ${name} tiene coordenadas no válidas.`);
+    throw new Error(`La tienda ${storeName} tiene coordenadas no válidas.`);
   }
 
   return {
+    lat,
+    lng,
+    source: cleanLocationSource(location.source),
+  };
+}
+
+function normalizeStore(store) {
+  const name = cleanStoreName(store.name);
+
+  if (!name) {
+    throw new Error("La tienda no tiene nombre.");
+  }
+
+  const city = cleanCity(store.city);
+  const provincia = cleanProvincia(store.provincia);
+  const address = cleanAddress(store.address);
+  const zipcode = normalizeZipcode(store.zipcode);
+
+  const id =
+    cleanStoreId(store.id) ||
+    createDeterministicStoreId({
+      name,
+      address,
+      city,
+      provincia,
+      zipcode,
+    });
+
+  const normalizedStore = {
     id,
     name,
-
-    city: cleanCity(store.city),
-    provincia: cleanProvincia(store.provincia),
-    address: cleanAddress(store.address),
-    zipcode: normalizeZipcode(store.zipcode),
-
-    location: {
-      lat,
-      lng,
-      source: cleanLocationSource(store.location?.source),
-    },
-
-    favorite: Boolean(store.favorite),
+    city,
+    provincia,
+    address,
+    zipcode,
   };
+
+  const location = normalizeLocation(store.location, name);
+
+  if (location) {
+    normalizedStore.location = location;
+  }
+
+  return normalizedStore;
 }
 
 function sortStoresByName(stores) {
@@ -162,13 +237,24 @@ export const listStoresByCity = query({
   },
 });
 
-export const listFavoriteStores = query({
-  args: {},
+export const searchStoresByName = query({
+  args: {
+    name: v.string(),
+  },
 
-  handler: async (ctx) => {
-    const stores = await ctx.db.query("stores").collect();
+  handler: async (ctx, args) => {
+    const name = cleanStoreName(args.name);
 
-    return sortStoresByName(stores.filter((store) => store.favorite));
+    if (!name) {
+      return [];
+    }
+
+    const stores = await ctx.db
+      .query("stores")
+      .withIndex("by_name", (q) => q.eq("name", name))
+      .collect();
+
+    return sortStoresByName(stores);
   },
 });
 
@@ -205,75 +291,6 @@ export const upsertStores = mutation({
       updated,
       skipped,
       total: args.stores.length,
-    };
-  },
-});
-
-export const setStoreFavorite = mutation({
-  args: {
-    id: v.string(),
-    favorite: v.boolean(),
-  },
-
-  handler: async (ctx, args) => {
-    const id = cleanStoreId(args.id);
-
-    if (!id) {
-      throw new Error("Falta el id de la tienda.");
-    }
-
-    const existing = await ctx.db
-      .query("stores")
-      .withIndex("by_storeId", (q) => q.eq("id", id))
-      .unique();
-
-    if (!existing) {
-      throw new Error("La tienda no existe.");
-    }
-
-    await ctx.db.patch(existing._id, {
-      favorite: args.favorite,
-    });
-
-    return {
-      ok: true,
-      id,
-      favorite: args.favorite,
-    };
-  },
-});
-
-export const toggleStoreFavorite = mutation({
-  args: {
-    id: v.string(),
-  },
-
-  handler: async (ctx, args) => {
-    const id = cleanStoreId(args.id);
-
-    if (!id) {
-      throw new Error("Falta el id de la tienda.");
-    }
-
-    const existing = await ctx.db
-      .query("stores")
-      .withIndex("by_storeId", (q) => q.eq("id", id))
-      .unique();
-
-    if (!existing) {
-      throw new Error("La tienda no existe.");
-    }
-
-    const favorite = !existing.favorite;
-
-    await ctx.db.patch(existing._id, {
-      favorite,
-    });
-
-    return {
-      ok: true,
-      id,
-      favorite,
     };
   },
 });

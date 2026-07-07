@@ -19,6 +19,8 @@ import EditScannedItemScreen from "@/src/screens/scanner/EditScannedItemScreen";
 import StoreMapScreen from "@/src/screens/stores/StoreMapScreen";
 import MenuScreen from "@/src/screens/settings/MenuScreen";
 
+import CarrefourTestScreen from "@/src/screens/CarrefourTestScreen";
+
 const Stack = createNativeStackNavigator();
 export default function ShoppingStack() {
   return (
@@ -73,6 +75,14 @@ export default function ShoppingStack() {
       />
 
       <Stack.Screen name={ROUTES.MENU} component={MenuScreen} />
+
+      <Stack.Screen
+        name={ROUTES.CARREFOUR_TEST}
+        component={CarrefourTestScreen}
+        options={{
+          title: "Catálogo Carrefour",
+        }}
+      />
     </Stack.Navigator>
   );
 }
