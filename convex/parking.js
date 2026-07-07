@@ -1,9 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 const DEFAULT_CITY = "gijon";
 const DEFAULT_ZONE = "general";
-const DEFAULT_USER_ID = "anonymous";
 
 const LOOKING_TTL_MS = 10 * 60 * 1000;
 const FREE_SPOT_TTL_MS = 10 * 60 * 1000;
@@ -50,8 +50,24 @@ function cleanZone(value) {
   return cleanText(value) || DEFAULT_ZONE;
 }
 
-function cleanUserId(value) {
-  return cleanText(value) || DEFAULT_USER_ID;
+async function requireAuthUserId(ctx) {
+  const userId = await getAuthUserId(ctx);
+
+  if (!userId) {
+    throw new Error("Usuario no autenticado.");
+  }
+
+  return String(userId);
+}
+
+function cleanAlias(value) {
+  const alias = cleanText(value);
+
+  if (!alias) {
+    return undefined;
+  }
+
+  return alias.slice(0, 40);
 }
 
 function isFiniteNumber(value) {
@@ -163,7 +179,8 @@ async function upsertParkingPresence(ctx, payload) {
 
   const city = cleanCity(payload.city);
   const zone = cleanZone(payload.zone);
-  const userId = cleanUserId(payload.userId);
+  const userId = String(payload.userId);
+  const alias = cleanAlias(payload.alias);
   const status = payload.status || "heading";
 
   const hasCoords = hasValidCoords(payload.lat, payload.lng);
@@ -182,6 +199,7 @@ async function upsertParkingPresence(ctx, payload) {
     zone,
     userId,
     status,
+    alias,
 
     lat: hasCoords ? payload.lat : undefined,
     lng: hasCoords ? payload.lng : undefined,
@@ -209,6 +227,9 @@ export const listParkingMessages = query({
   },
 
   handler: async (ctx, args) => {
+    const authUserId = await getAuthUserId(ctx);
+    const currentUserId = authUserId ? String(authUserId) : null;
+
     const city = cleanCity(args.city);
     const zone = cleanZone(args.zone);
     const limit = clampLimit(args.limit, 80, 1, MAX_MESSAGES_LIMIT);
@@ -221,7 +242,23 @@ export const listParkingMessages = query({
       .order("desc")
       .take(limit);
 
-    return messages.reverse();
+    return messages.reverse().map((message) => ({
+      _id: message._id,
+      _creationTime: message._creationTime,
+      city: message.city,
+      zone: message.zone,
+      alias: message.alias || "anonymous",
+      text: message.text,
+      createdAt: message.createdAt,
+      status: message.status,
+      parkingStatus: message.parkingStatus,
+      lat: message.lat,
+      lng: message.lng,
+      accuracy: message.accuracy,
+      locationSource: message.locationSource,
+      destination: message.destination,
+      isOwnUser: currentUserId ? message.userId === currentUserId : false,
+    }));
   },
 });
 
@@ -313,9 +350,27 @@ export const listDestinationPresence = query({
       .order("desc")
       .take(limit);
 
+    const authUserId = await getAuthUserId(ctx);
+    const currentUserId = authUserId ? String(authUserId) : null;
+
     return presence
       .filter((item) => item.expiresAt > now)
-      .sort((a, b) => b.updatedAt - a.updatedAt);
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((item) => ({
+        _id: item._id,
+        _creationTime: item._creationTime,
+        city: item.city,
+        zone: item.zone,
+        alias: item.alias || "anonymous",
+        status: item.status,
+        lat: item.lat,
+        lng: item.lng,
+        accuracy: item.accuracy,
+        locationSource: item.locationSource,
+        updatedAt: item.updatedAt,
+        expiresAt: item.expiresAt,
+        isOwnUser: currentUserId ? item.userId === currentUserId : false,
+      }));
   },
 });
 
@@ -323,8 +378,8 @@ export const sendParkingMessage = mutation({
   args: {
     city: v.string(),
     zone: v.string(),
-    userId: v.string(),
     text: v.string(),
+    alias: v.optional(v.string()),
 
     status: v.optional(parkingMessageStatusValidator),
 
@@ -341,7 +396,8 @@ export const sendParkingMessage = mutation({
 
     const city = cleanCity(args.city);
     const zone = cleanZone(args.zone);
-    const userId = cleanUserId(args.userId);
+    const userId = await requireAuthUserId(ctx);
+    const alias = cleanAlias(args.alias);
     const text = cleanText(args.text);
 
     const hasCoords = hasValidCoords(args.lat, args.lng);
@@ -362,6 +418,7 @@ export const sendParkingMessage = mutation({
       city,
       zone,
       userId,
+      alias,
       text,
 
       status: args.status,
@@ -378,6 +435,7 @@ export const sendParkingMessage = mutation({
       city,
       zone,
       userId,
+      alias,
       status: args.status || "heading",
       lat: args.lat,
       lng: args.lng,
@@ -589,11 +647,11 @@ export const expireOldFreeParkingSpots = mutation({
 export const markParkingSpotOccupied = mutation({
   args: {
     spotId: v.id("parkingSpots"),
-    userId: v.string(),
   },
 
   handler: async (ctx, args) => {
     const now = Date.now();
+    const userId = await requireAuthUserId(ctx);
 
     const spot = await ctx.db.get(args.spotId);
 
@@ -603,7 +661,7 @@ export const markParkingSpotOccupied = mutation({
 
     await ctx.db.patch(args.spotId, {
       status: "occupied",
-      occupiedBy: cleanUserId(args.userId),
+      occupiedBy: userId,
       occupiedAt: now,
       updatedAt: now,
       expiresAt: now,
@@ -618,11 +676,11 @@ export const markParkingSpotOccupied = mutation({
 export const markParkingSpotFree = mutation({
   args: {
     spotId: v.id("parkingSpots"),
-    userId: v.string(),
   },
 
   handler: async (ctx, args) => {
     const now = Date.now();
+    const userId = await requireAuthUserId(ctx);
 
     const spot = await ctx.db.get(args.spotId);
 
@@ -633,7 +691,7 @@ export const markParkingSpotFree = mutation({
     await ctx.db.patch(args.spotId, {
       status: "free",
 
-      revealedBy: cleanUserId(args.userId),
+      revealedBy: userId,
       revealedAt: now,
 
       occupiedBy: undefined,
@@ -653,7 +711,7 @@ export const touchParkingPresence = mutation({
   args: {
     city: v.string(),
     zone: v.string(),
-    userId: v.string(),
+    alias: v.optional(v.string()),
 
     status: v.optional(parkingPresenceStatusValidator),
 
@@ -667,7 +725,8 @@ export const touchParkingPresence = mutation({
     const presenceId = await upsertParkingPresence(ctx, {
       city: args.city,
       zone: args.zone,
-      userId: args.userId,
+      userId: await requireAuthUserId(ctx),
+      alias: args.alias,
       status: args.status || "heading",
       lat: args.lat,
       lng: args.lng,

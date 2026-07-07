@@ -1,18 +1,8 @@
-import React, {
-  createContext,
-  useContext,
-  useMemo,
-  useState,
-  useEffect,
-} from "react";
-import { useQuery } from "convex/react";
+import React, { createContext, useContext, useMemo } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
-import { storage } from "@/src/storage/storage";
-
 const StoresContext = createContext();
-
-const FAVORITE_STORE_IDS_KEY = "favorite_store_ids";
 
 const normalizeStores = (stores) => {
   if (!Array.isArray(stores)) return [];
@@ -30,66 +20,31 @@ const normalizeStores = (stores) => {
 };
 
 export const StoresProvider = ({ children }) => {
-  const convexStores = useQuery(api.stores.listStores);
+  const convexStores = useQuery(api.stores.listStoresWithMyFavorites);
+  const toggleFavoriteMutation = useMutation(api.stores.toggleMyFavoriteStore);
 
-  const [favoriteStoreIds, setFavoriteStoreIds] = useState([]);
-  const [favoritesReady, setFavoritesReady] = useState(false);
+  const stores = useMemo(() => normalizeStores(convexStores), [convexStores]);
 
-  useEffect(() => {
-    const loadFavorites = async () => {
-      try {
-        const stored = await storage.getJSON(FAVORITE_STORE_IDS_KEY, []);
+  const ready = convexStores !== undefined;
 
-        if (Array.isArray(stored)) {
-          setFavoriteStoreIds(stored.filter((id) => typeof id === "string"));
-        }
-      } catch (error) {
-        console.warn("Error loading favorite stores", error);
-      } finally {
-        setFavoritesReady(true);
-      }
-    };
+  const favoriteStores = useMemo(() => {
+    return stores.filter((store) => store.favorite === true);
+  }, [stores]);
 
-    loadFavorites();
-  }, []);
+  const favoriteStoreIds = useMemo(() => {
+    return favoriteStores.map((store) => store.id);
+  }, [favoriteStores]);
 
-  useEffect(() => {
-    if (!favoritesReady) return;
+  const toggleFavorite = async (storeId) => {
+    if (!storeId) return null;
 
-    storage.setJSON(FAVORITE_STORE_IDS_KEY, favoriteStoreIds);
-  }, [favoriteStoreIds, favoritesReady]);
-
-  const stores = useMemo(() => {
-    const normalized = normalizeStores(convexStores);
-
-    return normalized.map((store) => ({
-      ...store,
-      favorite: favoriteStoreIds.includes(store.id),
-    }));
-  }, [convexStores, favoriteStoreIds]);
-
-  const ready = convexStores !== undefined && favoritesReady;
-
-  const toggleFavorite = (storeId) => {
-    if (!storeId) return;
-
-    setFavoriteStoreIds((prev) => {
-      if (prev.includes(storeId)) {
-        return prev.filter((id) => id !== storeId);
-      }
-
-      return [...prev, storeId];
-    });
+    return await toggleFavoriteMutation({ id: storeId });
   };
 
   const toggleFavoriteStore = toggleFavorite;
 
   const getStoreById = (storeId) =>
     stores.find((store) => store.id === storeId) || null;
-
-  const favoriteStores = stores.filter((store) =>
-    favoriteStoreIds.includes(store.id),
-  );
 
   const isFavoriteStore = (storeId) => favoriteStoreIds.includes(storeId);
 

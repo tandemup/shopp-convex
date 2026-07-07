@@ -12,10 +12,13 @@ import {
   View,
 } from "react-native";
 import { useAuthActions } from "@convex-dev/auth/react";
+import { useMutation } from "convex/react";
 import { Ionicons } from "@expo/vector-icons";
+import { api } from "@/convex/_generated/api";
 
 export default function RegisterScreen({ navigation }) {
   const { signIn } = useAuthActions();
+  const upsertMyProfile = useMutation(api.users.upsertMyProfile);
 
   const { width, height } = useWindowDimensions();
 
@@ -23,18 +26,24 @@ export default function RegisterScreen({ navigation }) {
   const isTablet = width >= 700 && width < 900;
   const isSmallMobile = width < 390;
 
+  const [alias, setAlias] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const normalizedAlias = alias.trim();
+  const normalizedPhone = phone.trim();
   const normalizedEmail = email.trim().toLowerCase();
 
+  const aliasIsValid = normalizedAlias.length >= 3;
   const emailIsValid = normalizedEmail.includes("@");
   const passwordIsValid = password.length >= 8;
 
-  const canSubmit = emailIsValid && passwordIsValid && !submitting;
+  const canSubmit =
+    aliasIsValid && emailIsValid && passwordIsValid && !submitting;
 
   const layoutStyles = useMemo(() => {
     return {
@@ -86,6 +95,16 @@ export default function RegisterScreen({ navigation }) {
         password,
         flow: "signUp",
       });
+
+      try {
+        await upsertMyProfile({
+          alias: normalizedAlias,
+          phone: normalizedPhone || undefined,
+          phoneVisible: false,
+        });
+      } catch (profileError) {
+        console.warn("Profile creation after sign up failed:", profileError);
+      }
     } catch (error) {
       console.error("Register error:", error);
 
@@ -176,6 +195,67 @@ export default function RegisterScreen({ navigation }) {
             </Text>
 
             <View style={styles.form}>
+              <View style={styles.field}>
+                <Text style={styles.label}>Alias público</Text>
+
+                <View style={styles.inputBox}>
+                  <Ionicons
+                    name="person-circle-outline"
+                    size={20}
+                    color="#64748b"
+                    style={styles.inputIcon}
+                  />
+
+                  <TextInput
+                    value={alias}
+                    onChangeText={setAlias}
+                    placeholder="Ej. 4104-BZG"
+                    placeholderTextColor="#94a3b8"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="nickname"
+                    maxLength={40}
+                    style={styles.input}
+                  />
+                </View>
+
+                <Text style={styles.fieldHelp}>
+                  Se mostrará en Chat y Parking. No uses tu nombre real si no
+                  quieres identificarte.
+                </Text>
+              </View>
+
+              <View style={styles.field}>
+                <Text style={styles.label}>Teléfono móvil opcional</Text>
+
+                <View style={styles.inputBox}>
+                  <Ionicons
+                    name="call-outline"
+                    size={20}
+                    color="#64748b"
+                    style={styles.inputIcon}
+                  />
+
+                  <TextInput
+                    value={phone}
+                    onChangeText={setPhone}
+                    placeholder="Solo si quieres añadir contacto"
+                    placeholderTextColor="#94a3b8"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="phone-pad"
+                    textContentType="telephoneNumber"
+                    maxLength={30}
+                    style={styles.input}
+                  />
+                </View>
+
+                <Text style={styles.fieldHelp}>
+                  Se guarda privado. En Parking no se muestra salvo que lo
+                  actives expresamente más adelante.
+                </Text>
+              </View>
+
               <View style={styles.field}>
                 <Text style={styles.label}>Email</Text>
 
@@ -522,6 +602,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#0f172a",
     outlineStyle: "none",
+  },
+
+  fieldHelp: {
+    marginTop: 7,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+    color: "#64748b",
   },
 
   passwordHintBox: {

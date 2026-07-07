@@ -1,26 +1,26 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 const DEFAULT_CITY = "gijon";
 const DEFAULT_PROVINCIA = "Asturias";
 const DEFAULT_ZIPCODE = 0;
 
 const storeValidator = v.object({
-  id: v.optional(v.string()),
-
+  id: v.string(),
   name: v.string(),
   city: v.string(),
-  provincia: v.optional(v.string()),
+  provincia: v.string(),
   address: v.string(),
-  zipcode: v.optional(v.union(v.string(), v.float64())),
+  zipcode: v.number(),
 
-  location: v.optional(
-    v.object({
-      lat: v.float64(),
-      lng: v.float64(),
-      source: v.optional(v.string()),
-    }),
-  ),
+  location: v.object({
+    lat: v.number(),
+    lng: v.number(),
+    source: v.string(),
+  }),
+
+  favorite: v.optional(v.boolean()),
 });
 
 function cleanText(value) {
@@ -51,57 +51,6 @@ function cleanLocationSource(value) {
   return cleanText(value) || "manual";
 }
 
-function normalizeForHash(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, " ");
-}
-
-function createDeterministicStoreId({
-  name,
-  address,
-  city,
-  provincia,
-  zipcode,
-}) {
-  const normalizedName = normalizeForHash(name);
-  const normalizedAddress = normalizeForHash(address);
-  const normalizedCity = normalizeForHash(city);
-  const normalizedProvincia = normalizeForHash(provincia);
-  const normalizedZipcode = normalizeForHash(zipcode);
-
-  const source = [
-    normalizedName,
-    normalizedAddress,
-    normalizedCity,
-    normalizedProvincia,
-    normalizedZipcode,
-  ].join("|");
-
-  let hash = 2166136261;
-
-  for (let index = 0; index < source.length; index += 1) {
-    hash ^= source.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return `store_${(hash >>> 0).toString(16).padStart(8, "0")}`;
-}
-
-function normalizeNumber(value) {
-  const number = Number(value);
-
-  if (!Number.isFinite(number)) {
-    return null;
-  }
-
-  return number;
-}
-
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -115,72 +64,50 @@ function isValidLongitude(value) {
 }
 
 function normalizeZipcode(value) {
-  const zipcode = normalizeNumber(value);
-
-  if (zipcode === null) {
+  if (!isFiniteNumber(value)) {
     return DEFAULT_ZIPCODE;
   }
 
-  return Math.trunc(zipcode);
-}
-
-function normalizeLocation(location, storeName) {
-  if (!location) {
-    return undefined;
-  }
-
-  const lat = normalizeNumber(location.lat);
-  const lng = normalizeNumber(location.lng);
-
-  if (!isValidLatitude(lat) || !isValidLongitude(lng)) {
-    throw new Error(`La tienda ${storeName} tiene coordenadas no válidas.`);
-  }
-
-  return {
-    lat,
-    lng,
-    source: cleanLocationSource(location.source),
-  };
+  return Math.trunc(value);
 }
 
 function normalizeStore(store) {
+  const id = cleanStoreId(store.id);
   const name = cleanStoreName(store.name);
 
-  if (!name) {
-    throw new Error("La tienda no tiene nombre.");
+  if (!id) {
+    throw new Error("La tienda no tiene id.");
   }
 
-  const city = cleanCity(store.city);
-  const provincia = cleanProvincia(store.provincia);
-  const address = cleanAddress(store.address);
-  const zipcode = normalizeZipcode(store.zipcode);
+  if (!name) {
+    throw new Error(`La tienda ${id} no tiene nombre.`);
+  }
 
-  const id =
-    cleanStoreId(store.id) ||
-    createDeterministicStoreId({
-      name,
-      address,
-      city,
-      provincia,
-      zipcode,
-    });
+  const lat = store.location?.lat;
+  const lng = store.location?.lng;
 
-  const normalizedStore = {
+  if (!isValidLatitude(lat) || !isValidLongitude(lng)) {
+    throw new Error(`La tienda ${name} tiene coordenadas no válidas.`);
+  }
+
+  return {
     id,
     name,
-    city,
-    provincia,
-    address,
-    zipcode,
+
+    city: cleanCity(store.city),
+    provincia: cleanProvincia(store.provincia),
+    address: cleanAddress(store.address),
+    zipcode: normalizeZipcode(store.zipcode),
+
+    location: {
+      lat,
+      lng,
+      source: cleanLocationSource(store.location?.source),
+    },
+
+    // Campo heredado: las tiendas ya no guardan favoritos globales.
+    favorite: false,
   };
-
-  const location = normalizeLocation(store.location, name);
-
-  if (location) {
-    normalizedStore.location = location;
-  }
-
-  return normalizedStore;
 }
 
 function sortStoresByName(stores) {
@@ -191,13 +118,61 @@ function sortStoresByName(stores) {
   );
 }
 
+async function requireAuthUserId(ctx) {
+  const userId = await getAuthUserId(ctx);
+
+  if (!userId) {
+    throw new Error("Usuario no autenticado.");
+  }
+
+  return String(userId);
+}
+
+async function getFavoriteStoreIdsForUser(ctx, userId) {
+  const favorites = await ctx.db
+    .query("userStoreFavorites")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .collect();
+
+  return favorites.map((favorite) => favorite.storeId);
+}
+
+async function getStoreByPublicId(ctx, id) {
+  return await ctx.db
+    .query("stores")
+    .withIndex("by_storeId", (q) => q.eq("id", id))
+    .unique();
+}
+
 export const listStores = query({
   args: {},
 
   handler: async (ctx) => {
     const stores = await ctx.db.query("stores").collect();
 
-    return sortStoresByName(stores);
+    return sortStoresByName(stores).map((store) => ({
+      ...store,
+      favorite: false,
+    }));
+  },
+});
+
+export const listStoresWithMyFavorites = query({
+  args: {},
+
+  handler: async (ctx) => {
+    const authUserId = await getAuthUserId(ctx);
+    const userId = authUserId ? String(authUserId) : null;
+
+    const stores = await ctx.db.query("stores").collect();
+    const favoriteIds = userId
+      ? new Set(await getFavoriteStoreIdsForUser(ctx, userId))
+      : new Set();
+
+    return sortStoresByName(stores).map((store) => ({
+      ...store,
+      favorite: favoriteIds.has(store.id),
+    }));
   },
 });
 
@@ -213,10 +188,7 @@ export const getStoreById = query({
       return null;
     }
 
-    return await ctx.db
-      .query("stores")
-      .withIndex("by_storeId", (q) => q.eq("id", id))
-      .unique();
+    return await getStoreByPublicId(ctx, id);
   },
 });
 
@@ -227,34 +199,53 @@ export const listStoresByCity = query({
 
   handler: async (ctx, args) => {
     const city = cleanCity(args.city);
+    const authUserId = await getAuthUserId(ctx);
+    const userId = authUserId ? String(authUserId) : null;
 
     const stores = await ctx.db
       .query("stores")
       .withIndex("by_city", (q) => q.eq("city", city))
       .collect();
 
-    return sortStoresByName(stores);
+    const favoriteIds = userId
+      ? new Set(await getFavoriteStoreIdsForUser(ctx, userId))
+      : new Set();
+
+    return sortStoresByName(stores).map((store) => ({
+      ...store,
+      favorite: favoriteIds.has(store.id),
+    }));
   },
 });
 
-export const searchStoresByName = query({
-  args: {
-    name: v.string(),
+export const listMyFavoriteStoreIds = query({
+  args: {},
+
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+
+    return await getFavoriteStoreIdsForUser(ctx, userId);
   },
+});
 
-  handler: async (ctx, args) => {
-    const name = cleanStoreName(args.name);
+export const listFavoriteStores = query({
+  args: {},
 
-    if (!name) {
-      return [];
-    }
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const favoriteIds = await getFavoriteStoreIdsForUser(ctx, userId);
+    const favoriteIdSet = new Set(favoriteIds);
 
-    const stores = await ctx.db
-      .query("stores")
-      .withIndex("by_name", (q) => q.eq("name", name))
-      .collect();
+    const stores = await ctx.db.query("stores").collect();
 
-    return sortStoresByName(stores);
+    return sortStoresByName(
+      stores
+        .filter((store) => favoriteIdSet.has(store.id))
+        .map((store) => ({
+          ...store,
+          favorite: true,
+        })),
+    );
   },
 });
 
@@ -271,10 +262,7 @@ export const upsertStores = mutation({
     for (const rawStore of args.stores) {
       const store = normalizeStore(rawStore);
 
-      const existing = await ctx.db
-        .query("stores")
-        .withIndex("by_storeId", (q) => q.eq("id", store.id))
-        .unique();
+      const existing = await getStoreByPublicId(ctx, store.id);
 
       if (existing) {
         await ctx.db.patch(existing._id, store);
@@ -295,6 +283,129 @@ export const upsertStores = mutation({
   },
 });
 
+export const setStoreFavorite = mutation({
+  args: {
+    id: v.string(),
+    favorite: v.boolean(),
+  },
+
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const id = cleanStoreId(args.id);
+
+    if (!id) {
+      throw new Error("Falta el id de la tienda.");
+    }
+
+    const existingStore = await getStoreByPublicId(ctx, id);
+
+    if (!existingStore) {
+      throw new Error("La tienda no existe.");
+    }
+
+    const existingFavorite = await ctx.db
+      .query("userStoreFavorites")
+      .withIndex("by_userId_storeId", (q) =>
+        q.eq("userId", userId).eq("storeId", id),
+      )
+      .unique();
+
+    if (args.favorite && !existingFavorite) {
+      await ctx.db.insert("userStoreFavorites", {
+        userId,
+        storeId: id,
+        createdAt: Date.now(),
+      });
+    }
+
+    if (!args.favorite && existingFavorite) {
+      await ctx.db.delete(existingFavorite._id);
+    }
+
+    return {
+      ok: true,
+      id,
+      favorite: args.favorite,
+    };
+  },
+});
+
+export const toggleStoreFavorite = mutation({
+  args: {
+    id: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const id = cleanStoreId(args.id);
+
+    if (!id) {
+      throw new Error("Falta el id de la tienda.");
+    }
+
+    const existingStore = await getStoreByPublicId(ctx, id);
+
+    if (!existingStore) {
+      throw new Error("La tienda no existe.");
+    }
+
+    const existingFavorite = await ctx.db
+      .query("userStoreFavorites")
+      .withIndex("by_userId_storeId", (q) =>
+        q.eq("userId", userId).eq("storeId", id),
+      )
+      .unique();
+
+    if (existingFavorite) {
+      await ctx.db.delete(existingFavorite._id);
+
+      return {
+        ok: true,
+        id,
+        favorite: false,
+      };
+    }
+
+    await ctx.db.insert("userStoreFavorites", {
+      userId,
+      storeId: id,
+      createdAt: Date.now(),
+    });
+
+    return {
+      ok: true,
+      id,
+      favorite: true,
+    };
+  },
+});
+
+export const toggleMyFavoriteStore = toggleStoreFavorite;
+
+export const isMyFavoriteStore = query({
+  args: {
+    id: v.string(),
+  },
+
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const id = cleanStoreId(args.id);
+
+    if (!id) {
+      return false;
+    }
+
+    const existingFavorite = await ctx.db
+      .query("userStoreFavorites")
+      .withIndex("by_userId_storeId", (q) =>
+        q.eq("userId", userId).eq("storeId", id),
+      )
+      .unique();
+
+    return Boolean(existingFavorite);
+  },
+});
+
 export const deleteStoreById = mutation({
   args: {
     id: v.string(),
@@ -307,10 +418,7 @@ export const deleteStoreById = mutation({
       throw new Error("Falta el id de la tienda.");
     }
 
-    const existing = await ctx.db
-      .query("stores")
-      .withIndex("by_storeId", (q) => q.eq("id", id))
-      .unique();
+    const existing = await getStoreByPublicId(ctx, id);
 
     if (!existing) {
       return {

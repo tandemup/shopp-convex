@@ -1,9 +1,9 @@
-// convex/chat.js
-
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 const SELF_DELETE_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_USERNAME = "anonymous";
 
 function normalizeRoom(room) {
   const cleanRoom = String(room || "").trim();
@@ -19,14 +19,32 @@ function normalizeUsername(username) {
   const cleanUsername = String(username || "").trim();
 
   if (!cleanUsername) {
-    return "anonymous";
+    return DEFAULT_USERNAME;
   }
 
-  return cleanUsername;
+  return cleanUsername.slice(0, 40);
 }
 
 function normalizeText(text) {
   return String(text || "").trim();
+}
+
+async function requireAuthUserId(ctx) {
+  const userId = await getAuthUserId(ctx);
+
+  if (!userId) {
+    throw new Error("Usuario no autenticado.");
+  }
+
+  return String(userId);
+}
+
+async function getDisplayUsername(ctx, userId, fallbackUsername) {
+  const user = await ctx.db.get(userId);
+
+  return normalizeUsername(
+    user?.name || user?.email || fallbackUsername || DEFAULT_USERNAME,
+  );
 }
 
 export const listMessages = query({
@@ -60,12 +78,14 @@ export const listMessages = query({
 export const sendMessage = mutation({
   args: {
     room: v.string(),
-    username: v.string(),
     text: v.string(),
+    username: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+
     const room = normalizeRoom(args.room);
-    const username = normalizeUsername(args.username);
+    const username = await getDisplayUsername(ctx, userId, args.username);
     const text = normalizeText(args.text);
 
     if (!text) {
@@ -79,6 +99,7 @@ export const sendMessage = mutation({
     const now = Date.now();
 
     return await ctx.db.insert("chatMessages", {
+      userId,
       room,
       username,
       text,
@@ -96,6 +117,17 @@ export const hideMessage = mutation({
     id: v.id("chatMessages"),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const message = await ctx.db.get(args.id);
+
+    if (!message) {
+      throw new Error("El mensaje no existe.");
+    }
+
+    if (message.userId && message.userId !== userId) {
+      throw new Error("No puedes ocultar mensajes de otro usuario.");
+    }
+
     await ctx.db.patch(args.id, {
       status: "hidden",
     });
@@ -110,6 +142,8 @@ export const blockMessage = mutation({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuthUserId(ctx);
+
     await ctx.db.patch(args.id, {
       status: "blocked",
       messageStatus: "blocked",

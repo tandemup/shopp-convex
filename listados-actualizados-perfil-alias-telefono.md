@@ -1,3 +1,1005 @@
+# Listados actualizados - edición de alias y teléfono
+Estos archivos permiten que cuentas antiguas creen o actualicen su perfil después de iniciar sesión.
+
+## `convex/schema.js`
+
+```js
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
+
+export default defineSchema({
+  ...authTables,
+
+
+  userProfiles: defineTable({
+    userId: v.string(),
+    alias: v.string(),
+    phone: v.optional(v.string()),
+    phoneVisible: v.optional(v.boolean()),
+    createdAt: v.float64(),
+    updatedAt: v.float64(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_alias", ["alias"])
+    .index("by_phone", ["phone"]),
+
+  chatMessages: defineTable({
+    userId: v.optional(v.string()),
+
+    room: v.string(),
+    text: v.string(),
+    username: v.string(),
+    createdAt: v.float64(),
+
+    status: v.optional(
+      v.union(v.literal("visible"), v.literal("hidden"), v.literal("blocked")),
+    ),
+
+    messageStatus: v.optional(
+      v.union(
+        v.literal("clean"),
+        v.literal("blocked"),
+        v.literal("warning"),
+        v.literal("pending_url_check"),
+      ),
+    ),
+
+    urls: v.optional(
+      v.array(
+        v.object({
+          originalUrl: v.string(),
+          normalizedUrl: v.union(v.string(), v.null()),
+          hostname: v.union(v.string(), v.null()),
+          provider: v.string(),
+          reason: v.string(),
+          riskScore: v.float64(),
+          checkedAt: v.float64(),
+
+          status: v.optional(
+            v.union(
+              v.literal("trusted"),
+              v.literal("safe"),
+              v.literal("pending"),
+              v.literal("suspicious"),
+              v.literal("malicious"),
+              v.literal("blocked"),
+              v.literal("unknown"),
+            ),
+          ),
+        }),
+      ),
+    ),
+
+    checkedLocallyAt: v.optional(v.float64()),
+    checkedExternallyAt: v.optional(v.float64()),
+    expiresAt: v.optional(v.float64()),
+    blockedReason: v.optional(v.string()),
+  })
+    .index("by_room_createdAt", ["room", "createdAt"])
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  parkingPresence: defineTable({
+    userId: v.string(),
+
+    city: v.string(),
+    zone: v.string(),
+
+    alias: v.optional(v.string()),
+    destination: v.optional(v.string()),
+
+    status: v.optional(
+      v.union(
+        v.literal("heading"),
+        v.literal("looking"),
+        v.literal("parked"),
+        v.literal("leaving"),
+        v.literal("offline"),
+      ),
+    ),
+
+    lat: v.optional(v.float64()),
+    lng: v.optional(v.float64()),
+    accuracy: v.optional(v.float64()),
+    locationSource: v.optional(v.string()),
+
+    location: v.optional(
+      v.object({
+        lat: v.float64(),
+        lng: v.float64(),
+        source: v.optional(v.string()),
+      }),
+    ),
+
+    createdAt: v.optional(v.float64()),
+    updatedAt: v.float64(),
+    expiresAt: v.optional(v.float64()),
+  })
+    .index("by_city_zone_userId", ["city", "zone", "userId"])
+    .index("by_city_zone_updatedAt", ["city", "zone", "updatedAt"])
+    .index("by_userId", ["userId"])
+    .index("by_city_zone", ["city", "zone"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  parkingSpots: defineTable({
+    userId: v.optional(v.string()),
+
+    city: v.string(),
+    zone: v.string(),
+
+    status: v.optional(
+      v.union(
+        v.literal("free"),
+        v.literal("occupied"),
+        v.literal("unknown"),
+        v.literal("expired"),
+
+        // Compatibilidad con documentos antiguos.
+        v.literal("looking"),
+        v.literal("parked"),
+        v.literal("leaving"),
+        v.literal("heading"),
+        v.literal("offline"),
+      ),
+    ),
+
+    alias: v.optional(v.string()),
+    destination: v.optional(v.string()),
+
+    lat: v.optional(v.float64()),
+    lng: v.optional(v.float64()),
+    accuracy: v.optional(v.float64()),
+    locationSource: v.optional(v.string()),
+
+    location: v.optional(
+      v.object({
+        lat: v.float64(),
+        lng: v.float64(),
+        source: v.optional(v.string()),
+      }),
+    ),
+
+    revealedBy: v.optional(v.string()),
+    revealedAt: v.optional(v.float64()),
+
+    occupiedBy: v.optional(v.string()),
+    occupiedAt: v.optional(v.float64()),
+
+    sourceMessageId: v.optional(v.id("parkingMessages")),
+
+    createdAt: v.optional(v.float64()),
+    updatedAt: v.optional(v.float64()),
+    expiresAt: v.optional(v.float64()),
+  })
+    .index("by_city_zone_status_expiresAt", [
+      "city",
+      "zone",
+      "status",
+      "expiresAt",
+    ])
+    .index("by_city_zone_status_updatedAt", [
+      "city",
+      "zone",
+      "status",
+      "updatedAt",
+    ])
+    .index("by_city_zone_updatedAt", ["city", "zone", "updatedAt"])
+    .index("by_userId", ["userId"])
+    .index("by_city_zone", ["city", "zone"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  parkingMessages: defineTable({
+    room: v.optional(v.string()),
+
+    city: v.optional(v.string()),
+    zone: v.optional(v.string()),
+
+    userId: v.string(),
+    alias: v.optional(v.string()),
+    text: v.string(),
+    createdAt: v.float64(),
+
+    status: v.optional(
+      v.union(
+        v.literal("looking"),
+        v.literal("parked"),
+        v.literal("leaving"),
+
+        // Compatibilidad con documentos antiguos de tipo chat.
+        v.literal("visible"),
+        v.literal("hidden"),
+        v.literal("blocked"),
+      ),
+    ),
+
+    parkingStatus: v.optional(
+      v.union(v.literal("looking"), v.literal("parked"), v.literal("leaving")),
+    ),
+
+    lat: v.optional(v.float64()),
+    lng: v.optional(v.float64()),
+    accuracy: v.optional(v.float64()),
+    locationSource: v.optional(v.string()),
+
+    location: v.optional(
+      v.object({
+        lat: v.float64(),
+        lng: v.float64(),
+        source: v.optional(v.string()),
+      }),
+    ),
+
+    destination: v.optional(
+      v.object({
+        id: v.string(),
+        name: v.string(),
+        address: v.string(),
+        lat: v.float64(),
+        lng: v.float64(),
+      }),
+    ),
+  })
+    .index("by_room", ["room"])
+    .index("by_city", ["city"])
+    .index("by_zone", ["zone"])
+    .index("by_city_zone", ["city", "zone"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_city_zone_createdAt", ["city", "zone", "createdAt"])
+    .index("by_city_zone_status_createdAt", [
+      "city",
+      "zone",
+      "status",
+      "createdAt",
+    ])
+    .index("by_status_createdAt", ["status", "createdAt"]),
+
+  stores: defineTable({
+    id: v.string(),
+    name: v.string(),
+    address: v.string(),
+    city: v.string(),
+
+    // Campo heredado. No usarlo para favoritos de usuario.
+    favorite: v.optional(v.boolean()),
+
+    provincia: v.optional(v.string()),
+    zipcode: v.optional(v.union(v.string(), v.float64())),
+
+    location: v.optional(
+      v.object({
+        lat: v.float64(),
+        lng: v.float64(),
+        source: v.optional(v.string()),
+      }),
+    ),
+  })
+    .index("by_storeId", ["id"])
+    .index("by_city", ["city"])
+    .index("by_name", ["name"]),
+
+  userStoreFavorites: defineTable({
+    userId: v.string(),
+    storeId: v.string(),
+    createdAt: v.float64(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_storeId", ["userId", "storeId"])
+    .index("by_storeId", ["storeId"]),
+
+  scanHistory: defineTable({
+    barcode: v.string(),
+
+    name: v.optional(v.string()),
+    brand: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    category: v.optional(v.string()),
+    productUrl: v.optional(v.string()),
+
+    source: v.optional(v.string()),
+    rawData: v.optional(v.any()),
+
+    createdAt: v.float64(),
+    updatedAt: v.optional(v.float64()),
+  })
+    .index("by_barcode", ["barcode"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_updatedAt", ["updatedAt"])
+    .index("by_barcode_updatedAt", ["barcode", "updatedAt"]),
+});
+
+```
+
+## `convex/users.js`
+
+```js
+import { mutation, query } from "./_generated/server";
+import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
+
+function cleanText(value) {
+  return String(value || "").trim();
+}
+
+function cleanAlias(value) {
+  const alias = cleanText(value);
+  return alias ? alias.slice(0, 40) : "anonymous";
+}
+
+function cleanPhone(value) {
+  const phone = cleanText(value);
+  return phone ? phone.slice(0, 30) : undefined;
+}
+
+async function requireAuthUserId(ctx) {
+  const userId = await getAuthUserId(ctx);
+
+  if (!userId) {
+    throw new Error("Usuario no autenticado.");
+  }
+
+  return String(userId);
+}
+
+async function getProfileByUserId(ctx, userId) {
+  return await ctx.db
+    .query("userProfiles")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .first();
+}
+
+export const current = query({
+  args: {},
+  handler: async (ctx) => {
+    const authUserId = await getAuthUserId(ctx);
+
+    if (authUserId === null) {
+      return null;
+    }
+
+    const user = await ctx.db.get(authUserId);
+
+    if (!user) {
+      return null;
+    }
+
+    const userId = String(authUserId);
+    const profile = await getProfileByUserId(ctx, userId);
+
+    return {
+      _id: user._id,
+      _creationTime: user._creationTime,
+
+      name: user.name ?? null,
+      email: user.email ?? null,
+      image: user.image ?? null,
+
+      emailVerificationTime: user.emailVerificationTime ?? null,
+      phone: profile?.phone ?? user.phone ?? null,
+      phoneVerificationTime: user.phoneVerificationTime ?? null,
+      isAnonymous: user.isAnonymous ?? false,
+
+      profile: profile
+        ? {
+            _id: profile._id,
+            alias: profile.alias,
+            phone: profile.phone ?? null,
+            phoneVisible: profile.phoneVisible ?? false,
+            createdAt: profile.createdAt,
+            updatedAt: profile.updatedAt,
+          }
+        : null,
+    };
+  },
+});
+
+export const getMyProfile = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+
+    if (!userId) {
+      return null;
+    }
+
+    const profile = await getProfileByUserId(ctx, String(userId));
+
+    if (!profile) {
+      return null;
+    }
+
+    return {
+      _id: profile._id,
+      alias: profile.alias,
+      phone: profile.phone ?? null,
+      phoneVisible: profile.phoneVisible ?? false,
+      createdAt: profile.createdAt,
+      updatedAt: profile.updatedAt,
+    };
+  },
+});
+
+export const upsertMyProfile = mutation({
+  args: {
+    alias: v.string(),
+    phone: v.optional(v.string()),
+    phoneVisible: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const now = Date.now();
+
+    const alias = cleanAlias(args.alias);
+    const phone = cleanPhone(args.phone);
+    const phoneVisible = args.phoneVisible === true;
+
+    const existingProfile = await getProfileByUserId(ctx, userId);
+
+    if (existingProfile) {
+      await ctx.db.patch(existingProfile._id, {
+        alias,
+        phone,
+        phoneVisible,
+        updatedAt: now,
+      });
+
+      return {
+        ok: true,
+        profileId: existingProfile._id,
+      };
+    }
+
+    const profileId = await ctx.db.insert("userProfiles", {
+      userId,
+      alias,
+      phone,
+      phoneVisible,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      ok: true,
+      profileId,
+    };
+  },
+});
+
+```
+
+## `src/screens/profile/ProfileScreen.js`
+
+```js
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useMutation, useQuery } from "convex/react";
+
+import { api } from "@/convex/_generated/api";
+import { safeAlert } from "@/src/components/ui/alert/safeAlert";
+
+function cleanText(value) {
+  return String(value || "").trim();
+}
+
+function formatAccountLabel(currentUser) {
+  if (!currentUser) return "Cuenta de Shopp";
+
+  return (
+    currentUser?.email ||
+    currentUser?.name ||
+    currentUser?._id ||
+    "Cuenta de Shopp"
+  );
+}
+
+export default function ProfileScreen({ navigation }) {
+  const currentUser = useQuery(api.users.current);
+  const profile = useQuery(api.users.getMyProfile);
+  const upsertMyProfile = useMutation(api.users.upsertMyProfile);
+
+  const [alias, setAlias] = useState("");
+  const [phone, setPhone] = useState("");
+  const [phoneVisible, setPhoneVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [formTouched, setFormTouched] = useState(false);
+
+  const accountLabel = useMemo(
+    () => formatAccountLabel(currentUser),
+    [currentUser],
+  );
+
+  useEffect(() => {
+    if (profile === undefined) return;
+    if (formTouched) return;
+
+    if (profile) {
+      setAlias(profile.alias || "");
+      setPhone(profile.phone || "");
+      setPhoneVisible(profile.phoneVisible === true);
+      return;
+    }
+
+    setAlias("");
+    setPhone("");
+    setPhoneVisible(false);
+  }, [profile, formTouched]);
+
+  const handleChangeAlias = (value) => {
+    setFormTouched(true);
+    setAlias(value);
+  };
+
+  const handleChangePhone = (value) => {
+    setFormTouched(true);
+    setPhone(value);
+  };
+
+  const handleChangePhoneVisible = (value) => {
+    setFormTouched(true);
+    setPhoneVisible(value);
+  };
+
+  const handleSave = async () => {
+    const cleanAlias = cleanText(alias);
+    const cleanPhone = cleanText(phone);
+
+    if (cleanAlias.length < 2) {
+      safeAlert(
+        "Alias obligatorio",
+        "Escribe un alias público de al menos 2 caracteres.",
+      );
+      return;
+    }
+
+    if (cleanAlias.length > 40) {
+      safeAlert(
+        "Alias demasiado largo",
+        "El alias público no puede tener más de 40 caracteres.",
+      );
+      return;
+    }
+
+    if (cleanPhone.length > 30) {
+      safeAlert(
+        "Teléfono demasiado largo",
+        "El teléfono no puede tener más de 30 caracteres.",
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      await upsertMyProfile({
+        alias: cleanAlias,
+        phone: cleanPhone || undefined,
+        phoneVisible,
+      });
+
+      setFormTouched(false);
+
+      safeAlert(
+        "Perfil actualizado",
+        "Tu alias y tus preferencias de contacto se han guardado correctamente.",
+      );
+
+      navigation?.goBack?.();
+    } catch (error) {
+      console.warn("[ProfileScreen] save profile error", error);
+
+      safeAlert(
+        "No se pudo guardar",
+        error?.message || "Revisa los datos e inténtalo de nuevo.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (currentUser === undefined || profile === undefined) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator />
+        <Text style={styles.loadingText}>Cargando perfil...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.header}>
+          <View style={styles.headerIcon}>
+            <Ionicons name="person-circle-outline" size={30} color="#14532d" />
+          </View>
+
+          <View style={styles.headerTextBox}>
+            <Text style={styles.title}>Mi perfil</Text>
+            <Text style={styles.subtitle}>{accountLabel}</Text>
+          </View>
+        </View>
+
+        {profile ? null : (
+          <View style={styles.noticeBox}>
+            <Ionicons name="information-circle-outline" size={22} color="#166534" />
+            <Text style={styles.noticeText}>
+              Esta cuenta todavía no tiene perfil. Completa un alias público para
+              usar Parking y Chat sin mostrar tu email.
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Alias público</Text>
+          <TextInput
+            value={alias}
+            onChangeText={handleChangeAlias}
+            placeholder="Ej. 4104-BZG"
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={40}
+            style={styles.input}
+          />
+          <Text style={styles.help}>
+            Es el nombre visible para otros usuarios en Parking y Chat. No uses
+            tu nombre real si quieres proteger tu privacidad.
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Teléfono</Text>
+          <TextInput
+            value={phone}
+            onChangeText={handleChangePhone}
+            placeholder="Ej. 600 000 000"
+            keyboardType="phone-pad"
+            textContentType="telephoneNumber"
+            maxLength={30}
+            style={styles.input}
+          />
+          <Text style={styles.help}>
+            El teléfono es opcional. Guárdalo solo si quieres usarlo como dato de
+            contacto en funciones de Parking.
+          </Text>
+
+          <View style={styles.switchRow}>
+            <View style={styles.switchTextBox}>
+              <Text style={styles.switchTitle}>Mostrar teléfono en Parking</Text>
+              <Text style={styles.helpNoMargin}>
+                Por defecto queda oculto. Actívalo solo si quieres que otros
+                usuarios puedan verlo.
+              </Text>
+            </View>
+
+            <Switch
+              value={phoneVisible}
+              onValueChange={handleChangePhoneVisible}
+              disabled={!cleanText(phone)}
+            />
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.primaryButton, saving && styles.disabledButton]}
+          onPress={handleSave}
+          disabled={saving}
+          activeOpacity={0.86}
+        >
+          <Ionicons name="checkmark" size={20} color="#ffffff" />
+          <Text style={styles.primaryButtonText}>
+            {saving ? "Guardando..." : "Guardar perfil"}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  scroll: {
+    flex: 1,
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#64748b",
+    fontWeight: "700",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 18,
+  },
+  headerIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    backgroundColor: "#dcfce7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTextBox: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  subtitle: {
+    marginTop: 3,
+    color: "#64748b",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  noticeBox: {
+    flexDirection: "row",
+    gap: 10,
+    backgroundColor: "#ecfdf5",
+    borderColor: "#bbf7d0",
+    borderWidth: 1,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 14,
+  },
+  noticeText: {
+    flex: 1,
+    color: "#166534",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700",
+  },
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#14532d",
+    marginBottom: 8,
+  },
+  input: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: "#0f172a",
+    backgroundColor: "#ffffff",
+  },
+  help: {
+    marginTop: 8,
+    color: "#64748b",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  helpNoMargin: {
+    color: "#64748b",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  switchRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+  },
+  switchTextBox: {
+    flex: 1,
+  },
+  switchTitle: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+  primaryButton: {
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: "#15803d",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  primaryButtonText: {
+    color: "#ffffff",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+});
+
+```
+
+## `src/navigation/ROUTES.js`
+
+```js
+export const ROUTES = {
+  // Tabs
+  SHOPPING_TAB: "ShoppingTab",
+  STORES_TAB: "StoresTab",
+  SCANNER_TAB: "ScannerTab",
+  CHAT_TAB: "ChatTab",
+  MENU_TAB: "MenuTab",
+
+  // Shopping stack
+  SHOPPING_LISTS: "Shopping Lists",
+  SHOPPING_LIST: "Shopping List",
+  ITEM_DETAIL: "Item Detail",
+
+  // Stores stack
+  STORES_HOME: "Stores Home",
+  STORES_BROWSE: "Stores Browse",
+  STORE_SELECT: "Store Select",
+  STORES_FAVORITES: "Stores Favorites",
+  STORE_DETAIL: "Store Detail",
+  STORE_MAP: "Store Map",
+  STORES_NEARBY: "Stores Nearby",
+  STORE_INFO: "Store Info",
+
+  // Archive
+  ARCHIVED_LISTS: "Archived Lists",
+  ARCHIVED_LIST_DETAIL: "Archived List Detail",
+
+  // History
+  PURCHASE_HISTORY: "Purchase History",
+  PURCHASE_DETAIL: "Purchase Detail",
+  SCANNED_HISTORY: "Scanned History",
+
+  // Scanner stack
+  SCANNER_HOME: "Scanner Home",
+
+  // Scanner básico heredado
+  PRODUCT_BARCODE_SCANNER: "ProductBarcodeScanner",
+
+  // Scanner principal
+  NEW_PRODUCT_SCANNER2: "NewProductScanner2",
+
+  // Pantalla para mostrar información obtenida del producto escaneado
+  PRODUCT_INFO: "ProductInfo",
+
+  // Scanner auxiliares / existentes
+  SCANNER_SCREEN: "Scanner Screen",
+  QUICK_SCANNER_SCREEN: "QuickScanner Screen",
+  DETAILED_SCANNER_SCREEN: "DetailedScanner Screen",
+  SHELF_LABEL_SCANNER: "Shelf Label Scanner",
+  EDIT_SCANNED_ITEM: "Edit Scanned Item",
+
+  // Search settings
+  SEARCH_ENGINES: "Search Engines",
+  SEARCH_ENGINE_SETTINGS: "SearchEngine Settings Screen",
+
+  // Menu / Settings
+  MENU: "Menu",
+  PROFILE: "Profile",
+  SETTINGS: "Settings Screen",
+  BARCODE_SETTINGS: "Barcode Settings Screen",
+  CONFIRM_DELETE: "Confirm Delete Screen",
+
+  // Chat stack
+  CHAT_SCREEN: "Chat",
+  CHAT_SCREEN_RESPONSIVE: "Chat Responsive",
+  PARKING_SCREEN: "Parking",
+  PARKING_SETTINGS: "ParkingSettings",
+  YESTERDAY_NEWS_SCREEN: "Yesterday News",
+
+  // Debug
+  PRODUCT_LEARNING_DEBUG: "Product Learning Debug",
+};
+
+```
+
+## `src/navigation/MenuStack.js`
+
+```js
+// navigation/MenuStack.js
+
+import React from "react";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+
+import { ROUTES } from "@/src/navigation/ROUTES";
+
+import MenuScreen from "@/src/screens/settings/MenuScreen";
+import SearchEngines from "@/src/screens/settings/SearchEngines";
+import BarcodeSettingsScreen from "@/src/screens/settings/BarcodeSettingsScreen";
+import ProfileScreen from "@/src/screens/profile/ProfileScreen";
+
+const Stack = createNativeStackNavigator();
+
+export default function MenuStack() {
+  return (
+    <Stack.Navigator
+      initialRouteName={ROUTES.MENU}
+      screenOptions={{
+        headerTitleAlign: "center",
+        headerTitleStyle: { fontSize: 20, fontWeight: "700" },
+        headerBackButtonDisplayMode: "minimal",
+      }}
+    >
+      <Stack.Screen
+        name={ROUTES.MENU}
+        component={MenuScreen}
+        options={{ title: "Menú" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.SEARCH_ENGINE_SETTINGS}
+        component={SearchEngines}
+        options={{ title: "Motor de búsqueda" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.PROFILE}
+        component={ProfileScreen}
+        options={{ title: "Mi perfil" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.SEARCH_ENGINES}
+        component={SearchEngines}
+        options={{ title: "Motor de búsqueda" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.BARCODE_SETTINGS}
+        component={BarcodeSettingsScreen}
+        options={{ title: "Código de barras" }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+```
+
+## `src/screens/settings/MenuScreen.js`
+
+```js
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Linking,
@@ -1450,3 +2452,5 @@ const styles = StyleSheet.create({
     height: 24,
   },
 });
+
+```

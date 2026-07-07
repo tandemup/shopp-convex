@@ -18,7 +18,7 @@ import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
 import { ROUTES } from "@/src/navigation/ROUTES";
 import {
   DEFAULT_PARKING_DESTINATION,
-  DEFAULT_PARKING_USER_ID,
+  DEFAULT_PARKING_ALIAS,
   loadParkingPreferences,
   saveParkingPreferences,
 } from "@/src/screens/parking/parkingPreferences";
@@ -26,7 +26,6 @@ import {
 const PARKING_SETTINGS_STORAGE_KEY = "@shopp/parking/settings";
 const DEFAULT_CITY = "gijon";
 const DEFAULT_DESTINATION = "palacio-deportes";
-const DEFAULT_USER_ID = "anonymous";
 
 const DESTINATION_OPTIONS = [
   {
@@ -78,15 +77,6 @@ const DESTINATION_OPTIONS = [
     latitude: 43.535538,
     longitude: -5.62342,
   },
-  {
-    id: "iglesia-san-julian2",
-    label: "Iglesia de San Julian",
-    category: "Iglesia",
-    address:
-      "Iglesia de San Julián de Somió, Av. Dionisio Cifuentes, 19, Periurbano - Rural, 33203 Gijón, Asturias",
-    latitude: 43.535488789235345,
-    longitude: -5.624319460817051,
-  },
 ];
 
 function blurActiveElement() {
@@ -107,8 +97,10 @@ export default function ParkingSettingsScreen({ navigation, route }) {
   );
   const [destinationPickerVisible, setDestinationPickerVisible] =
     useState(false);
-  const [draftUserId, setDraftUserId] = useState(
-    route?.params?.activeUserId || DEFAULT_PARKING_USER_ID,
+  const [draftParkingAlias, setDraftParkingAlias] = useState(
+    route?.params?.activeParkingAlias ||
+      route?.params?.activeUserId ||
+      DEFAULT_PARKING_ALIAS,
   );
 
   const { location } = useLocation();
@@ -157,10 +149,8 @@ export default function ParkingSettingsScreen({ navigation, route }) {
     ? destinationPresenceResult
     : [];
 
-  const cleanDraftUserId = draftUserId.trim() || DEFAULT_USER_ID;
-
   const activeFriendsCount = destinationPresence.filter((item) => {
-    return item.userId !== cleanDraftUserId;
+    return item.isOwnUser !== true;
   }).length;
 
   const mapCenter = {
@@ -201,10 +191,10 @@ export default function ParkingSettingsScreen({ navigation, route }) {
   async function handleSave() {
     blurActiveElement();
 
-    const cleanUserId = draftUserId.trim() || DEFAULT_PARKING_USER_ID;
+    const cleanParkingAlias = draftParkingAlias.trim() || DEFAULT_PARKING_ALIAS;
 
     const nextSettings = {
-      userId: cleanUserId,
+      parkingAlias: cleanParkingAlias,
       destinationId: selectedDestination,
       destinationName: activeDestinationData.label,
       destinationAddress: activeDestinationData.address,
@@ -220,22 +210,22 @@ export default function ParkingSettingsScreen({ navigation, route }) {
 
     await saveParkingPreferences({
       activeDestination: selectedDestination,
-      activeUserId: cleanUserId,
+      parkingAlias: cleanParkingAlias,
     });
 
     await touchParkingPresence({
       city: "gijon",
       zone: selectedDestination,
-      userId: cleanUserId,
+      alias: cleanParkingAlias,
       status: "heading",
-      lat: mapCenter.lat,
-      lng: mapCenter.lng,
-      locationSource: "destination",
+      lat: userCoords?.lat,
+      lng: userCoords?.lng,
+      locationSource: userCoords ? "gps" : "settings",
     });
 
     navigation.navigate(ROUTES.PARKING_SCREEN, {
       activeDestination: selectedDestination,
-      activeUserId: cleanUserId,
+      parkingAlias: cleanParkingAlias,
     });
   }
 
@@ -443,8 +433,8 @@ export default function ParkingSettingsScreen({ navigation, route }) {
         setSelectedDestination(preferences.activeDestination);
       }
 
-      if (!route?.params?.activeUserId) {
-        setDraftUserId(preferences.activeUserId);
+      if (!route?.params?.activeParkingAlias && !route?.params?.activeUserId) {
+        setDraftParkingAlias(preferences.parkingAlias);
       }
     }
 
@@ -453,7 +443,11 @@ export default function ParkingSettingsScreen({ navigation, route }) {
     return () => {
       isMounted = false;
     };
-  }, [route?.params?.activeDestination, route?.params?.activeUserId]);
+  }, [
+    route?.params?.activeDestination,
+    route?.params?.activeParkingAlias,
+    route?.params?.activeUserId,
+  ]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -513,18 +507,23 @@ export default function ParkingSettingsScreen({ navigation, route }) {
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.fieldLabel}>User ID</Text>
+              <Text style={styles.fieldLabel}>Alias público</Text>
 
               <TextInput
-                value={draftUserId}
-                onChangeText={setDraftUserId}
-                placeholder="anonymous"
+                value={draftParkingAlias}
+                onChangeText={setDraftParkingAlias}
+                placeholder="Ej. 4104-BZG"
                 placeholderTextColor="#888"
                 style={styles.usernameInput}
                 autoCapitalize="none"
                 autoCorrect={false}
                 maxLength={32}
               />
+
+              <Text style={styles.fieldHelp}>
+                Este alias se muestra a otros usuarios. El identificador real de
+                Convex Auth queda oculto y solo se usa internamente.
+              </Text>
             </View>
 
             <View style={styles.trafficCard}>
@@ -782,6 +781,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     color: "#111827",
     fontSize: 15,
+  },
+
+  fieldHelp: {
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "600",
   },
 
   trafficCard: {

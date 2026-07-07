@@ -6,7 +6,13 @@ import React, {
   useState,
 } from "react";
 
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { loadLists, saveLists } from "@/src/storage/listsStorage";
+import {
+  STORAGE_KEYS,
+  getUserScopedStorageKey,
+} from "@/src/storage/storageKeys";
 import { DEFAULT_CURRENCY } from "@/src/constants/currency";
 import { buildPurchaseHistoryFromArchivedLists } from "@/src/utils/buildPurchaseHistoryFromArchivedLists";
 
@@ -19,6 +25,14 @@ const ListsContext = createContext(null);
    Provider
 -------------------------------------------------- */
 export function ListsProvider({ children }) {
+  const currentUser = useQuery(api.users.current);
+  const userStorageKey = useMemo(() => {
+    return getUserScopedStorageKey(
+      currentUser?._id || "anonymous",
+      STORAGE_KEYS.LISTS,
+    );
+  }, [currentUser?._id]);
+
   const [lists, setLists] = useState([]);
   const [purchaseHistory, setPurchaseHistory] = useState([]);
   const [isReady, setIsReady] = useState(false);
@@ -27,27 +41,44 @@ export function ListsProvider({ children }) {
      Rehidratación (solo listas)
   -------------------------------------------------- */
   useEffect(() => {
+    let cancelled = false;
+
     const init = async () => {
+      setIsReady(false);
+
       try {
-        const data = await loadLists();
-        setLists(data);
+        const data = await loadLists(userStorageKey);
+
+        if (!cancelled) {
+          setLists(data);
+        }
       } catch (err) {
         console.warn("Error loading lists", err);
+
+        if (!cancelled) {
+          setLists([]);
+        }
       } finally {
-        setIsReady(true);
+        if (!cancelled) {
+          setIsReady(true);
+        }
       }
     };
 
     init();
-  }, []);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userStorageKey]);
 
   /* -------------------------------------------------
      Persistencia (solo listas)
   -------------------------------------------------- */
   useEffect(() => {
     if (!isReady) return;
-    saveLists(lists);
-  }, [lists, isReady]);
+    saveLists(lists, userStorageKey);
+  }, [lists, isReady, userStorageKey]);
 
   /* -------------------------------------------------
      Derivar purchaseHistory (NO persistido)

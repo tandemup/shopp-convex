@@ -4,7 +4,12 @@ export const PARKING_PREFERENCES_KEY = "shopp_parking_preferences_v1";
 
 export const DEFAULT_PARKING_CITY = "gijon";
 export const DEFAULT_PARKING_DESTINATION = "palacio-deportes";
-export const DEFAULT_PARKING_USER_ID = "anonymous";
+export const DEFAULT_PARKING_ALIAS = "anonymous";
+
+function normalizeAlias(value) {
+  const alias = String(value || "").trim();
+  return alias || DEFAULT_PARKING_ALIAS;
+}
 
 export async function loadParkingPreferences() {
   try {
@@ -13,35 +18,41 @@ export async function loadParkingPreferences() {
     if (!rawValue) {
       return {
         activeDestination: DEFAULT_PARKING_DESTINATION,
-        activeUserId: DEFAULT_PARKING_USER_ID,
+        parkingAlias: DEFAULT_PARKING_ALIAS,
       };
     }
 
     const parsedValue = JSON.parse(rawValue);
 
+    // Compatibilidad con versiones anteriores: antes se guardaba como activeUserId.
+    const alias = parsedValue?.parkingAlias || parsedValue?.activeUserId;
+
     return {
       activeDestination:
         parsedValue?.activeDestination || DEFAULT_PARKING_DESTINATION,
-      activeUserId: parsedValue?.activeUserId || DEFAULT_PARKING_USER_ID,
+      parkingAlias: normalizeAlias(alias),
     };
   } catch (error) {
     console.error("Error cargando preferencias de parking:", error);
 
     return {
       activeDestination: DEFAULT_PARKING_DESTINATION,
-      activeUserId: DEFAULT_PARKING_USER_ID,
+      parkingAlias: DEFAULT_PARKING_ALIAS,
     };
   }
 }
 
 export async function saveParkingPreferences({
   activeDestination,
+  parkingAlias,
   activeUserId,
 }) {
+  const cleanAlias = normalizeAlias(parkingAlias || activeUserId);
+
   try {
     const cleanPreferences = {
       activeDestination: activeDestination || DEFAULT_PARKING_DESTINATION,
-      activeUserId: activeUserId?.trim() || DEFAULT_PARKING_USER_ID,
+      parkingAlias: cleanAlias,
     };
 
     await AsyncStorage.setItem(
@@ -55,7 +66,7 @@ export async function saveParkingPreferences({
 
     return {
       activeDestination: activeDestination || DEFAULT_PARKING_DESTINATION,
-      activeUserId: activeUserId?.trim() || DEFAULT_PARKING_USER_ID,
+      parkingAlias: cleanAlias,
     };
   }
 }

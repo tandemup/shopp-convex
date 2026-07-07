@@ -23,3 +23,14 @@ export const STORAGE_KEYS = {
 
   BARCODE_SETTINGS: "@shopping/barcode-settings",
 };
+
+export function getUserScopedStorageKey(userId, key) {
+  const cleanUserId = String(userId || "anonymous").trim() || "anonymous";
+  const cleanKey = String(key || "").trim();
+
+  if (!cleanKey) {
+    return `@shopping/users/${cleanUserId}`;
+  }
+
+  return `@shopping/users/${cleanUserId}/${cleanKey.replace(/^@shopping\//, "")}`;
+}

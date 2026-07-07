@@ -1,10 +1,10 @@
 import { storage } from "./storage";
 import { STORAGE_KEYS } from "./storageKeys";
 
-export async function loadLists() {
-  return await storage.getJSON(STORAGE_KEYS.LISTS, []);
+export async function loadLists(storageKey = STORAGE_KEYS.LISTS) {
+  return await storage.getJSON(storageKey, []);
 }
 
-export async function saveLists(lists) {
-  return await storage.setJSON(STORAGE_KEYS.LISTS, lists);
+export async function saveLists(lists, storageKey = STORAGE_KEYS.LISTS) {
+  return await storage.setJSON(storageKey, lists);
 }

@@ -1,4 +1,3 @@
-// screens/ParkingScreen.js
 import React, {
   useCallback,
   useEffect,
@@ -28,7 +27,6 @@ import "moment/locale/es";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import { ROUTES } from "@/src/navigation/ROUTES";
 import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
-import { useMap } from "react-leaflet";
 
 moment.locale("es");
 
@@ -106,7 +104,7 @@ const DEFAULT_REGION = {
 };
 
 const DEFAULT_SETTINGS = {
-  userId: "",
+  parkingAlias: "",
   destinationId: "",
   destinationName: "",
   destinationAddress: "",
@@ -152,9 +150,9 @@ const formatElapsedTime = (value) => {
   return date.fromNow();
 };
 
-function getDisplayUserId(settings) {
-  const userId = normalizeText(settings?.userId);
-  return userId || "userId";
+function getDisplayParkingAlias(settings) {
+  const alias = normalizeText(settings?.parkingAlias || settings?.userId);
+  return alias || "anonymous";
 }
 
 function getDisplayDestination(settings) {
@@ -223,7 +221,7 @@ function buildEventMessage(status, destination) {
 }
 
 function createLocalEvent({
-  userId,
+  parkingAlias,
   status,
   destinationName,
   destinationAddress,
@@ -236,7 +234,7 @@ function createLocalEvent({
 
   return {
     id: `${now}-${Math.random().toString(36).slice(2)}`,
-    userId,
+    parkingAlias,
     status,
     destinationName,
     destinationAddress,
@@ -312,23 +310,35 @@ function StatusBadge({ status }) {
   );
 }
 
-function InfoRow({ label, value }) {
+function CoordinateDropdown({ title, subtitle, open, onToggle, children }) {
   return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+    <View style={styles.coordinateDropdown}>
+      <Pressable
+        style={styles.coordinateDropdownHeader}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+      >
+        <View style={styles.coordinateDropdownTitleBox}>
+          <Text style={styles.coordinateDropdownTitle}>{title}</Text>
+
+          {subtitle ? (
+            <Text style={styles.coordinateDropdownSubtitle}>{subtitle}</Text>
+          ) : null}
+        </View>
+
+        <Ionicons
+          name={open ? "chevron-up-outline" : "chevron-down-outline"}
+          size={20}
+          color="#0f172a"
+        />
+      </Pressable>
+
+      {open ? (
+        <View style={styles.coordinateDropdownBody}>{children}</View>
+      ) : null}
     </View>
   );
-}
-
-function formatCoordinate(value) {
-  const numberValue = Number(value);
-
-  if (!Number.isFinite(numberValue)) {
-    return "No disponible";
-  }
-
-  return numberValue.toFixed(6);
 }
 
 function LocationSummary({
@@ -339,123 +349,92 @@ function LocationSummary({
   destinationAddress,
   destinationLatitude,
   destinationLongitude,
+  userCoordinatesExpanded,
+  onToggleUserCoordinates,
+  destinationCoordinatesExpanded,
+  onToggleDestinationCoordinates,
 }) {
-  const [userCoordsExpanded, setUserCoordsExpanded] = useState(false);
-  const [destinationCoordsExpanded, setDestinationCoordsExpanded] =
-    useState(false);
+  const hasUserLocation =
+    typeof userLatitude === "number" && typeof userLongitude === "number";
 
-  const userCoordsText =
-    Number.isFinite(Number(userLatitude)) &&
-    Number.isFinite(Number(userLongitude))
-      ? `${formatCoordinate(userLatitude)}, ${formatCoordinate(userLongitude)}`
-      : "Ubicación del usuario no disponible";
-
-  const destinationCoordsText =
-    Number.isFinite(Number(destinationLatitude)) &&
-    Number.isFinite(Number(destinationLongitude))
-      ? `${formatCoordinate(destinationLatitude)}, ${formatCoordinate(
-          destinationLongitude,
-        )}`
-      : "Coordenadas del destino no disponibles";
+  const hasDestinationLocation =
+    typeof destinationLatitude === "number" &&
+    typeof destinationLongitude === "number";
 
   return (
-    <View style={styles.locationSummary}>
-      <Pressable
-        style={styles.coordsToggleHeader}
-        onPress={() => setUserCoordsExpanded((value) => !value)}
+    <View style={styles.locationSummaryBlock}>
+      <CoordinateDropdown
+        title="Coordenadas del usuario"
+        subtitle="Posición GPS actual detectada por la app."
+        open={userCoordinatesExpanded}
+        onToggle={onToggleUserCoordinates}
       >
-        <View style={styles.coordsToggleTitleRow}>
-          <Ionicons name="navigate-outline" size={18} color="#2563eb" />
-
-          <View style={styles.coordsToggleTextBlock}>
-            <Text style={styles.locationSummaryTitle}>
-              Coordenadas del usuario
+        <View style={styles.coordsBox}>
+          <View style={styles.coordRow}>
+            <Text style={styles.coordLabel}>Latitud usuario</Text>
+            <Text style={styles.coordValue}>
+              {hasUserLocation ? userLatitude.toFixed(6) : "Sin dato"}
             </Text>
+          </View>
 
-            <Text style={styles.coordsCollapsedText} numberOfLines={1}>
-              {userCoordsText}
+          <View style={styles.coordRow}>
+            <Text style={styles.coordLabel}>Longitud usuario</Text>
+            <Text style={styles.coordValue}>
+              {hasUserLocation ? userLongitude.toFixed(6) : "Sin dato"}
+            </Text>
+          </View>
+
+          <View style={styles.coordRow}>
+            <Text style={styles.coordLabel}>Precisión</Text>
+            <Text style={styles.coordValue}>
+              {typeof userAccuracy === "number"
+                ? `${Math.round(userAccuracy)} m`
+                : "Sin dato"}
             </Text>
           </View>
         </View>
+      </CoordinateDropdown>
 
-        <Ionicons
-          name={userCoordsExpanded ? "chevron-up" : "chevron-down"}
-          size={20}
-          color="#111827"
-        />
-      </Pressable>
-
-      {userCoordsExpanded ? (
-        <View style={styles.coordsDetailsBox}>
-          <InfoRow
-            label="Latitud usuario"
-            value={formatCoordinate(userLatitude)}
-          />
-
-          <InfoRow
-            label="Longitud usuario"
-            value={formatCoordinate(userLongitude)}
-          />
-
-          <InfoRow
-            label="Precisión"
-            value={
-              userAccuracy != null && Number.isFinite(Number(userAccuracy))
-                ? `${Math.round(Number(userAccuracy))} m`
-                : "No disponible"
-            }
-          />
-        </View>
-      ) : null}
-
-      <Pressable
-        style={[styles.coordsToggleHeader, styles.coordsToggleHeaderSpaced]}
-        onPress={() => setDestinationCoordsExpanded((value) => !value)}
+      <CoordinateDropdown
+        title="Coordenadas del destino"
+        subtitle="Destino elegido para buscar aparcamiento."
+        open={destinationCoordinatesExpanded}
+        onToggle={onToggleDestinationCoordinates}
       >
-        <View style={styles.coordsToggleTitleRow}>
-          <Ionicons name="flag-outline" size={18} color="#2563eb" />
-
-          <View style={styles.coordsToggleTextBlock}>
-            <Text style={styles.locationSummaryTitle}>
-              Coordenadas del destino
+        <View style={styles.coordsBox}>
+          <View style={styles.coordRow}>
+            <Text style={styles.coordLabel}>Destino</Text>
+            <Text style={styles.coordValue}>
+              {destinationName || "Sin destino"}
             </Text>
+          </View>
 
-            <Text style={styles.coordsCollapsedText} numberOfLines={1}>
-              {destinationName || destinationCoordsText}
+          <View style={styles.coordRow}>
+            <Text style={styles.coordLabel}>Dirección</Text>
+            <Text style={styles.coordValue}>
+              {destinationAddress || "Sin dirección"}
+            </Text>
+          </View>
+
+          <View style={styles.coordRow}>
+            <Text style={styles.coordLabel}>Latitud destino</Text>
+            <Text style={styles.coordValue}>
+              {hasDestinationLocation
+                ? destinationLatitude.toFixed(6)
+                : "Sin dato"}
+            </Text>
+          </View>
+
+          <View style={styles.coordRow}>
+            <Text style={styles.coordLabel}>Longitud destino</Text>
+            <Text style={styles.coordValue}>
+              {hasDestinationLocation
+                ? destinationLongitude.toFixed(6)
+                : "Sin dato"}
             </Text>
           </View>
         </View>
-
-        <Ionicons
-          name={destinationCoordsExpanded ? "chevron-up" : "chevron-down"}
-          size={20}
-          color="#111827"
-        />
-      </Pressable>
-
-      {destinationCoordsExpanded ? (
-        <View style={styles.coordsDetailsBox}>
-          <InfoRow
-            label="Destino"
-            value={destinationName || "No seleccionado"}
-          />
-
-          <InfoRow
-            label="Dirección"
-            value={destinationAddress || "No disponible"}
-          />
-
-          <InfoRow
-            label="Latitud destino"
-            value={formatCoordinate(destinationLatitude)}
-          />
-
-          <InfoRow
-            label="Longitud destino"
-            value={formatCoordinate(destinationLongitude)}
-          />
-        </View>
-      ) : null}
+      </CoordinateDropdown>
     </View>
   );
 }
@@ -475,8 +454,21 @@ function LocationSection({
   mapCenter,
   userCoords,
   activeParkingSpots,
-  mapRefreshKey,
 }) {
+  const [userCoordinatesExpanded, setUserCoordinatesExpanded] = useState(false);
+  const [destinationCoordinatesExpanded, setDestinationCoordinatesExpanded] =
+    useState(false);
+
+  const safeMapLat =
+    typeof mapCenter?.lat === "number"
+      ? mapCenter.lat
+      : DEFAULT_REGION.latitude;
+
+  const safeMapLng =
+    typeof mapCenter?.lng === "number"
+      ? mapCenter.lng
+      : DEFAULT_REGION.longitude;
+
   return (
     <View style={styles.card}>
       <Pressable style={styles.collapsibleHeader} onPress={onToggle}>
@@ -508,6 +500,14 @@ function LocationSection({
             destinationAddress={selectedDestinationAddress}
             destinationLatitude={destinationCoords?.lat}
             destinationLongitude={destinationCoords?.lng}
+            userCoordinatesExpanded={userCoordinatesExpanded}
+            onToggleUserCoordinates={() =>
+              setUserCoordinatesExpanded((value) => !value)
+            }
+            destinationCoordinatesExpanded={destinationCoordinatesExpanded}
+            onToggleDestinationCoordinates={() =>
+              setDestinationCoordinatesExpanded((value) => !value)
+            }
           />
 
           <Pressable
@@ -529,17 +529,9 @@ function LocationSection({
 
           <View style={styles.mapContainer}>
             <StoreMapPreview
-              key={[
-                "parking-map",
-                mapRefreshKey,
-                selectedDestination || "no-destination",
-                mapCenter?.lat || "no-map-lat",
-                mapCenter?.lng || "no-map-lng",
-                userCoords?.lat || "no-user-lat",
-                userCoords?.lng || "no-user-lng",
-              ].join("-")}
-              lat={mapCenter?.lat}
-              lng={mapCenter?.lng}
+              key={`parking-map-${selectedDestination || "no-destination"}-${safeMapLat}-${safeMapLng}-${userCoords?.lat ?? "no-user-lat"}-${userCoords?.lng ?? "no-user-lng"}`}
+              lat={safeMapLat}
+              lng={safeMapLng}
               userLat={userCoords?.lat}
               userLng={userCoords?.lng}
               parkingSpots={activeParkingSpots}
@@ -561,7 +553,7 @@ function EventCard({ event, isOwnUser }) {
       <View style={styles.eventHeader}>
         <View style={styles.eventUserBlock}>
           <Text style={styles.eventUser}>
-            {event.userId}
+            {event.parkingAlias || event.userId}
             {isOwnUser ? " (Tú)" : ""}
           </Text>
 
@@ -617,11 +609,10 @@ export default function ParkingScreen({ navigation }) {
   const [currentState, setCurrentState] = useState(DEFAULT_CURRENT_STATE);
   const [events, setEvents] = useState([]);
   const [note, setNote] = useState("");
+
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [locationExpanded, setLocationExpanded] = useState(false);
-  const [mapFocusCoords, setMapFocusCoords] = useState(null);
-  const [mapRefreshKey, setMapRefreshKey] = useState(0);
   const [locationPermissionStatus, setLocationPermissionStatus] =
     useState(null);
 
@@ -650,7 +641,10 @@ export default function ParkingScreen({ navigation }) {
     }
   }, [currentState]);
 
-  const displayUserId = useMemo(() => getDisplayUserId(settings), [settings]);
+  const displayParkingAlias = useMemo(
+    () => getDisplayParkingAlias(settings),
+    [settings],
+  );
 
   const displayDestination = useMemo(
     () => getDisplayDestination(settings),
@@ -674,13 +668,6 @@ export default function ParkingScreen({ navigation }) {
   }, [settings.destinationLatitude, settings.destinationLongitude]);
 
   const mapCenter = useMemo(() => {
-    if (
-      typeof mapFocusCoords?.lat === "number" &&
-      typeof mapFocusCoords?.lng === "number"
-    ) {
-      return mapFocusCoords;
-    }
-
     if (destinationCoords) {
       return destinationCoords;
     }
@@ -699,12 +686,7 @@ export default function ParkingScreen({ navigation }) {
       lat: DEFAULT_REGION.latitude,
       lng: DEFAULT_REGION.longitude,
     };
-  }, [
-    mapFocusCoords,
-    destinationCoords,
-    currentState.latitude,
-    currentState.longitude,
-  ]);
+  }, [destinationCoords, currentState.latitude, currentState.longitude]);
 
   const userCoords = useMemo(() => {
     if (
@@ -733,20 +715,19 @@ export default function ParkingScreen({ navigation }) {
         id: event.id,
         lat: event.latitude,
         lng: event.longitude,
-        revealedBy: event.userId,
+        revealedBy: event.parkingAlias || event.userId,
         status: event.status,
         createdAt: event.createdAt,
       }));
   }, [events]);
-
   const availableNextStatuses = useMemo(
     () => getAvailableNextStatuses(currentState.status),
     [currentState.status],
   );
 
   const hasUserSettings = useMemo(() => {
-    return Boolean(normalizeText(settings.userId));
-  }, [settings.userId]);
+    return Boolean(normalizeText(settings.parkingAlias || settings.userId));
+  }, [settings.parkingAlias, settings.userId]);
 
   const hasDestination = useMemo(() => {
     return displayDestination !== "Sin destino definido";
@@ -1040,9 +1021,12 @@ export default function ParkingScreen({ navigation }) {
 
       if (raw) {
         const parsed = JSON.parse(raw);
+        const parkingAlias = parsed?.parkingAlias || parsed?.userId || "";
+
         setSettings({
           ...DEFAULT_SETTINGS,
           ...parsed,
+          parkingAlias,
         });
       } else {
         setSettings(DEFAULT_SETTINGS);
@@ -1111,11 +1095,6 @@ export default function ParkingScreen({ navigation }) {
     };
   }, [stopLocationWatcher]);
 
-  useEffect(() => {
-    setMapFocusCoords(null);
-    setMapRefreshKey((prev) => prev + 1);
-  }, [settings.destinationId]);
-
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
       scrollRef.current?.scrollToEnd?.({ animated: true });
@@ -1154,7 +1133,7 @@ export default function ParkingScreen({ navigation }) {
     if (!canPublish) {
       safeAlert(
         "Configura Parking",
-        "Antes de publicar tu estado, introduce un User ID y un destino en Ajustes.",
+        "Antes de publicar tu estado, introduce un alias público y un destino en Ajustes.",
         [
           {
             text: "Cancelar",
@@ -1236,7 +1215,7 @@ export default function ParkingScreen({ navigation }) {
     const cleanedNote = normalizeText(note);
 
     const event = createLocalEvent({
-      userId: displayUserId,
+      parkingAlias: displayParkingAlias,
       status: nextStatus,
       destinationName: displayDestination,
       destinationAddress,
@@ -1259,7 +1238,6 @@ export default function ParkingScreen({ navigation }) {
 
     setNote("");
     setLocationExpanded(true);
-    setMapRefreshKey((prev) => prev + 1);
     scrollToBottom();
   };
 
@@ -1290,7 +1268,7 @@ export default function ParkingScreen({ navigation }) {
     await startLocationWatcher();
 
     const event = createLocalEvent({
-      userId: displayUserId,
+      parkingAlias: displayParkingAlias,
       status: PARKING_STATUS.LOOKING,
       destinationName: displayDestination,
       destinationAddress,
@@ -1301,7 +1279,6 @@ export default function ParkingScreen({ navigation }) {
     });
 
     await persistEvents([event, ...events].slice(0, 100));
-    setMapRefreshKey((prev) => prev + 1);
     scrollToBottom();
   };
 
@@ -1424,7 +1401,7 @@ export default function ParkingScreen({ navigation }) {
           <View style={styles.currentHeader}>
             <View>
               <Text style={styles.cardEyebrow}>Estado actual</Text>
-              <Text style={styles.currentUser}>{displayUserId}</Text>
+              <Text style={styles.currentUser}>{displayParkingAlias}</Text>
             </View>
 
             <StatusBadge status={currentState.status} />
@@ -1472,7 +1449,7 @@ export default function ParkingScreen({ navigation }) {
             <View style={styles.warningBox}>
               <Ionicons name="warning-outline" size={18} color="#b45309" />
               <Text style={styles.warningText}>
-                Falta configurar User ID o destino. Abre Ajustes antes de
+                Falta configurar alias público o destino. Abre Ajustes antes de
                 publicar.
               </Text>
             </View>
@@ -1548,7 +1525,6 @@ export default function ParkingScreen({ navigation }) {
           mapCenter={mapCenter}
           userCoords={userCoords}
           activeParkingSpots={activeParkingSpots}
-          mapRefreshKey={mapRefreshKey}
         />
 
         <View style={styles.card}>
@@ -1585,7 +1561,9 @@ export default function ParkingScreen({ navigation }) {
                 <EventCard
                   key={event.id}
                   event={event}
-                  isOwnUser={event.userId === displayUserId}
+                  isOwnUser={
+                    (event.parkingAlias || event.userId) === displayParkingAlias
+                  }
                 />
               ))}
             </View>
@@ -2139,149 +2117,47 @@ const styles = StyleSheet.create({
   locationSummaryTitleSpaced: {
     marginTop: 10,
   },
-  locationSummary: {
-    gap: 8,
-  },
-
-  coordsToggleHeader: {
-    minHeight: 46,
+  coordinateDropdown: {
+    marginTop: 8,
     borderWidth: 1,
     borderColor: "#dbeafe",
-    backgroundColor: "#eff6ff",
     borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  coordsToggleHeaderSpaced: {
-    marginTop: 4,
-  },
-
-  coordsToggleTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-  },
-
-  locationSummaryTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#111827",
-  },
-
-  coordsDetailsBox: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 14,
+    backgroundColor: "#ffffff",
     overflow: "hidden",
-    backgroundColor: "#f9fafb",
   },
 
-  coordsCollapsedText: {
-    paddingHorizontal: 12,
-    paddingBottom: 6,
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#64748b",
-  },
-  infoRow: {
-    minHeight: 38,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  infoLabel: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#64748b",
-  },
-
-  infoValue: {
-    flex: 1.4,
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#111827",
-    textAlign: "right",
-  },
-
-  locationContent: {
-    marginTop: 14,
-    gap: 12,
-  },
-
-  locationSummary: {
-    gap: 8,
-  },
-
-  coordsToggleHeader: {
+  coordinateDropdownHeader: {
     minHeight: 52,
-    borderWidth: 1,
-    borderColor: "#dbeafe",
-    backgroundColor: "#eff6ff",
-    borderRadius: 14,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 12,
+    backgroundColor: "#f8fafc",
   },
 
-  coordsToggleHeaderSpaced: {
-    marginTop: 4,
-  },
-
-  coordsToggleTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-  },
-
-  coordsToggleTextBlock: {
+  coordinateDropdownTitleBox: {
     flex: 1,
     minWidth: 0,
   },
 
-  locationSummaryTitle: {
+  coordinateDropdownTitle: {
+    color: "#0f172a",
     fontSize: 15,
-    fontWeight: "800",
-    color: "#111827",
+    fontWeight: "900",
   },
 
-  coordsDetailsBox: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: "#f9fafb",
-  },
-
-  coordsCollapsedText: {
+  coordinateDropdownSubtitle: {
     marginTop: 2,
-    fontSize: 13,
-    fontWeight: "700",
     color: "#64748b",
+    fontSize: 12,
+    fontWeight: "600",
   },
 
-  mapContainer: {
-    marginTop: 12,
-    height: 220,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#e5e7eb",
+  coordinateDropdownBody: {
+    padding: 12,
+    backgroundColor: "#ffffff",
   },
 });
 

@@ -5,7 +5,21 @@ import { authTables } from "@convex-dev/auth/server";
 export default defineSchema({
   ...authTables,
 
+  userProfiles: defineTable({
+    userId: v.string(),
+    alias: v.string(),
+    phone: v.optional(v.string()),
+    phoneVisible: v.optional(v.boolean()),
+    createdAt: v.float64(),
+    updatedAt: v.float64(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_alias", ["alias"])
+    .index("by_phone", ["phone"]),
+
   chatMessages: defineTable({
+    userId: v.optional(v.string()),
+
     room: v.string(),
     text: v.string(),
     username: v.string(),
@@ -56,6 +70,7 @@ export default defineSchema({
     blockedReason: v.optional(v.string()),
   })
     .index("by_room_createdAt", ["room", "createdAt"])
+    .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_expiresAt", ["expiresAt"]),
 
   parkingPresence: defineTable({
@@ -174,6 +189,7 @@ export default defineSchema({
     zone: v.optional(v.string()),
 
     userId: v.string(),
+    alias: v.optional(v.string()),
     text: v.string(),
     createdAt: v.float64(),
 
@@ -237,6 +253,9 @@ export default defineSchema({
     address: v.string(),
     city: v.string(),
 
+    // Campo heredado. No usarlo para favoritos de usuario.
+    favorite: v.optional(v.boolean()),
+
     provincia: v.optional(v.string()),
     zipcode: v.optional(v.union(v.string(), v.float64())),
 
@@ -252,32 +271,14 @@ export default defineSchema({
     .index("by_city", ["city"])
     .index("by_name", ["name"]),
 
-  items: defineTable({
-    id: v.string(),
-    name: v.string(),
-
-    category: v.optional(v.string()),
-    subcategory: v.optional(v.string()),
-    brand: v.optional(v.string()),
-    barcode: v.optional(v.string()),
-    unit: v.optional(v.string()),
-    image: v.optional(v.string()),
-
-    createdFrom: v.optional(v.string()),
-  })
-    .index("by_itemId", ["id"])
-    .index("by_barcode", ["barcode"])
-    .index("by_name", ["name"])
-    .index("by_category", ["category"]),
-
   userStoreFavorites: defineTable({
-    userId: v.id("users"),
+    userId: v.string(),
     storeId: v.string(),
     createdAt: v.float64(),
   })
-    .index("by_user", ["userId"])
-    .index("by_user_store", ["userId", "storeId"])
-    .index("by_store", ["storeId"]),
+    .index("by_userId", ["userId"])
+    .index("by_userId_storeId", ["userId", "storeId"])
+    .index("by_storeId", ["storeId"]),
 
   scanHistory: defineTable({
     barcode: v.string(),

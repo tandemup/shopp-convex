@@ -10,6 +10,7 @@ export const ROUTES = {
   SHOPPING_LISTS: "Shopping Lists",
   SHOPPING_LIST: "Shopping List",
   ITEM_DETAIL: "Item Detail",
+  CARREFOUR_TEST: "Carrefour Test",
 
   // Stores stack
   STORES_HOME: "Stores Home",
@@ -20,7 +21,7 @@ export const ROUTES = {
   STORE_MAP: "Store Map",
   STORES_NEARBY: "Stores Nearby",
   STORE_INFO: "Store Info",
-  CARREFOUR_TEST: "Carrefour test",
+
   // Archive
   ARCHIVED_LISTS: "Archived Lists",
   ARCHIVED_LIST_DETAIL: "Archived List Detail",
@@ -55,6 +56,7 @@ export const ROUTES = {
 
   // Menu / Settings
   MENU: "Menu",
+  PROFILE: "Profile",
   SETTINGS: "Settings Screen",
   BARCODE_SETTINGS: "Barcode Settings Screen",
   CONFIRM_DELETE: "Confirm Delete Screen",
