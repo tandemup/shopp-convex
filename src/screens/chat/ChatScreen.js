@@ -77,6 +77,50 @@ function now() {
   return Date.now();
 }
 
+function isEmailLike(value) {
+  const text = String(value || "").trim();
+
+  if (!text) return false;
+
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+}
+
+function getSafeChatAlias(value) {
+  const alias = String(value || "").trim();
+
+  if (!alias) return DEFAULT_USERNAME;
+
+  if (isEmailLike(alias)) {
+    return DEFAULT_USERNAME;
+  }
+
+  return alias;
+}
+
+function getVisibleUsername(value) {
+  return getSafeChatAlias(value);
+}
+
+function getNormalizedUrlsFromText(text) {
+  return extractUrlsFromText(text || "")
+    .map((url) => normalizeUrl(url))
+    .filter(Boolean);
+}
+
+function getUniqueValues(values) {
+  return Array.from(new Set(values));
+}
+
+function getMessageFingerprint(room, text) {
+  return `${room || DEFAULT_ROOM}::${String(text || "").trim()}`;
+}
+
+function messageHasUrl(message, normalizedUrl) {
+  const urls = getNormalizedUrlsFromText(message?.text || "");
+
+  return urls.includes(normalizedUrl);
+}
+
 function formatRelativeTime(timestamp) {
   if (!timestamp) return "";
 
@@ -360,26 +404,32 @@ function YouTubeThumbnail({ url, onOpenUrl }) {
   );
 }
 
-function MessageCard({ item, onOpenUrl, compact = false }) {
+function MessageCard({
+  item,
+  onOpenUrl,
+  compact = false,
+  forcedUsername = null,
+}) {
   const urls = useMemo(() => {
     return extractUrlsFromText(item?.text || "");
   }, [item?.text]);
 
   const createdAt = item.createdAt || item._creationTime;
 
+  const visibleUsername = getVisibleUsername(forcedUsername || item?.username);
+  const avatarLetter = visibleUsername.slice(0, 1).toUpperCase();
+
   return (
     <View style={[styles.messageCard, compact && styles.messageCardCompact]}>
       <View style={styles.messageHeader}>
         <View style={styles.messageUserBlock}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {(item.username || DEFAULT_USERNAME).slice(0, 1).toUpperCase()}
-            </Text>
+            <Text style={styles.avatarText}>{avatarLetter}</Text>
           </View>
 
           <View style={styles.messageUserTextBox}>
             <Text style={styles.messageUser} numberOfLines={1}>
-              {item.username || DEFAULT_USERNAME}
+              {visibleUsername}
             </Text>
 
             <Text style={styles.messageRoom} numberOfLines={1}>
@@ -452,8 +502,10 @@ export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [showSettings, setShowSettings] = useState(false);
   const [sending, setSending] = useState(false);
+  const [localAliasByMessage, setLocalAliasByMessage] = useState({});
 
   const activeRoom = room.trim() || DEFAULT_ROOM;
+  const visibleUsername = getSafeChatAlias(username);
 
   const convexMessages = useQuery(api.chat.listMessages, {
     room: activeRoom,
@@ -583,11 +635,52 @@ export default function ChatScreen() {
     }
 
     const cleanRoom = room.trim() || DEFAULT_ROOM;
-    const cleanUsername = username.trim() || DEFAULT_USERNAME;
+    const cleanUsername = getSafeChatAlias(username);
+
+    const urlsInPost = getNormalizedUrlsFromText(cleanText);
+    const uniqueUrlsInPost = getUniqueValues(urlsInPost);
+
+    if (urlsInPost.length !== uniqueUrlsInPost.length) {
+      safeAlert(
+        "URL duplicada",
+        "El mensaje contiene la misma URL más de una vez.",
+      );
+      return;
+    }
+
+    const duplicatedUrl = uniqueUrlsInPost.find((url) => {
+      return filteredMessages.some((message) => {
+        const messageRoom = message.room || DEFAULT_ROOM;
+        const createdAt = message.createdAt || message._creationTime;
+
+        if (messageRoom !== cleanRoom) return false;
+
+        if (createdAt && now() - createdAt >= SELF_DELETE_MS) {
+          return false;
+        }
+
+        return messageHasUrl(message, url);
+      });
+    });
+
+    if (duplicatedUrl) {
+      safeAlert(
+        "URL ya publicada",
+        "Ese enlace ya existe en este chat. No se publicará otra vez.",
+      );
+      return;
+    }
+
+    const messageFingerprint = getMessageFingerprint(cleanRoom, cleanText);
 
     setSending(true);
 
     try {
+      setLocalAliasByMessage((prev) => ({
+        ...prev,
+        [messageFingerprint]: cleanUsername,
+      }));
+
       await sendMessage({
         room: cleanRoom,
         username: cleanUsername,
@@ -602,6 +695,12 @@ export default function ChatScreen() {
     } catch (error) {
       console.error("Error guardando mensaje en Convex:", error);
 
+      setLocalAliasByMessage((prev) => {
+        const next = { ...prev };
+        delete next[messageFingerprint];
+        return next;
+      });
+
       safeAlert(
         "Error",
         error?.message || "No se pudo guardar el mensaje en la base de datos.",
@@ -609,21 +708,32 @@ export default function ChatScreen() {
     } finally {
       setSending(false);
     }
-  }, [input, room, username, sending, sendMessage]);
+  }, [input, room, username, sending, sendMessage, filteredMessages]);
 
   const renderItem = useCallback(
     ({ item }) => {
+      const messageFingerprint = getMessageFingerprint(
+        item?.room || DEFAULT_ROOM,
+        item?.text || "",
+      );
+
+      const currentVisibleUsername = getVisibleUsername(item?.username);
+      const localAlias = localAliasByMessage[messageFingerprint];
+
+      const forcedUsername =
+        currentVisibleUsername === DEFAULT_USERNAME ? localAlias : null;
+
       return (
         <MessageCard
           item={item}
           onOpenUrl={handleOpenUrl}
           compact={isSmallMobile}
+          forcedUsername={forcedUsername}
         />
       );
     },
-    [handleOpenUrl, isSmallMobile],
+    [handleOpenUrl, isSmallMobile, localAliasByMessage],
   );
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -647,8 +757,7 @@ export default function ChatScreen() {
                 </View>
 
                 <Text style={layoutStyles.subtitle} numberOfLines={2}>
-                  Room: {room || DEFAULT_ROOM} · Usuario:{" "}
-                  {username || DEFAULT_USERNAME}
+                  Room: {room || DEFAULT_ROOM} · Usuario: {visibleUsername}
                 </Text>
               </View>
 
