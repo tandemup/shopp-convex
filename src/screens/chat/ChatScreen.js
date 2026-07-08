@@ -1,12 +1,6 @@
 // screens/ChatScreen.js
 
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 
 import {
   FlatList,
@@ -119,6 +113,15 @@ function messageHasUrl(message, normalizedUrl) {
   const urls = getNormalizedUrlsFromText(message?.text || "");
 
   return urls.includes(normalizedUrl);
+}
+
+function requestNextFrame(callback) {
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(callback);
+    return;
+  }
+
+  setTimeout(callback, 0);
 }
 
 function formatRelativeTime(timestamp) {
@@ -491,6 +494,9 @@ function MessageCard({
 
 export default function ChatScreen() {
   const listRef = useRef(null);
+  const didInitialScrollRef = useRef(false);
+  const shouldScrollAfterPostRef = useRef(false);
+
   const { width } = useWindowDimensions();
 
   const isDesktop = width >= 900;
@@ -582,12 +588,26 @@ export default function ChatScreen() {
   const remainingChars = MAX_MESSAGE_LENGTH - input.length;
   const canPost = input.trim().length > 0 && remainingChars >= 0 && !sending;
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      listRef.current?.scrollToEnd?.({ animated: true });
-    }, 100);
+  const handleListContentSizeChange = useCallback(() => {
+    if (!filteredMessages.length) return;
 
-    return () => clearTimeout(timeout);
+    if (!didInitialScrollRef.current) {
+      didInitialScrollRef.current = true;
+
+      requestNextFrame(() => {
+        listRef.current?.scrollToEnd?.({ animated: false });
+      });
+
+      return;
+    }
+
+    if (shouldScrollAfterPostRef.current) {
+      shouldScrollAfterPostRef.current = false;
+
+      requestNextFrame(() => {
+        listRef.current?.scrollToEnd?.({ animated: true });
+      });
+    }
   }, [filteredMessages.length]);
 
   const handleOpenUrl = useCallback(async (url, status) => {
@@ -640,6 +660,14 @@ export default function ChatScreen() {
     const urlsInPost = getNormalizedUrlsFromText(cleanText);
     const uniqueUrlsInPost = getUniqueValues(urlsInPost);
 
+    if (urlsInPost.length > 1) {
+      safeAlert(
+        "Demasiados enlaces",
+        "Solo se permite publicar un enlace por mensaje.",
+      );
+      return;
+    }
+
     if (urlsInPost.length !== uniqueUrlsInPost.length) {
       safeAlert(
         "URL duplicada",
@@ -681,6 +709,8 @@ export default function ChatScreen() {
         [messageFingerprint]: cleanUsername,
       }));
 
+      shouldScrollAfterPostRef.current = true;
+
       await sendMessage({
         room: cleanRoom,
         username: cleanUsername,
@@ -688,12 +718,10 @@ export default function ChatScreen() {
       });
 
       setInput("");
-
-      setTimeout(() => {
-        listRef.current?.scrollToEnd?.({ animated: true });
-      }, 100);
     } catch (error) {
       console.error("Error guardando mensaje en Convex:", error);
+
+      shouldScrollAfterPostRef.current = false;
 
       setLocalAliasByMessage((prev) => {
         const next = { ...prev };
@@ -734,6 +762,7 @@ export default function ChatScreen() {
     },
     [handleOpenUrl, isSmallMobile, localAliasByMessage],
   );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -816,6 +845,7 @@ export default function ChatScreen() {
                   ]}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={isDesktop}
+                  onContentSizeChange={handleListContentSizeChange}
                   ListEmptyComponent={
                     <View style={styles.emptyBlock}>
                       <View style={styles.emptyIconBox}>
