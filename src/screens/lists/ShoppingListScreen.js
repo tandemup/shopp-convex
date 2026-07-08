@@ -77,31 +77,26 @@ const InfoRow = ({ date, store, onSelectStore, onPressStoreInfo }) => (
   </View>
 );
 
-const ProductsAndTotalRow = ({ count, checkedCount, total }) => (
+const ProductsAndTotalRow = ({ checkedCount, total, onCheckout }) => (
   <View style={styles.bottomRow}>
     <View style={styles.iconRow}>
       <Ionicons name="cart-outline" size={17} color="#6B7280" />
       <Text style={styles.productsText}>{checkedCount} items</Text>
     </View>
 
-    <Text style={styles.totalPrice}>{formatCurrency(total)}</Text>
+    <Pressable
+      onPress={onCheckout}
+      style={({ pressed }) => [
+        styles.checkoutInlineButton,
+        pressed && styles.checkoutInlineButtonPressed,
+      ]}
+    >
+      <Ionicons name="cart-outline" size={17} color="#FFFFFF" />
+      <Text style={styles.checkoutInlineText} numberOfLines={1}>
+        Finalizar · {formatCurrency(total)}
+      </Text>
+    </Pressable>
   </View>
-);
-
-const CheckoutMiniButton = ({ total, onCheckout }) => (
-  <Pressable
-    onPress={onCheckout}
-    style={({ pressed }) => [
-      styles.checkoutMiniButton,
-      pressed && styles.checkoutMiniButtonPressed,
-    ]}
-  >
-    <Ionicons name="cart-outline" size={18} color="#FFFFFF" />
-
-    <Text style={styles.checkoutMiniText} numberOfLines={1}>
-      Finalizar · {formatCurrency(total)}
-    </Text>
-  </Pressable>
 );
 
 const ShoppingListItemRow = ({ item, isLast, onToggle, onEdit }) => {
@@ -113,6 +108,7 @@ const ShoppingListItemRow = ({ item, isLast, onToggle, onEdit }) => {
   const normalizedPromo = String(promo || "")
     .trim()
     .toLowerCase();
+
   const normalizedPromoLabel = String(promoLabel || "")
     .trim()
     .toLowerCase();
@@ -154,12 +150,14 @@ const ShoppingListItemRow = ({ item, isLast, onToggle, onEdit }) => {
             </View>
           ) : null}
         </View>
+
         {summary ? <Text style={styles.summaryText}>{summary}</Text> : null}
 
         <Categories
           category={item.categoryName}
           subcategory={item.subcategoryName}
         />
+
         {typeof item.barcode === "string" && item.barcode.length > 0 ? (
           <Text style={styles.barcode}>🔎 {item.barcode}</Text>
         ) : null}
@@ -190,6 +188,7 @@ const ShoppingListItemRow = ({ item, isLast, onToggle, onEdit }) => {
     </Pressable>
   );
 };
+
 const EmptyProducts = () => (
   <View style={styles.emptyProductsBox}>
     <View style={styles.emptyIconBoxSmall}>
@@ -220,31 +219,28 @@ const ShoppingListCard = ({
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
-        <View style={styles.cardHeaderLeft}>
-          <View style={styles.iconBox}>
-            <Ionicons name="cart-outline" size={26} color="#111827" />
-          </View>
-
-          <View style={styles.cardText}>
-            <HeaderRow title={list.name} />
-
-            <InfoRow
-              date={list.createdAt || list.dateISO || list.updatedAt}
-              store={store}
-              onSelectStore={onSelectStore}
-              onPressStoreInfo={onPressStoreInfo}
-            />
-          </View>
+        <View style={styles.iconBox}>
+          <Ionicons name="cart-outline" size={24} color="#111827" />
         </View>
 
-        <CheckoutMiniButton total={total} onCheckout={onCheckout} />
+        <View style={styles.cardText}>
+          <HeaderRow title={list.name} />
+
+          <InfoRow
+            date={list.createdAt || list.dateISO || list.updatedAt}
+            store={store}
+            onSelectStore={onSelectStore}
+            onPressStoreInfo={onPressStoreInfo}
+          />
+        </View>
       </View>
+
       <View style={styles.separator} />
 
       <ProductsAndTotalRow
-        count={items.length}
         checkedCount={checkedCount}
         total={total}
+        onCheckout={onCheckout}
       />
 
       <View style={styles.itemsContainer}>
@@ -398,6 +394,7 @@ export default function ShoppingListScreen() {
       params: { storeId },
     });
   };
+
   const handleEditItem = (itemId) => {
     navigation.navigate(ROUTES.ITEM_DETAIL, {
       listId,
@@ -509,9 +506,9 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 80,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 70,
   },
 
   center: {
@@ -527,28 +524,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  storeInfoButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    backgroundColor: "#F3F4F6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  storeSelectorWrapper: {
-    marginBottom: 12,
-  },
-
   searchWrapper: {
     marginBottom: 12,
-  },
-
-  categoriesText: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#64748B",
   },
 
   card: {
@@ -572,13 +549,13 @@ const styles = StyleSheet.create({
   },
 
   iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 46,
+    height: 46,
+    borderRadius: 15,
     backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 14,
+    marginRight: 12,
   },
 
   cardText: {
@@ -589,7 +566,6 @@ const styles = StyleSheet.create({
   topRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
   },
 
   listTitle: {
@@ -606,6 +582,15 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
+  storeInfoButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
   separator: {
     height: 1,
     backgroundColor: "#E5E7EB",
@@ -616,6 +601,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
   },
 
   iconRow: {
@@ -623,6 +609,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     flexShrink: 1,
+    minWidth: 0,
   },
 
   productsText: {
@@ -631,10 +618,29 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  totalPrice: {
-    fontSize: 20,
+  checkoutInlineButton: {
+    minWidth: 150,
+    maxWidth: 190,
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: "#22C55E",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+
+  checkoutInlineButtonPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.98 }],
+  },
+
+  checkoutInlineText: {
+    fontSize: 14,
     fontWeight: "800",
-    color: "#16A34A",
+    color: "#FFFFFF",
   },
 
   itemsContainer: {
@@ -692,44 +698,11 @@ const styles = StyleSheet.create({
     textDecorationLine: "line-through",
   },
 
-  badgesRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 6,
-  },
-
-  categoryBadge: {
-    backgroundColor: "#EAF2FF",
-    borderWidth: 1,
-    borderColor: "#BFDBFE",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    maxWidth: 130,
-  },
-
-  categoryBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#2563EB",
-  },
-
-  subcategoryBadge: {
-    backgroundColor: "#ECFDF3",
-    borderWidth: 1,
-    borderColor: "#BBF7D0",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 999,
-    maxWidth: 130,
-  },
-
-  subcategoryBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#15803D",
+  categoriesText: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
   },
 
   barcode: {
@@ -821,42 +794,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: "#6B7280",
     textAlign: "center",
-  },
-  cardHeaderRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  cardHeaderLeft: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  checkoutMiniButton: {
-    minWidth: 150,
-    maxWidth: 190,
-    height: 42,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-    backgroundColor: "#22C55E",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-
-  checkoutMiniButtonPressed: {
-    opacity: 0.78,
-    transform: [{ scale: 0.98 }],
-  },
-
-  checkoutMiniText: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#FFFFFF",
   },
 });
