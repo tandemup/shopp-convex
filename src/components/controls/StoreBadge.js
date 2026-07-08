@@ -36,7 +36,14 @@ export default function StoreBadge({
     variant === "auto" ? (onPressStore ? "pill" : "link") : variant;
 
   if (resolvedVariant === "pill") {
-    return <StorePill store={store} onPressStore={onPressStore} />;
+    return (
+      <StorePill
+        store={store}
+        onPressStore={onPressStore}
+        style={style}
+        textStyle={textStyle}
+      />
+    );
   }
 
   return (

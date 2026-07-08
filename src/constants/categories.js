@@ -185,8 +185,8 @@ export const PRODUCT_CATEGORIES = [
       "Cereales",
       "Cafe",
       "Sopas",
-      "Cremas",
-      "Otros",
+      "Cremas_untables",
+      "Mermeladas",
     ],
   },
   {

@@ -260,7 +260,7 @@ function CategoryBadgeSelector({
 
   return (
     <View>
-      <Text style={styles.badgeGroupTitle}>Categoría</Text>
+      <Text style={styles.badgeGroupTitle}>Categoria</Text>
 
       <View style={styles.badgeGrid}>
         {categories.map((category) => {
@@ -358,9 +358,9 @@ function Categorias({
 
   const selectedClassification = selectedCategory
     ? selectedSubcategoryName
-      ? `${selectedCategory.name} · ${selectedSubcategoryName}`
-      : selectedCategory.name
-    : "Sin categoría";
+      ? `🏷️ ${selectedCategory.name} · ${selectedSubcategoryName}`
+      : `🏷️ ${selectedCategory.name}`
+    : "🏷️ Sin categoría";
 
   return (
     <View style={styles.card}>
@@ -376,7 +376,7 @@ function Categorias({
           onExpandedChange(!expanded);
         }}
       >
-        <Text style={styles.dropdownLabel}>Categoría</Text>
+        <Text style={styles.dropdownLabel}>Categoria</Text>
 
         <View style={styles.dropdownRight}>
           <Text

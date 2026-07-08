@@ -1,41 +1,57 @@
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-export default function StorePill({ store, onPressStore }) {
+export default function StorePill({
+  store,
+  onPressStore,
+  placeholder = "Especificar tienda",
+  disabled = false,
+  style,
+  textStyle,
+}) {
+  const hasStore = !!store?.id;
+  const isPressable = !!onPressStore && !disabled;
+
   const handlePressStore = () => {
-    if (!store?.id) return;
-    onPressStore?.(store.id);
+    if (!isPressable) return;
+
+    /*
+     * Enviamos la tienda completa si existe.
+     * Si no existe, enviamos null.
+     *
+     * Esto permite usar el mismo componente para:
+     * - cambiar tienda existente
+     * - especificar tienda cuando todavía no hay ninguna
+     */
+    onPressStore(hasStore ? store : null);
   };
-
-  if (!store) {
-    return (
-      <View style={[styles.metaPill, styles.storePill, styles.storePillMuted]}>
-        <Ionicons name="location-outline" size={14} color="#9CA3AF" />
-
-        <Text style={styles.storeMutedText} numberOfLines={1}>
-          Sin tienda
-        </Text>
-      </View>
-    );
-  }
 
   return (
     <Pressable
       onPress={handlePressStore}
-      disabled={!onPressStore}
+      disabled={!isPressable}
       style={({ pressed }) => [
         styles.metaPill,
         styles.storePill,
-        pressed && styles.storePillPressed,
-        !onPressStore && styles.storePillDisabled,
+        !hasStore && styles.storePillMuted,
+        pressed && isPressable && styles.storePillPressed,
+        !isPressable && styles.storePillDisabled,
+        style,
       ]}
       hitSlop={6}
     >
-      <Ionicons name="location-outline" size={14} color="#2563EB" />
+      <Ionicons
+        name={hasStore ? "location-outline" : "add-circle-outline"}
+        size={14}
+        color={hasStore ? "#2563EB" : "#64748B"}
+      />
 
-      <Text style={styles.storeText} numberOfLines={1}>
-        {store.name || "Tienda"}
+      <Text
+        style={[hasStore ? styles.storeText : styles.storeMutedText, textStyle]}
+        numberOfLines={1}
+      >
+        {hasStore ? store.name || "Tienda" : placeholder}
       </Text>
     </Pressable>
   );
@@ -54,8 +70,7 @@ const styles = StyleSheet.create({
 
   storePill: {
     alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
+    maxWidth: "100%",
     backgroundColor: "#EFF6FF",
     borderWidth: 1,
     borderColor: "#BFDBFE",
@@ -72,19 +87,19 @@ const styles = StyleSheet.create({
   },
 
   storePillMuted: {
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "#F8FAFC",
     borderColor: "#E5E7EB",
   },
 
   storeText: {
     color: "#2563EB",
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 
   storeMutedText: {
-    color: "#9CA3AF",
+    color: "#64748B",
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });
