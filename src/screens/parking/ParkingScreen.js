@@ -17,10 +17,11 @@ import {
   View,
 } from "react-native";
 
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
-
 import moment from "moment";
 import "moment/locale/es";
 
@@ -80,7 +81,7 @@ const LOCATION_WATCH_OPTIONS = {
 };
 
 const LOCATION_SINGLE_OPTIONS = {
-  accuracy: Location.Accuracy.Balanced,
+  accuracy: Location.Accuracy.High,
 };
 
 const WEB_LOCATION_POLL_INTERVAL_MS = 60000;
@@ -95,6 +96,10 @@ const STOPPED_STATUSES = new Set([
   PARKING_STATUS.CANCELLED,
   PARKING_STATUS.INACTIVE,
 ]);
+
+const DEFAULT_PARKING_CITY = "gijon";
+const DEFAULT_PARKING_ZONE = "general";
+const VALID_SPOTS_RADIUS_METERS = 1000;
 
 const DEFAULT_REGION = {
   latitude: 43.5322,
@@ -114,7 +119,7 @@ const DEFAULT_SETTINGS = {
 };
 
 const DEFAULT_CURRENT_STATE = {
-  status: PARKING_STATUS.LOOKING,
+  status: PARKING_STATUS.INACTIVE,
   latitude: null,
   longitude: null,
   accuracy: null,
@@ -267,6 +272,94 @@ function normalizeExpoLocation(location) {
   };
 }
 
+function normalizeBrowserLocation(position) {
+  if (!position?.coords) return null;
+
+  const latitude = Number(position.coords.latitude);
+  const longitude = Number(position.coords.longitude);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return {
+    latitude,
+    longitude,
+    accuracy:
+      typeof position.coords.accuracy === "number"
+        ? position.coords.accuracy
+        : null,
+    updatedAt: Date.now(),
+  };
+}
+
+function getBrowserCurrentPosition() {
+  return new Promise((resolve, reject) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      reject(
+        new Error("La geolocalización no está disponible en este navegador."),
+      );
+      return;
+    }
+
+    if (
+      typeof window !== "undefined" &&
+      window.isSecureContext === false &&
+      window.location?.hostname !== "localhost"
+    ) {
+      reject(
+        new Error(
+          "La geolocalización requiere HTTPS. Abre la app desde la URL segura de Netlify.",
+        ),
+      );
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const normalizedLocation = normalizeBrowserLocation(position);
+
+        if (!normalizedLocation) {
+          reject(
+            new Error("No se pudieron leer coordenadas válidas del navegador."),
+          );
+          return;
+        }
+
+        resolve(normalizedLocation);
+      },
+      (error) => {
+        let message = "No se pudo obtener la ubicación actual.";
+
+        if (error.code === error.PERMISSION_DENIED) {
+          message =
+            "Permiso de ubicación denegado. Activa la ubicación para esta web en el navegador.";
+        }
+
+        if (error.code === error.POSITION_UNAVAILABLE) {
+          message =
+            "La ubicación no está disponible. Comprueba GPS, WiFi o permisos del sistema.";
+        }
+
+        if (error.code === error.TIMEOUT) {
+          message =
+            "La lectura de ubicación ha tardado demasiado. Inténtalo de nuevo.";
+        }
+
+        const normalizedError = new Error(message);
+        normalizedError.code = error.code;
+
+        reject(normalizedError);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      },
+    );
+  });
+}
+
 function getDistanceMeters(fromLocation, toLocation) {
   if (
     typeof fromLocation?.latitude !== "number" ||
@@ -341,6 +434,39 @@ function CoordinateDropdown({ title, subtitle, open, onToggle, children }) {
   );
 }
 
+function CoordinateMapToggle({ label, value, onToggle, disabled }) {
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{
+        checked: value,
+        disabled: Boolean(disabled),
+      }}
+      disabled={disabled}
+      onPress={onToggle}
+      style={[
+        styles.coordinateMapToggle,
+        disabled && styles.coordinateMapToggleDisabled,
+      ]}
+    >
+      <Ionicons
+        name={value ? "checkbox-outline" : "square-outline"}
+        size={22}
+        color={disabled ? "#94a3b8" : "#2563eb"}
+      />
+
+      <Text
+        style={[
+          styles.coordinateMapToggleText,
+          disabled && styles.coordinateMapToggleTextDisabled,
+        ]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 function LocationSummary({
   userLatitude,
   userLongitude,
@@ -353,6 +479,10 @@ function LocationSummary({
   onToggleUserCoordinates,
   destinationCoordinatesExpanded,
   onToggleDestinationCoordinates,
+  showUserOnMap,
+  onToggleShowUserOnMap,
+  showDestinationOnMap,
+  onToggleShowDestinationOnMap,
 }) {
   const hasUserLocation =
     typeof userLatitude === "number" && typeof userLongitude === "number";
@@ -392,6 +522,13 @@ function LocationSummary({
                 : "Sin dato"}
             </Text>
           </View>
+
+          <CoordinateMapToggle
+            label="Mostrar usuario en el mapa"
+            value={showUserOnMap}
+            onToggle={onToggleShowUserOnMap}
+            disabled={!hasUserLocation}
+          />
         </View>
       </CoordinateDropdown>
 
@@ -433,6 +570,13 @@ function LocationSummary({
                 : "Sin dato"}
             </Text>
           </View>
+
+          <CoordinateMapToggle
+            label="Mostrar destino en el mapa"
+            value={showDestinationOnMap}
+            onToggle={onToggleShowDestinationOnMap}
+            disabled={!hasDestinationLocation}
+          />
         </View>
       </CoordinateDropdown>
     </View>
@@ -454,24 +598,65 @@ function LocationSection({
   mapCenter,
   userCoords,
   activeParkingSpots,
+  onMarkValidSpot,
+  markingValidSpot,
+  validParkingSpotsCount,
 }) {
   const [userCoordinatesExpanded, setUserCoordinatesExpanded] = useState(false);
   const [destinationCoordinatesExpanded, setDestinationCoordinatesExpanded] =
     useState(false);
 
+  const [showUserOnMap, setShowUserOnMap] = useState(true);
+  const [showDestinationOnMap, setShowDestinationOnMap] = useState(true);
+
+  const hasUserCoords =
+    typeof userCoords?.lat === "number" && typeof userCoords?.lng === "number";
+
+  const hasDestinationCoords =
+    typeof destinationCoords?.lat === "number" &&
+    typeof destinationCoords?.lng === "number";
+
+  const visibleUserCoords = showUserOnMap && hasUserCoords ? userCoords : null;
+
+  const visibleDestinationCoords =
+    showDestinationOnMap && hasDestinationCoords ? destinationCoords : null;
+
+  const visibleMapCenter = useMemo(() => {
+    if (visibleUserCoords && !visibleDestinationCoords) {
+      return visibleUserCoords;
+    }
+
+    if (visibleDestinationCoords && !visibleUserCoords) {
+      return visibleDestinationCoords;
+    }
+
+    if (visibleUserCoords && visibleDestinationCoords) {
+      return mapCenter;
+    }
+
+    return {
+      lat: DEFAULT_REGION.latitude,
+      lng: DEFAULT_REGION.longitude,
+    };
+  }, [visibleUserCoords, visibleDestinationCoords, mapCenter]);
+
   const safeMapLat =
-    typeof mapCenter?.lat === "number"
-      ? mapCenter.lat
+    typeof visibleMapCenter?.lat === "number"
+      ? visibleMapCenter.lat
       : DEFAULT_REGION.latitude;
 
   const safeMapLng =
-    typeof mapCenter?.lng === "number"
-      ? mapCenter.lng
+    typeof visibleMapCenter?.lng === "number"
+      ? visibleMapCenter.lng
       : DEFAULT_REGION.longitude;
 
   return (
     <View style={styles.card}>
-      <Pressable style={styles.collapsibleHeader} onPress={onToggle}>
+      <Pressable
+        style={styles.collapsibleHeader}
+        onPress={onToggle}
+        accessibilityRole="button"
+      >
         <View style={styles.sectionHeaderLeft}>
           <Ionicons name="map-outline" size={22} color="#2563eb" />
 
@@ -508,9 +693,16 @@ function LocationSection({
             onToggleDestinationCoordinates={() =>
               setDestinationCoordinatesExpanded((value) => !value)
             }
+            showUserOnMap={showUserOnMap}
+            onToggleShowUserOnMap={() => setShowUserOnMap((value) => !value)}
+            showDestinationOnMap={showDestinationOnMap}
+            onToggleShowDestinationOnMap={() =>
+              setShowDestinationOnMap((value) => !value)
+            }
           />
 
           <Pressable
+            accessibilityRole="button"
             style={[
               styles.secondaryActionButton,
               loadingLocation && styles.actionButtonDisabled,
@@ -526,14 +718,47 @@ function LocationSection({
                 : "Actualizar ubicación"}
             </Text>
           </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={[
+              styles.validSpotButton,
+              markingValidSpot && styles.actionButtonDisabled,
+            ]}
+            onPress={onMarkValidSpot}
+            disabled={markingValidSpot}
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#15803d" />
+
+            <Text style={styles.validSpotButtonText}>
+              {markingValidSpot
+                ? "Guardando plaza..."
+                : "Marcar posición válida para aparcar"}
+            </Text>
+          </Pressable>
+
+          <Text style={styles.validSpotCounterText}>
+            {validParkingSpotsCount > 0
+              ? `${validParkingSpotsCount} plaza(s) válidas visibles en el mapa.`
+              : "No hay plazas válidas visibles todavía."}
+          </Text>
+          <View style={styles.mapVisibilityHint}>
+            <Ionicons
+              name="information-circle-outline"
+              size={16}
+              color="#64748b"
+            />
+            <Text style={styles.mapVisibilityHintText}>
+              Activa una o ambas casillas para centrar el mapa en usuario,
+              destino o ajustar ambos puntos.
+            </Text>
+          </View>
 
           <View style={styles.mapContainer}>
             <StoreMapPreview
-              key={`parking-map-${selectedDestination || "no-destination"}-${safeMapLat}-${safeMapLng}-${userCoords?.lat ?? "no-user-lat"}-${userCoords?.lng ?? "no-user-lng"}`}
-              lat={safeMapLat}
-              lng={safeMapLng}
-              userLat={userCoords?.lat}
-              userLng={userCoords?.lng}
+              lat={visibleDestinationCoords?.lat}
+              lng={visibleDestinationCoords?.lng}
+              userLat={visibleUserCoords?.lat}
+              userLng={visibleUserCoords?.lng}
               parkingSpots={activeParkingSpots}
             />
           </View>
@@ -615,7 +840,26 @@ export default function ParkingScreen({ navigation }) {
   const [locationExpanded, setLocationExpanded] = useState(false);
   const [locationPermissionStatus, setLocationPermissionStatus] =
     useState(null);
+  const [markingValidSpot, setMarkingValidSpot] = useState(false);
 
+  const createValidParkingSpotMutation = useMutation(
+    api.parking.createValidParkingSpot,
+  );
+
+  const validParkingSpots = useQuery(api.parking.listValidParkingSpots, {
+    city: DEFAULT_PARKING_CITY,
+    zone: DEFAULT_PARKING_ZONE,
+    lat:
+      typeof currentState.latitude === "number"
+        ? currentState.latitude
+        : undefined,
+    lng:
+      typeof currentState.longitude === "number"
+        ? currentState.longitude
+        : undefined,
+    radiusMeters: VALID_SPOTS_RADIUS_METERS,
+    limit: 100,
+  });
   useEffect(() => {
     currentStateRef.current = currentState;
 
@@ -668,10 +912,6 @@ export default function ParkingScreen({ navigation }) {
   }, [settings.destinationLatitude, settings.destinationLongitude]);
 
   const mapCenter = useMemo(() => {
-    if (destinationCoords) {
-      return destinationCoords;
-    }
-
     if (
       typeof currentState.latitude === "number" &&
       typeof currentState.longitude === "number"
@@ -682,11 +922,15 @@ export default function ParkingScreen({ navigation }) {
       };
     }
 
+    if (destinationCoords) {
+      return destinationCoords;
+    }
+
     return {
       lat: DEFAULT_REGION.latitude,
       lng: DEFAULT_REGION.longitude,
     };
-  }, [destinationCoords, currentState.latitude, currentState.longitude]);
+  }, [currentState.latitude, currentState.longitude, destinationCoords]);
 
   const userCoords = useMemo(() => {
     if (
@@ -703,23 +947,23 @@ export default function ParkingScreen({ navigation }) {
   }, [currentState.latitude, currentState.longitude]);
 
   const activeParkingSpots = useMemo(() => {
-    return events
-      .filter((event) => {
-        return (
-          event.status === PARKING_STATUS.LEAVING &&
-          typeof event.latitude === "number" &&
-          typeof event.longitude === "number"
-        );
+    if (!Array.isArray(validParkingSpots)) {
+      return [];
+    }
+
+    return validParkingSpots
+      .filter((spot) => {
+        return typeof spot.lat === "number" && typeof spot.lng === "number";
       })
-      .map((event) => ({
-        id: event.id,
-        lat: event.latitude,
-        lng: event.longitude,
-        revealedBy: event.parkingAlias || event.userId,
-        status: event.status,
-        createdAt: event.createdAt,
+      .map((spot) => ({
+        id: spot.id || String(spot._id),
+        lat: spot.lat,
+        lng: spot.lng,
+        revealedBy: spot.revealedBy || "anonymous",
+        status: spot.status || "free",
+        createdAt: spot.revealedAt || spot.updatedAt,
       }));
-  }, [events]);
+  }, [validParkingSpots]);
   const availableNextStatuses = useMemo(
     () => getAvailableNextStatuses(currentState.status),
     [currentState.status],
@@ -829,6 +1073,10 @@ export default function ParkingScreen({ navigation }) {
   );
 
   const readCurrentLocation = useCallback(async () => {
+    if (Platform.OS === "web") {
+      return getBrowserCurrentPosition();
+    }
+
     const position = await Location.getCurrentPositionAsync(
       LOCATION_SINGLE_OPTIONS,
     );
@@ -841,17 +1089,24 @@ export default function ParkingScreen({ navigation }) {
       try {
         setLoadingLocation(true);
 
-        const hasPermission = await requestLocationPermission();
+        let normalizedLocation = null;
 
-        if (!hasPermission) {
-          return null;
+        if (Platform.OS === "web") {
+          normalizedLocation = await getBrowserCurrentPosition();
+          setLocationPermissionStatus("granted");
+        } else {
+          const hasPermission = await requestLocationPermission();
+
+          if (!hasPermission) {
+            return null;
+          }
+
+          const position = await Location.getCurrentPositionAsync(
+            LOCATION_SINGLE_OPTIONS,
+          );
+
+          normalizedLocation = normalizeExpoLocation(position);
         }
-
-        const position = await Location.getCurrentPositionAsync(
-          LOCATION_SINGLE_OPTIONS,
-        );
-
-        const normalizedLocation = normalizeExpoLocation(position);
 
         if (!normalizedLocation) {
           return null;
@@ -873,9 +1128,13 @@ export default function ParkingScreen({ navigation }) {
       } catch (error) {
         console.warn("[ParkingScreen] Error getting location:", error);
 
+        if (Platform.OS === "web" && error?.code === 1) {
+          setLocationPermissionStatus("denied");
+        }
+
         safeAlert(
           "Ubicación no disponible",
-          "No se ha podido obtener la ubicación actual.",
+          error?.message || "No se ha podido obtener la ubicación actual.",
         );
 
         return null;
@@ -891,23 +1150,22 @@ export default function ParkingScreen({ navigation }) {
       return;
     }
 
-    const hasPermission = await requestLocationPermission();
-
-    if (!hasPermission) {
-      return;
-    }
-
     if (Platform.OS === "web") {
       try {
         const initialLocation = await readCurrentLocation();
 
         if (initialLocation) {
+          setLocationPermissionStatus("granted");
           await applyLocationToCurrentState(initialLocation);
         }
       } catch (error) {
+        if (error?.code === 1) {
+          setLocationPermissionStatus("denied");
+        }
+
         console.warn(
           "[ParkingScreen] Error getting initial web location:",
-          error,
+          error?.message || error,
         );
       }
 
@@ -925,6 +1183,8 @@ export default function ParkingScreen({ navigation }) {
           if (!nextLocation) {
             return;
           }
+
+          setLocationPermissionStatus("granted");
 
           const previousLocation =
             latestUserLocationRef.current ||
@@ -950,6 +1210,11 @@ export default function ParkingScreen({ navigation }) {
             await applyLocationToCurrentState(nextLocation);
           }
         } catch (error) {
+          if (error?.code === 1) {
+            setLocationPermissionStatus("denied");
+            stopLocationWatcher();
+          }
+
           console.warn(
             "[ParkingScreen] Error polling web location:",
             error?.message || error,
@@ -961,6 +1226,12 @@ export default function ParkingScreen({ navigation }) {
         remove: () => clearInterval(intervalId),
       };
 
+      return;
+    }
+
+    const hasPermission = await requestLocationPermission();
+
+    if (!hasPermission) {
       return;
     }
 
@@ -1129,6 +1400,91 @@ export default function ParkingScreen({ navigation }) {
     }
   };
 
+  const markCurrentPositionAsValidSpot = async () => {
+    if (markingValidSpot) return;
+
+    setMarkingValidSpot(true);
+
+    try {
+      let location =
+        latestUserLocationRef.current ||
+        (typeof currentState.latitude === "number" &&
+        typeof currentState.longitude === "number"
+          ? {
+              latitude: currentState.latitude,
+              longitude: currentState.longitude,
+              accuracy: currentState.accuracy,
+              updatedAt: currentState.updatedAt,
+            }
+          : null);
+
+      if (!location) {
+        location = await getCurrentLocation({
+          persist: true,
+          saveAsParkedSpot: false,
+        });
+      }
+
+      if (
+        typeof location?.latitude !== "number" ||
+        typeof location?.longitude !== "number"
+      ) {
+        safeAlert(
+          "Ubicación necesaria",
+          "Primero actualiza la ubicación para poder marcar una plaza válida.",
+        );
+        return;
+      }
+
+      const result = await createValidParkingSpotMutation({
+        city: DEFAULT_PARKING_CITY,
+        zone: DEFAULT_PARKING_ZONE,
+
+        alias: displayParkingAlias,
+
+        lat: location.latitude,
+        lng: location.longitude,
+        accuracy:
+          typeof location.accuracy === "number" ? location.accuracy : undefined,
+        locationSource: Platform.OS === "web" ? "web" : "gps",
+
+        destinationName: displayDestination,
+        destinationAddress,
+      });
+
+      const localEvent = createLocalEvent({
+        parkingAlias: displayParkingAlias,
+        status: PARKING_STATUS.LEAVING,
+        destinationName: displayDestination,
+        destinationAddress,
+        note: result?.updated
+          ? "He actualizado una posición válida para aparcar."
+          : "He marcado una nueva posición válida para aparcar.",
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.accuracy,
+      });
+
+      await persistEvents([localEvent, ...events].slice(0, 100));
+
+      setLocationExpanded(true);
+
+      safeAlert(
+        "Plaza guardada",
+        "La posición se ha guardado como plaza válida para aparcar.",
+      );
+    } catch (error) {
+      console.warn("[ParkingScreen] Error marking valid spot:", error);
+
+      safeAlert(
+        "No se pudo guardar",
+        error?.message || "No se ha podido guardar la posición válida.",
+      );
+    } finally {
+      setMarkingValidSpot(false);
+    }
+  };
+
   const publishStatus = async (nextStatus) => {
     if (!canPublish) {
       safeAlert(
@@ -1161,8 +1517,6 @@ export default function ParkingScreen({ navigation }) {
     };
 
     if (nextStatus === PARKING_STATUS.LOOKING) {
-      await startLocationWatcher();
-
       const freshLocation =
         latestUserLocationRef.current ||
         (await getCurrentLocation({ persist: true }));
@@ -1525,6 +1879,9 @@ export default function ParkingScreen({ navigation }) {
           mapCenter={mapCenter}
           userCoords={userCoords}
           activeParkingSpots={activeParkingSpots}
+          onMarkValidSpot={markCurrentPositionAsValidSpot}
+          markingValidSpot={markingValidSpot}
+          validParkingSpotsCount={activeParkingSpots.length}
         />
 
         <View style={styles.card}>
@@ -2117,6 +2474,7 @@ const styles = StyleSheet.create({
   locationSummaryTitleSpaced: {
     marginTop: 10,
   },
+
   coordinateDropdown: {
     marginTop: 8,
     borderWidth: 1,
@@ -2158,6 +2516,78 @@ const styles = StyleSheet.create({
   coordinateDropdownBody: {
     padding: 12,
     backgroundColor: "#ffffff",
+  },
+  coordinateMapToggle: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#ffffff",
+  },
+
+  coordinateMapToggleDisabled: {
+    opacity: 0.55,
+  },
+
+  coordinateMapToggleText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#2563eb",
+  },
+
+  coordinateMapToggleTextDisabled: {
+    color: "#94a3b8",
+  },
+
+  mapVisibilityHint: {
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+
+  mapVisibilityHintText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+  validSpotButton: {
+    marginTop: 10,
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    backgroundColor: "#ecfdf5",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  validSpotButtonText: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#15803d",
+  },
+
+  validSpotCounterText: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#64748b",
+    fontWeight: "700",
+    textAlign: "center",
   },
 });
 

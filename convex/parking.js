@@ -7,16 +7,20 @@ const DEFAULT_ZONE = "general";
 
 const LOOKING_TTL_MS = 10 * 60 * 1000;
 const FREE_SPOT_TTL_MS = 10 * 60 * 1000;
+const OCCUPIED_SPOT_TTL_MS = 60 * 60 * 1000;
+const PRESENCE_TTL_MS = 10 * 60 * 1000;
+const WATCHER_TTL_MS = 20 * 60 * 1000;
+const PARKING_NOTIFICATION_TTL_MS = 10 * 60 * 1000;
 
 const DEFAULT_OCCUPY_RADIUS_METERS = 35;
 const DEFAULT_DUPLICATE_RADIUS_METERS = 10;
+const DEFAULT_NOTIFICATION_RADIUS_METERS = 350;
 
 const MAX_MESSAGE_LENGTH = 500;
 const MAX_MESSAGES_LIMIT = 200;
 const MAX_SPOTS_LIMIT = 300;
-
-const PRESENCE_TTL_MS = 10 * 60 * 1000;
 const MAX_PRESENCE_LIMIT = 200;
+const MAX_NOTIFICATIONS_LIMIT = 100;
 
 const parkingMessageStatusValidator = v.union(
   v.literal("looking"),
@@ -27,6 +31,7 @@ const parkingMessageStatusValidator = v.union(
 const parkingSpotStatusValidator = v.union(
   v.literal("free"),
   v.literal("occupied"),
+  v.literal("leaving"),
   v.literal("unknown"),
   v.literal("expired"),
 );
@@ -113,7 +118,7 @@ function clampLimit(value, defaultValue, minValue, maxValue) {
 function clampRadius(value, defaultValue) {
   const numericValue = isFiniteNumber(value) ? value : defaultValue;
 
-  return Math.max(1, Math.min(numericValue, 200));
+  return Math.max(1, Math.min(numericValue, 2000));
 }
 
 function toRadians(value) {
@@ -142,6 +147,14 @@ function distanceMeters(lat1, lng1, lat2, lng2) {
   return earthRadiusMeters * c;
 }
 
+function buildAreaKey(lat, lng) {
+  if (!hasValidCoords(lat, lng)) {
+    return `${DEFAULT_CITY}:${DEFAULT_ZONE}`;
+  }
+
+  return `${Number(lat).toFixed(3)}:${Number(lng).toFixed(3)}`;
+}
+
 async function listActiveFreeSpotsForZone(ctx, city, zone, now) {
   return await ctx.db
     .query("parkingSpots")
@@ -160,7 +173,11 @@ function findNearestSpot(spots, lat, lng, maxDistanceMeters) {
   let nearestDistance = Number.POSITIVE_INFINITY;
 
   for (const spot of spots) {
-    const distance = distanceMeters(lat, lng, spot.lat, spot.lng);
+    const spotLat = typeof spot.lat === "number" ? spot.lat : spot.latitude;
+
+    const spotLng = typeof spot.lng === "number" ? spot.lng : spot.longitude;
+
+    const distance = distanceMeters(lat, lng, spotLat, spotLng);
 
     if (distance <= maxDistanceMeters && distance < nearestDistance) {
       nearestSpot = spot;
@@ -172,6 +189,57 @@ function findNearestSpot(spots, lat, lng, maxDistanceMeters) {
     spot: nearestSpot,
     distanceMeters: nearestDistance,
   };
+}
+
+async function incrementAreaParkedCount(ctx, { city, zone, lat, lng }) {
+  const now = Date.now();
+  const areaKey = buildAreaKey(lat, lng);
+
+  const existing = await ctx.db
+    .query("parkingAreaStats")
+    .withIndex("by_areaKey", (q) => q.eq("areaKey", areaKey))
+    .first();
+
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      parkedCount: (existing.parkedCount || 0) + 1,
+      updatedAt: now,
+    });
+
+    return existing._id;
+  }
+
+  return await ctx.db.insert("parkingAreaStats", {
+    areaKey,
+    city,
+    zone,
+    parkedCount: 1,
+    leavingCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+async function moveAreaParkedToLeaving(ctx, { city, zone, lat, lng }) {
+  const now = Date.now();
+  const areaKey = buildAreaKey(lat, lng);
+
+  const existing = await ctx.db
+    .query("parkingAreaStats")
+    .withIndex("by_areaKey", (q) => q.eq("areaKey", areaKey))
+    .first();
+
+  if (!existing) {
+    return null;
+  }
+
+  await ctx.db.patch(existing._id, {
+    parkedCount: Math.max(0, (existing.parkedCount || 0) - 1),
+    leavingCount: (existing.leavingCount || 0) + 1,
+    updatedAt: now,
+  });
+
+  return existing._id;
 }
 
 async function upsertParkingPresence(ctx, payload) {
@@ -206,6 +274,14 @@ async function upsertParkingPresence(ctx, payload) {
     accuracy,
     locationSource,
 
+    location: hasCoords
+      ? {
+          lat: payload.lat,
+          lng: payload.lng,
+          source: locationSource,
+        }
+      : undefined,
+
     updatedAt: now,
     expiresAt: now + PRESENCE_TTL_MS,
   };
@@ -216,7 +292,118 @@ async function upsertParkingPresence(ctx, payload) {
     return existingPresence._id;
   }
 
-  return await ctx.db.insert("parkingPresence", presenceData);
+  return await ctx.db.insert("parkingPresence", {
+    ...presenceData,
+    createdAt: now,
+  });
+}
+
+async function markWatcherInactiveByIdentity(ctx, { userId, alias }) {
+  const parkingAlias = cleanAlias(alias) || userId;
+
+  const existing = await ctx.db
+    .query("parkingWatchers")
+    .withIndex("by_parkingAlias", (q) => q.eq("parkingAlias", parkingAlias))
+    .first();
+
+  if (!existing) {
+    return null;
+  }
+
+  const now = Date.now();
+
+  await ctx.db.patch(existing._id, {
+    status: "inactive",
+    updatedAt: now,
+    expiresAt: now,
+  });
+
+  return existing._id;
+}
+
+async function notifyNearbyLookingDrivers(
+  ctx,
+  {
+    ownerUserId,
+    ownerAlias,
+    city,
+    zone,
+    lat,
+    lng,
+    spotId,
+    destinationName,
+    destinationAddress,
+  },
+) {
+  const now = Date.now();
+
+  const watchers = await ctx.db
+    .query("parkingWatchers")
+    .withIndex("by_status", (q) => q.eq("status", "looking"))
+    .collect();
+
+  const nearbyWatchers = watchers.filter((watcher) => {
+    if (watcher.expiresAt && watcher.expiresAt <= now) {
+      return false;
+    }
+
+    if (ownerAlias && watcher.parkingAlias === ownerAlias) {
+      return false;
+    }
+
+    if (ownerUserId && watcher.userId === ownerUserId) {
+      return false;
+    }
+
+    const watcherLat =
+      typeof watcher.latitude === "number" ? watcher.latitude : watcher.lat;
+
+    const watcherLng =
+      typeof watcher.longitude === "number" ? watcher.longitude : watcher.lng;
+
+    if (!hasValidCoords(watcherLat, watcherLng)) {
+      return false;
+    }
+
+    const radius = clampRadius(
+      watcher.radiusMeters,
+      DEFAULT_NOTIFICATION_RADIUS_METERS,
+    );
+
+    return distanceMeters(lat, lng, watcherLat, watcherLng) <= radius;
+  });
+
+  await Promise.all(
+    nearbyWatchers.map((watcher) =>
+      ctx.db.insert("parkingNotifications", {
+        recipientAlias: watcher.parkingAlias,
+        recipientUserId: watcher.userId,
+
+        type: "spot_released",
+        spotId,
+
+        title: "Plaza liberada cerca",
+        body: `Un conductor está dejando una plaza cerca de ${
+          destinationName || watcher.destinationName || "tu zona de búsqueda"
+        }.`,
+
+        latitude: lat,
+        longitude: lng,
+        lat,
+        lng,
+
+        city,
+        zone,
+        areaKey: buildAreaKey(lat, lng),
+
+        read: false,
+        createdAt: now,
+        expiresAt: now + PARKING_NOTIFICATION_TTL_MS,
+      }),
+    ),
+  );
+
+  return nearbyWatchers.length;
 }
 
 export const listParkingMessages = query({
@@ -288,7 +475,64 @@ export const listActiveParkingSpots = query({
       .order("asc")
       .take(limit);
 
-    return spots.sort((a, b) => b.revealedAt - a.revealedAt);
+    return spots.sort((a, b) => (b.revealedAt || 0) - (a.revealedAt || 0));
+  },
+});
+
+export const listReleasedParkingSpots = query({
+  args: {
+    city: v.optional(v.string()),
+    zone: v.optional(v.string()),
+    lat: v.optional(v.float64()),
+    lng: v.optional(v.float64()),
+    radiusMeters: v.optional(v.float64()),
+    limit: v.optional(v.float64()),
+  },
+
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const city = args.city ? cleanCity(args.city) : null;
+    const zone = args.zone ? cleanZone(args.zone) : null;
+    const limit = clampLimit(args.limit, 50, 1, MAX_SPOTS_LIMIT);
+    const radius = clampRadius(
+      args.radiusMeters,
+      DEFAULT_NOTIFICATION_RADIUS_METERS,
+    );
+
+    const candidates = await ctx.db
+      .query("parkingSpots")
+      .withIndex("by_status_updatedAt", (q) => q.eq("status", "free"))
+      .order("desc")
+      .take(MAX_SPOTS_LIMIT);
+
+    return candidates
+      .filter((spot) => {
+        if (spot.expiresAt && spot.expiresAt <= now) {
+          return false;
+        }
+
+        if (city && spot.city !== city) {
+          return false;
+        }
+
+        if (zone && spot.zone !== zone) {
+          return false;
+        }
+
+        if (hasValidCoords(args.lat, args.lng)) {
+          const spotLat =
+            typeof spot.lat === "number" ? spot.lat : spot.latitude;
+
+          const spotLng =
+            typeof spot.lng === "number" ? spot.lng : spot.longitude;
+
+          return distanceMeters(args.lat, args.lng, spotLat, spotLng) <= radius;
+        }
+
+        return true;
+      })
+      .slice(0, limit);
   },
 });
 
@@ -374,6 +618,110 @@ export const listDestinationPresence = query({
   },
 });
 
+export const upsertLookingWatcher = mutation({
+  args: {
+    city: v.optional(v.string()),
+    zone: v.optional(v.string()),
+    alias: v.optional(v.string()),
+
+    lat: v.float64(),
+    lng: v.float64(),
+    accuracy: v.optional(v.float64()),
+    locationSource: v.optional(v.string()),
+
+    destinationName: v.optional(v.string()),
+    destinationAddress: v.optional(v.string()),
+
+    radiusMeters: v.optional(v.float64()),
+  },
+
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const userId = await requireAuthUserId(ctx);
+    const city = cleanCity(args.city);
+    const zone = cleanZone(args.zone);
+    const parkingAlias = cleanAlias(args.alias) || userId;
+
+    if (!hasValidCoords(args.lat, args.lng)) {
+      throw new Error("Coordenadas no válidas.");
+    }
+
+    const existing = await ctx.db
+      .query("parkingWatchers")
+      .withIndex("by_parkingAlias", (q) => q.eq("parkingAlias", parkingAlias))
+      .first();
+
+    const accuracy = safeAccuracy(args.accuracy);
+    const radiusMeters = clampRadius(
+      args.radiusMeters,
+      DEFAULT_NOTIFICATION_RADIUS_METERS,
+    );
+
+    const payload = {
+      userId,
+      parkingAlias,
+
+      city,
+      zone,
+      areaKey: buildAreaKey(args.lat, args.lng),
+
+      latitude: args.lat,
+      longitude: args.lng,
+      lat: args.lat,
+      lng: args.lng,
+      accuracy,
+
+      destinationName: cleanText(args.destinationName) || undefined,
+      destinationAddress: cleanText(args.destinationAddress) || undefined,
+
+      status: "looking",
+      radiusMeters,
+
+      updatedAt: now,
+      expiresAt: now + WATCHER_TTL_MS,
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, payload);
+
+      return {
+        ok: true,
+        watcherId: existing._id,
+      };
+    }
+
+    const watcherId = await ctx.db.insert("parkingWatchers", {
+      ...payload,
+      createdAt: now,
+    });
+
+    return {
+      ok: true,
+      watcherId,
+    };
+  },
+});
+
+export const markInactiveWatcher = mutation({
+  args: {
+    alias: v.optional(v.string()),
+  },
+
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const watcherId = await markWatcherInactiveByIdentity(ctx, {
+      userId,
+      alias: args.alias,
+    });
+
+    return {
+      ok: true,
+      watcherId,
+    };
+  },
+});
+
 export const sendParkingMessage = mutation({
   args: {
     city: v.string(),
@@ -389,6 +737,10 @@ export const sendParkingMessage = mutation({
     locationSource: v.optional(v.string()),
 
     occupyRadiusMeters: v.optional(v.float64()),
+
+    destinationName: v.optional(v.string()),
+    destinationAddress: v.optional(v.string()),
+    watcherRadiusMeters: v.optional(v.float64()),
   },
 
   handler: async (ctx, args) => {
@@ -403,6 +755,7 @@ export const sendParkingMessage = mutation({
     const hasCoords = hasValidCoords(args.lat, args.lng);
     const accuracy = safeAccuracy(args.accuracy);
     const locationSource = safeLocationSource(args.locationSource);
+    const ownerAlias = alias || userId;
 
     if (!text) {
       throw new Error("El mensaje no puede estar vacío.");
@@ -422,11 +775,20 @@ export const sendParkingMessage = mutation({
       text,
 
       status: args.status,
+      parkingStatus: args.status,
 
       lat: hasCoords ? args.lat : undefined,
       lng: hasCoords ? args.lng : undefined,
       accuracy,
       locationSource,
+
+      location: hasCoords
+        ? {
+            lat: args.lat,
+            lng: args.lng,
+            source: locationSource,
+          }
+        : undefined,
 
       createdAt: now,
     });
@@ -443,7 +805,52 @@ export const sendParkingMessage = mutation({
       locationSource: args.locationSource,
     });
 
+    if (args.status === "looking" && hasCoords) {
+      const existingWatcher = await ctx.db
+        .query("parkingWatchers")
+        .withIndex("by_parkingAlias", (q) => q.eq("parkingAlias", ownerAlias))
+        .first();
+
+      const watcherPayload = {
+        userId,
+        parkingAlias: ownerAlias,
+
+        city,
+        zone,
+        areaKey: buildAreaKey(args.lat, args.lng),
+
+        latitude: args.lat,
+        longitude: args.lng,
+        lat: args.lat,
+        lng: args.lng,
+        accuracy,
+
+        destinationName: cleanText(args.destinationName) || undefined,
+        destinationAddress: cleanText(args.destinationAddress) || undefined,
+
+        status: "looking",
+        radiusMeters: clampRadius(
+          args.watcherRadiusMeters,
+          DEFAULT_NOTIFICATION_RADIUS_METERS,
+        ),
+
+        updatedAt: now,
+        expiresAt: now + WATCHER_TTL_MS,
+      };
+
+      if (existingWatcher) {
+        await ctx.db.patch(existingWatcher._id, watcherPayload);
+      } else {
+        await ctx.db.insert("parkingWatchers", {
+          ...watcherPayload,
+          createdAt: now,
+        });
+      }
+    }
+
     if (args.status === "leaving" && hasCoords) {
+      let releasedSpotId = null;
+
       const activeFreeSpots = await listActiveFreeSpotsForZone(
         ctx,
         city,
@@ -462,12 +869,22 @@ export const sendParkingMessage = mutation({
         await ctx.db.patch(nearest.spot._id, {
           lat: args.lat,
           lng: args.lng,
+          latitude: args.lat,
+          longitude: args.lng,
           accuracy,
           locationSource,
 
+          location: {
+            lat: args.lat,
+            lng: args.lng,
+            source: locationSource,
+          },
+
           status: "free",
           revealedBy: userId,
+          releasedBy: userId,
           revealedAt: now,
+          releasedAt: now,
           updatedAt: now,
           expiresAt: now + FREE_SPOT_TTL_MS,
 
@@ -476,29 +893,85 @@ export const sendParkingMessage = mutation({
 
           sourceMessageId: messageId,
         });
+
+        releasedSpotId = nearest.spot._id;
       } else {
-        await ctx.db.insert("parkingSpots", {
+        releasedSpotId = await ctx.db.insert("parkingSpots", {
           city,
           zone,
+          areaKey: buildAreaKey(args.lat, args.lng),
+
+          userId,
+          ownerAlias,
+          parkingAlias: ownerAlias,
+
+          alias,
+          destination: cleanText(args.destinationName) || undefined,
+          destinationName: cleanText(args.destinationName) || undefined,
+          destinationAddress: cleanText(args.destinationAddress) || undefined,
 
           lat: args.lat,
           lng: args.lng,
+          latitude: args.lat,
+          longitude: args.lng,
           accuracy,
           locationSource,
+
+          location: {
+            lat: args.lat,
+            lng: args.lng,
+            source: locationSource,
+          },
 
           status: "free",
 
           revealedBy: userId,
-          occupiedBy: undefined,
+          releasedBy: userId,
 
           revealedAt: now,
+          releasedAt: now,
+
+          occupiedBy: undefined,
           occupiedAt: undefined,
+
+          createdAt: now,
           updatedAt: now,
           expiresAt: now + FREE_SPOT_TTL_MS,
 
           sourceMessageId: messageId,
         });
       }
+
+      await moveAreaParkedToLeaving(ctx, {
+        city,
+        zone,
+        lat: args.lat,
+        lng: args.lng,
+      });
+
+      const notifiedCount = await notifyNearbyLookingDrivers(ctx, {
+        ownerUserId: userId,
+        ownerAlias,
+        city,
+        zone,
+        lat: args.lat,
+        lng: args.lng,
+        spotId: releasedSpotId,
+        destinationName: cleanText(args.destinationName) || undefined,
+        destinationAddress: cleanText(args.destinationAddress) || undefined,
+      });
+
+      await markWatcherInactiveByIdentity(ctx, {
+        userId,
+        alias,
+      });
+
+      return {
+        ok: true,
+        messageId,
+        spotId: releasedSpotId,
+        notifiedCount,
+      };
     }
 
     if (args.status === "parked" && hasCoords) {
@@ -521,15 +994,99 @@ export const sendParkingMessage = mutation({
         radius,
       );
 
+      let occupiedSpotId = null;
+
       if (nearest.spot) {
         await ctx.db.patch(nearest.spot._id, {
+          lat: args.lat,
+          lng: args.lng,
+          latitude: args.lat,
+          longitude: args.lng,
+          accuracy,
+          locationSource,
+
+          location: {
+            lat: args.lat,
+            lng: args.lng,
+            source: locationSource,
+          },
+
           status: "occupied",
           occupiedBy: userId,
           occupiedAt: now,
+
+          ownerAlias,
+          parkingAlias: ownerAlias,
+          alias,
+
           updatedAt: now,
-          expiresAt: now,
+          expiresAt: now + OCCUPIED_SPOT_TTL_MS,
+
+          sourceMessageId: messageId,
+        });
+
+        occupiedSpotId = nearest.spot._id;
+      } else {
+        occupiedSpotId = await ctx.db.insert("parkingSpots", {
+          city,
+          zone,
+          areaKey: buildAreaKey(args.lat, args.lng),
+
+          userId,
+          ownerAlias,
+          parkingAlias: ownerAlias,
+
+          alias,
+          destination: cleanText(args.destinationName) || undefined,
+          destinationName: cleanText(args.destinationName) || undefined,
+          destinationAddress: cleanText(args.destinationAddress) || undefined,
+
+          lat: args.lat,
+          lng: args.lng,
+          latitude: args.lat,
+          longitude: args.lng,
+          accuracy,
+          locationSource,
+
+          location: {
+            lat: args.lat,
+            lng: args.lng,
+            source: locationSource,
+          },
+
+          status: "occupied",
+
+          occupiedBy: userId,
+          occupiedAt: now,
+
+          revealedBy: undefined,
+          revealedAt: undefined,
+
+          createdAt: now,
+          updatedAt: now,
+          expiresAt: now + OCCUPIED_SPOT_TTL_MS,
+
+          sourceMessageId: messageId,
         });
       }
+
+      await incrementAreaParkedCount(ctx, {
+        city,
+        zone,
+        lat: args.lat,
+        lng: args.lng,
+      });
+
+      await markWatcherInactiveByIdentity(ctx, {
+        userId,
+        alias,
+      });
+
+      return {
+        ok: true,
+        messageId,
+        spotId: occupiedSpotId,
+      };
     }
 
     return {
@@ -644,6 +1201,66 @@ export const expireOldFreeParkingSpots = mutation({
   },
 });
 
+export const expireOldWatchers = mutation({
+  args: {
+    city: v.optional(v.string()),
+    zone: v.optional(v.string()),
+  },
+
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const expiredWatchers = await ctx.db
+      .query("parkingWatchers")
+      .withIndex("by_expiresAt", (q) => q.lte("expiresAt", now))
+      .collect();
+
+    const city = args.city ? cleanCity(args.city) : null;
+    const zone = args.zone ? cleanZone(args.zone) : null;
+
+    const filteredWatchers = expiredWatchers.filter((watcher) => {
+      const sameCity = city ? watcher.city === city : true;
+      const sameZone = zone ? watcher.zone === zone : true;
+
+      return watcher.status === "looking" && sameCity && sameZone;
+    });
+
+    for (const watcher of filteredWatchers) {
+      await ctx.db.patch(watcher._id, {
+        status: "inactive",
+        updatedAt: now,
+      });
+    }
+
+    return {
+      ok: true,
+      updated: filteredWatchers.length,
+    };
+  },
+});
+
+export const expireOldParkingNotifications = mutation({
+  args: {},
+
+  handler: async (ctx) => {
+    const now = Date.now();
+
+    const expiredNotifications = await ctx.db
+      .query("parkingNotifications")
+      .withIndex("by_expiresAt", (q) => q.lte("expiresAt", now))
+      .collect();
+
+    for (const notification of expiredNotifications) {
+      await ctx.db.delete(notification._id);
+    }
+
+    return {
+      ok: true,
+      deleted: expiredNotifications.length,
+    };
+  },
+});
+
 export const markParkingSpotOccupied = mutation({
   args: {
     spotId: v.id("parkingSpots"),
@@ -664,8 +1281,17 @@ export const markParkingSpotOccupied = mutation({
       occupiedBy: userId,
       occupiedAt: now,
       updatedAt: now,
-      expiresAt: now,
+      expiresAt: now + OCCUPIED_SPOT_TTL_MS,
     });
+
+    if (hasValidCoords(spot.lat, spot.lng)) {
+      await incrementAreaParkedCount(ctx, {
+        city: spot.city || DEFAULT_CITY,
+        zone: spot.zone || DEFAULT_ZONE,
+        lat: spot.lat,
+        lng: spot.lng,
+      });
+    }
 
     return {
       ok: true,
@@ -688,11 +1314,16 @@ export const markParkingSpotFree = mutation({
       throw new Error("La plaza no existe.");
     }
 
+    const lat = typeof spot.lat === "number" ? spot.lat : spot.latitude;
+    const lng = typeof spot.lng === "number" ? spot.lng : spot.longitude;
+
     await ctx.db.patch(args.spotId, {
       status: "free",
 
       revealedBy: userId,
+      releasedBy: userId,
       revealedAt: now,
+      releasedAt: now,
 
       occupiedBy: undefined,
       occupiedAt: undefined,
@@ -701,8 +1332,35 @@ export const markParkingSpotFree = mutation({
       expiresAt: now + FREE_SPOT_TTL_MS,
     });
 
+    if (hasValidCoords(lat, lng)) {
+      await moveAreaParkedToLeaving(ctx, {
+        city: spot.city || DEFAULT_CITY,
+        zone: spot.zone || DEFAULT_ZONE,
+        lat,
+        lng,
+      });
+
+      const notifiedCount = await notifyNearbyLookingDrivers(ctx, {
+        ownerUserId: userId,
+        ownerAlias: spot.ownerAlias || spot.parkingAlias || spot.alias,
+        city: spot.city || DEFAULT_CITY,
+        zone: spot.zone || DEFAULT_ZONE,
+        lat,
+        lng,
+        spotId: args.spotId,
+        destinationName: spot.destinationName || spot.destination,
+        destinationAddress: spot.destinationAddress,
+      });
+
+      return {
+        ok: true,
+        notifiedCount,
+      };
+    }
+
     return {
       ok: true,
+      notifiedCount: 0,
     };
   },
 });
@@ -773,5 +1431,311 @@ export const deleteExpiredParkingPresence = mutation({
       ok: true,
       deleted: filteredPresence.length,
     };
+  },
+});
+
+export const listMyParkingNotifications = query({
+  args: {
+    limit: v.optional(v.float64()),
+  },
+
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const limit = clampLimit(args.limit, 20, 1, MAX_NOTIFICATIONS_LIMIT);
+
+    const notificationsByUserId = await ctx.db
+      .query("parkingNotifications")
+      .withIndex("by_recipientUserId", (q) => q.eq("recipientUserId", userId))
+      .order("desc")
+      .take(limit);
+
+    return notificationsByUserId;
+  },
+});
+
+export const listMyParkingNotificationsByAlias = query({
+  args: {
+    alias: v.string(),
+    limit: v.optional(v.float64()),
+  },
+
+  handler: async (ctx, args) => {
+    const alias = cleanAlias(args.alias);
+
+    if (!alias) {
+      return [];
+    }
+
+    const limit = clampLimit(args.limit, 20, 1, MAX_NOTIFICATIONS_LIMIT);
+
+    return await ctx.db
+      .query("parkingNotifications")
+      .withIndex("by_recipientAlias", (q) => q.eq("recipientAlias", alias))
+      .order("desc")
+      .take(limit);
+  },
+});
+
+export const markParkingNotificationRead = mutation({
+  args: {
+    notificationId: v.id("parkingNotifications"),
+  },
+
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+
+    const notification = await ctx.db.get(args.notificationId);
+
+    if (!notification) {
+      throw new Error("La notificación no existe.");
+    }
+
+    if (
+      notification.recipientUserId &&
+      notification.recipientUserId !== userId
+    ) {
+      throw new Error("No puedes modificar esta notificación.");
+    }
+
+    await ctx.db.patch(args.notificationId, {
+      read: true,
+    });
+
+    return {
+      ok: true,
+    };
+  },
+});
+
+export const listParkingAreaStats = query({
+  args: {
+    city: v.optional(v.string()),
+    zone: v.optional(v.string()),
+    limit: v.optional(v.float64()),
+  },
+
+  handler: async (ctx, args) => {
+    const city = args.city ? cleanCity(args.city) : null;
+    const zone = args.zone ? cleanZone(args.zone) : null;
+    const limit = clampLimit(args.limit, 100, 1, 300);
+
+    if (city && zone) {
+      return await ctx.db
+        .query("parkingAreaStats")
+        .withIndex("by_city_zone", (q) => q.eq("city", city).eq("zone", zone))
+        .take(limit);
+    }
+
+    return await ctx.db.query("parkingAreaStats").take(limit);
+  },
+});
+
+export const createValidParkingSpot = mutation({
+  args: {
+    city: v.optional(v.string()),
+    zone: v.optional(v.string()),
+
+    alias: v.optional(v.string()),
+
+    lat: v.float64(),
+    lng: v.float64(),
+    accuracy: v.optional(v.float64()),
+    locationSource: v.optional(v.string()),
+
+    destinationName: v.optional(v.string()),
+    destinationAddress: v.optional(v.string()),
+  },
+
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const userId = await requireAuthUserId(ctx);
+
+    const city = cleanCity(args.city);
+    const zone = cleanZone(args.zone);
+    const alias = cleanAlias(args.alias);
+    const accuracy = safeAccuracy(args.accuracy);
+    const locationSource = safeLocationSource(args.locationSource);
+
+    if (!hasValidCoords(args.lat, args.lng)) {
+      throw new Error("Coordenadas no válidas.");
+    }
+
+    const activeFreeSpots = await listActiveFreeSpotsForZone(
+      ctx,
+      city,
+      zone,
+      now,
+    );
+
+    const nearest = findNearestSpot(
+      activeFreeSpots,
+      args.lat,
+      args.lng,
+      DEFAULT_DUPLICATE_RADIUS_METERS,
+    );
+
+    if (nearest.spot) {
+      await ctx.db.patch(nearest.spot._id, {
+        lat: args.lat,
+        lng: args.lng,
+        latitude: args.lat,
+        longitude: args.lng,
+        accuracy,
+        locationSource,
+
+        location: {
+          lat: args.lat,
+          lng: args.lng,
+          source: locationSource,
+        },
+
+        status: "free",
+
+        revealedBy: userId,
+        releasedBy: userId,
+        revealedAt: now,
+        releasedAt: now,
+
+        alias,
+        ownerAlias: alias || userId,
+        parkingAlias: alias || userId,
+
+        destination: cleanText(args.destinationName) || undefined,
+        destinationName: cleanText(args.destinationName) || undefined,
+        destinationAddress: cleanText(args.destinationAddress) || undefined,
+
+        updatedAt: now,
+        expiresAt: now + FREE_SPOT_TTL_MS,
+      });
+
+      return {
+        ok: true,
+        spotId: nearest.spot._id,
+        updated: true,
+      };
+    }
+
+    const spotId = await ctx.db.insert("parkingSpots", {
+      city,
+      zone,
+      areaKey: buildAreaKey(args.lat, args.lng),
+
+      userId,
+      ownerAlias: alias || userId,
+      parkingAlias: alias || userId,
+
+      alias,
+      destination: cleanText(args.destinationName) || undefined,
+      destinationName: cleanText(args.destinationName) || undefined,
+      destinationAddress: cleanText(args.destinationAddress) || undefined,
+
+      lat: args.lat,
+      lng: args.lng,
+      latitude: args.lat,
+      longitude: args.lng,
+      accuracy,
+      locationSource,
+
+      location: {
+        lat: args.lat,
+        lng: args.lng,
+        source: locationSource,
+      },
+
+      status: "free",
+
+      revealedBy: userId,
+      releasedBy: userId,
+
+      revealedAt: now,
+      releasedAt: now,
+
+      occupiedBy: undefined,
+      occupiedAt: undefined,
+
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: now + FREE_SPOT_TTL_MS,
+    });
+
+    return {
+      ok: true,
+      spotId,
+      updated: false,
+    };
+  },
+});
+
+export const listValidParkingSpots = query({
+  args: {
+    city: v.optional(v.string()),
+    zone: v.optional(v.string()),
+
+    lat: v.optional(v.float64()),
+    lng: v.optional(v.float64()),
+    radiusMeters: v.optional(v.float64()),
+
+    limit: v.optional(v.float64()),
+  },
+
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const city = args.city ? cleanCity(args.city) : DEFAULT_CITY;
+    const zone = args.zone ? cleanZone(args.zone) : DEFAULT_ZONE;
+    const limit = clampLimit(args.limit, 100, 1, MAX_SPOTS_LIMIT);
+    const radius = clampRadius(args.radiusMeters, 800);
+
+    const spots = await ctx.db
+      .query("parkingSpots")
+      .withIndex("by_city_zone_status_expiresAt", (q) =>
+        q
+          .eq("city", city)
+          .eq("zone", zone)
+          .eq("status", "free")
+          .gt("expiresAt", now),
+      )
+      .order("asc")
+      .take(limit);
+
+    return spots
+      .filter((spot) => {
+        const spotLat = typeof spot.lat === "number" ? spot.lat : spot.latitude;
+
+        const spotLng =
+          typeof spot.lng === "number" ? spot.lng : spot.longitude;
+
+        if (!hasValidCoords(spotLat, spotLng)) {
+          return false;
+        }
+
+        if (hasValidCoords(args.lat, args.lng)) {
+          return distanceMeters(args.lat, args.lng, spotLat, spotLng) <= radius;
+        }
+
+        return true;
+      })
+      .map((spot) => ({
+        _id: spot._id,
+        id: String(spot._id),
+
+        city: spot.city,
+        zone: spot.zone,
+
+        lat: typeof spot.lat === "number" ? spot.lat : spot.latitude,
+        lng: typeof spot.lng === "number" ? spot.lng : spot.longitude,
+
+        accuracy: spot.accuracy,
+        status: spot.status,
+
+        revealedBy: spot.alias || spot.parkingAlias || spot.revealedBy,
+        revealedAt: spot.revealedAt,
+        updatedAt: spot.updatedAt,
+        expiresAt: spot.expiresAt,
+
+        destinationName: spot.destinationName || spot.destination,
+        destinationAddress: spot.destinationAddress,
+      }))
+      .sort((a, b) => (b.revealedAt || 0) - (a.revealedAt || 0));
   },
 });

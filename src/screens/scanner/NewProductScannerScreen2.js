@@ -17,6 +17,8 @@ import {
   View,
 } from "react-native";
 
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -116,6 +118,8 @@ export default function NewProductScannerScreen2() {
 
   const scannedRef = useRef(false);
   const handlingScanRef = useRef(false);
+
+  const saveBarcodeScan = useMutation(api.barcodeScans.saveBarcodeScan);
 
   const {
     autoOpenEngine = false,
