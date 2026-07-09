@@ -22,6 +22,8 @@ import { api } from "@/convex/_generated/api";
 
 import { Ionicons } from "@expo/vector-icons";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
+import WebPreviewCard from "@/src/components/chat/WebPreviewCard";
+
 import {
   canOpenUrlByStatus,
   extractUrlsFromText,
@@ -38,6 +40,8 @@ const MAX_MESSAGE_LENGTH = 280;
 const DEFAULT_ROOM = "general";
 const DEFAULT_USERNAME = "anonymous";
 const SELF_DELETE_MS = 24 * 60 * 60 * 1000;
+
+const LINK_PREVIEW_ENDPOINT = "http://localhost:3000/api/link-preview";
 
 const ROOM_OPTIONS = [
   {
@@ -293,9 +297,13 @@ function UrlBadge({ status }) {
   );
 }
 
-function MessageText({ message, onOpenUrl }) {
+function MessageText({ message, onOpenUrl, hiddenUrls = [] }) {
   const text = message?.text || "";
   const parts = splitTextWithUrls(text);
+
+  const normalizedHiddenUrls = hiddenUrls
+    .map((url) => normalizeUrl(url))
+    .filter(Boolean);
 
   return (
     <Text style={styles.messageText}>
@@ -309,6 +317,11 @@ function MessageText({ message, onOpenUrl }) {
         }
 
         const normalizedUrl = normalizeUrl(part.value);
+
+        if (normalizedHiddenUrls.includes(normalizedUrl)) {
+          return null;
+        }
+
         const status = getUrlStatusFromMessage(message, normalizedUrl);
         const canOpen = canOpenUrlByStatus(status);
 
@@ -414,9 +427,10 @@ function MessageCard({
   forcedUsername = null,
 }) {
   const urls = useMemo(() => {
-    return extractUrlsFromText(item?.text || "");
+    return getUniqueValues(getNormalizedUrlsFromText(item?.text || ""));
   }, [item?.text]);
 
+  const firstUrl = urls[0] || null;
   const createdAt = item.createdAt || item._creationTime;
 
   const visibleUsername = getVisibleUsername(forcedUsername || item?.username);
@@ -450,24 +464,23 @@ function MessageCard({
         </View>
       </View>
 
-      <MessageText message={item} onOpenUrl={onOpenUrl} />
+      {/* <MessageText message={item} onOpenUrl={onOpenUrl} /> */}
 
-      {urls.length > 0 ? (
+      {firstUrl ? (
+        <WebPreviewCard
+          url={firstUrl}
+          compact={compact}
+          previewEndpoint={LINK_PREVIEW_ENDPOINT}
+          onPress={(targetUrl) => onOpenUrl(targetUrl, URL_STATUS.TRUSTED)}
+        />
+      ) : null}
+
+      {firstUrl && getYouTubeThumbnailUrl(firstUrl) ? (
         <View style={styles.youtubePreviewBlock}>
-          {urls.map((url) => {
-            const normalizedUrl = normalizeUrl(url);
-            const thumbnailUrl = getYouTubeThumbnailUrl(normalizedUrl);
-
-            if (!thumbnailUrl) return null;
-
-            return (
-              <YouTubeThumbnail
-                key={`${item.id || item._id}-youtube-${normalizedUrl}`}
-                url={normalizedUrl}
-                onOpenUrl={onOpenUrl}
-              />
-            );
-          })}
+          <YouTubeThumbnail
+            url={firstUrl}
+            onOpenUrl={(targetUrl) => onOpenUrl(targetUrl, URL_STATUS.TRUSTED)}
+          />
         </View>
       ) : null}
 
@@ -891,8 +904,7 @@ export default function ChatScreen() {
                       />
 
                       <Text style={styles.inputHint} numberOfLines={1}>
-                        Se permiten enlaces e imágenes por URL http:// o
-                        https://
+                        Se permite 1 enlace por mensaje: http:// o https://
                       </Text>
                     </View>
 
