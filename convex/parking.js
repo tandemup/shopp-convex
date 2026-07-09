@@ -1739,3 +1739,150 @@ export const listValidParkingSpots = query({
       .sort((a, b) => (b.revealedAt || 0) - (a.revealedAt || 0));
   },
 });
+
+export const createGpsDebugParkingSpot = mutation({
+  args: {
+    lat: v.float64(),
+    lng: v.float64(),
+    accuracy: v.optional(v.float64()),
+    locationSource: v.optional(v.string()),
+
+    note: v.optional(v.string()),
+  },
+
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const userId = await requireAuthUserId(ctx);
+
+    if (!hasValidCoords(args.lat, args.lng)) {
+      throw new Error("Coordenadas no válidas.");
+    }
+
+    const accuracy = safeAccuracy(args.accuracy);
+    const locationSource = safeLocationSource(args.locationSource);
+
+    const spotId = await ctx.db.insert("parkingSpots", {
+      city: DEFAULT_CITY,
+      zone: "gps-debug",
+      areaKey: buildAreaKey(args.lat, args.lng),
+
+      userId,
+      ownerAlias: userId,
+      parkingAlias: userId,
+
+      alias: "gps-debug",
+      destination: "GPS debug",
+      destinationName: "GPS debug",
+      destinationAddress: cleanText(args.note) || undefined,
+
+      lat: args.lat,
+      lng: args.lng,
+      latitude: args.lat,
+      longitude: args.lng,
+      accuracy,
+      locationSource,
+
+      location: {
+        lat: args.lat,
+        lng: args.lng,
+        source: locationSource,
+      },
+
+      status: "free",
+
+      revealedBy: userId,
+      releasedBy: userId,
+
+      revealedAt: now,
+      releasedAt: now,
+
+      occupiedBy: undefined,
+      occupiedAt: undefined,
+
+      createdAt: now,
+      updatedAt: now,
+
+      // Para pruebas de GPS no conviene que expire enseguida.
+      expiresAt: now + 30 * 24 * 60 * 60 * 1000,
+    });
+
+    return {
+      ok: true,
+      spotId,
+    };
+  },
+});
+
+export const listGpsDebugParkingSpots = query({
+  args: {
+    limit: v.optional(v.float64()),
+  },
+
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const limit = clampLimit(args.limit, 100, 1, MAX_SPOTS_LIMIT);
+
+    const spots = await ctx.db
+      .query("parkingSpots")
+      .withIndex("by_city_zone_updatedAt", (q) =>
+        q.eq("city", DEFAULT_CITY).eq("zone", "gps-debug"),
+      )
+      .order("desc")
+      .take(limit);
+
+    return spots
+      .filter((spot) => spot.userId === userId)
+      .map((spot) => ({
+        _id: spot._id,
+        id: String(spot._id),
+
+        lat: typeof spot.lat === "number" ? spot.lat : spot.latitude,
+        lng: typeof spot.lng === "number" ? spot.lng : spot.longitude,
+
+        accuracy: spot.accuracy,
+        locationSource: spot.locationSource,
+
+        status: spot.status,
+
+        createdAt: spot.createdAt,
+        updatedAt: spot.updatedAt,
+        revealedAt: spot.revealedAt,
+
+        note: spot.destinationAddress,
+      }))
+      .filter(
+        (spot) => typeof spot.lat === "number" && typeof spot.lng === "number",
+      );
+  },
+});
+
+export const deleteGpsDebugParkingSpot = mutation({
+  args: {
+    spotId: v.id("parkingSpots"),
+  },
+
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+
+    const spot = await ctx.db.get(args.spotId);
+
+    if (!spot) {
+      throw new Error("La muestra no existe.");
+    }
+
+    if (spot.userId !== userId) {
+      throw new Error("No puedes borrar una muestra de otro usuario.");
+    }
+
+    if (spot.zone !== "gps-debug") {
+      throw new Error("Solo se pueden borrar muestras GPS debug.");
+    }
+
+    await ctx.db.delete(args.spotId);
+
+    return {
+      ok: true,
+      spotId: args.spotId,
+    };
+  },
+});

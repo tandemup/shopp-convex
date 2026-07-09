@@ -70,4 +70,5 @@ export const ROUTES = {
 
   // Debug
   PRODUCT_LEARNING_DEBUG: "Product Learning Debug",
+  PARKING_GPS_DEBUG: "ParkingGpsDebug",
 };

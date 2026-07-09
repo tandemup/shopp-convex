@@ -22,26 +22,22 @@ import { api } from "@/convex/_generated/api";
 
 import { Ionicons } from "@expo/vector-icons";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
-import WebPreviewCard from "@/src/components/chat/WebPreviewCard";
 
-import {
-  canOpenUrlByStatus,
-  extractUrlsFromText,
-  getInitialUrlStatus,
-  getUrlBlockedReason,
-  getUrlStatusFromMessage,
-  getUrlStatusLabel,
-  getUrlStatusTone,
-  normalizeUrl,
-  URL_STATUS,
-} from "@/src/services/urlSafety";
+import { extractUrlsFromText, normalizeUrl } from "@/src/services/urlSafety";
 
 const MAX_MESSAGE_LENGTH = 280;
 const DEFAULT_ROOM = "general";
 const DEFAULT_USERNAME = "anonymous";
 const SELF_DELETE_MS = 24 * 60 * 60 * 1000;
+const YOUTUBE_RENDER_MODE = {
+  EMBED: "embed",
+  THUMBNAIL: "thumbnail",
+};
 
-const LINK_PREVIEW_ENDPOINT = "http://localhost:3000/api/link-preview";
+const DEFAULT_YOUTUBE_RENDER_MODE =
+  Platform.OS === "web"
+    ? YOUTUBE_RENDER_MODE.EMBED
+    : YOUTUBE_RENDER_MODE.THUMBNAIL;
 
 const ROOM_OPTIONS = [
   {
@@ -180,43 +176,6 @@ function formatTimeLeft(createdAt) {
   return `Se borra en ${hours} h ${minutes} min`;
 }
 
-function splitTextWithUrls(text) {
-  if (!text) return [];
-
-  const regex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
-  const parts = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = regex.exec(text)) !== null) {
-    const url = match[0];
-    const start = match.index;
-
-    if (start > lastIndex) {
-      parts.push({
-        type: "text",
-        value: text.slice(lastIndex, start),
-      });
-    }
-
-    parts.push({
-      type: "url",
-      value: url,
-    });
-
-    lastIndex = start + url.length;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push({
-      type: "text",
-      value: text.slice(lastIndex),
-    });
-  }
-
-  return parts;
-}
-
 function getYouTubeVideoId(url) {
   if (!url) return null;
 
@@ -260,6 +219,10 @@ function getYouTubeVideoId(url) {
   }
 }
 
+function isYouTubeUrl(url) {
+  return Boolean(getYouTubeVideoId(url));
+}
+
 function getYouTubeThumbnailUrl(url) {
   const videoId = getYouTubeVideoId(url);
 
@@ -268,75 +231,57 @@ function getYouTubeThumbnailUrl(url) {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 }
 
-function UrlBadge({ status }) {
-  const tone = getUrlStatusTone(status);
-  const label = getUrlStatusLabel(status);
+function getYouTubeEmbedUrl(url) {
+  const videoId = getYouTubeVideoId(url);
 
-  return (
-    <View
-      style={[
-        styles.urlBadge,
-        tone === "safe" && styles.urlBadgeSafe,
-        tone === "pending" && styles.urlBadgePending,
-        tone === "suspicious" && styles.urlBadgeSuspicious,
-        tone === "malicious" && styles.urlBadgeMalicious,
-      ]}
-    >
-      <Text
-        style={[
-          styles.urlBadgeText,
-          tone === "safe" && styles.urlBadgeTextSafe,
-          tone === "pending" && styles.urlBadgeTextPending,
-          tone === "suspicious" && styles.urlBadgeTextSuspicious,
-          tone === "malicious" && styles.urlBadgeTextMalicious,
-        ]}
-      >
-        {label}
-      </Text>
-    </View>
-  );
+  if (!videoId) return null;
+
+  const params = new URLSearchParams({
+    playsinline: "1",
+    rel: "0",
+    controls: "1",
+    fs: "1",
+    modestbranding: "1",
+  });
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    params.set("origin", window.location.origin);
+  }
+
+  return `https://www.youtube-nocookie.com/embed/${videoId}?${params.toString()}`;
 }
 
-function MessageText({ message, onOpenUrl, hiddenUrls = [] }) {
-  const text = message?.text || "";
-  const parts = splitTextWithUrls(text);
+function getYouTubeRenderConfig(url, mode = DEFAULT_YOUTUBE_RENDER_MODE) {
+  const normalizedUrl = normalizeUrl(url);
+  const videoId = getYouTubeVideoId(normalizedUrl);
 
-  const normalizedHiddenUrls = hiddenUrls
-    .map((url) => normalizeUrl(url))
-    .filter(Boolean);
+  if (!normalizedUrl || !videoId) {
+    return {
+      canRender: false,
+      mode: null,
+      videoId: null,
+      normalizedUrl: null,
+      embedUrl: null,
+      thumbnailUrl: null,
+    };
+  }
 
-  return (
-    <Text style={styles.messageText}>
-      {parts.map((part, index) => {
-        if (part.type === "text") {
-          return (
-            <Text key={`text-${index}`} style={styles.messageText}>
-              {part.value}
-            </Text>
-          );
-        }
+  const safeMode =
+    mode === YOUTUBE_RENDER_MODE.EMBED && Platform.OS === "web"
+      ? YOUTUBE_RENDER_MODE.EMBED
+      : YOUTUBE_RENDER_MODE.THUMBNAIL;
 
-        const normalizedUrl = normalizeUrl(part.value);
-
-        if (normalizedHiddenUrls.includes(normalizedUrl)) {
-          return null;
-        }
-
-        const status = getUrlStatusFromMessage(message, normalizedUrl);
-        const canOpen = canOpenUrlByStatus(status);
-
-        return (
-          <Text
-            key={`url-${index}`}
-            style={[styles.messageLink, !canOpen && styles.messageLinkDisabled]}
-            onPress={() => onOpenUrl(normalizedUrl, status)}
-          >
-            {part.value}
-          </Text>
-        );
-      })}
-    </Text>
-  );
+  return {
+    canRender: true,
+    mode: safeMode,
+    videoId,
+    normalizedUrl,
+    embedUrl:
+      safeMode === YOUTUBE_RENDER_MODE.EMBED
+        ? getYouTubeEmbedUrl(normalizedUrl)
+        : null,
+    thumbnailUrl: getYouTubeThumbnailUrl(normalizedUrl),
+  };
 }
 
 function LayoutPanel({
@@ -397,18 +342,45 @@ function LayoutPanel({
   );
 }
 
-function YouTubeThumbnail({ url, onOpenUrl }) {
-  const thumbnailUrl = getYouTubeThumbnailUrl(url);
+function YouTubePlayer({ url, onOpenUrl, mode = DEFAULT_YOUTUBE_RENDER_MODE }) {
+  const youtubeConfig = getYouTubeRenderConfig(url, mode);
 
-  if (!thumbnailUrl) return null;
+  if (!youtubeConfig.canRender) {
+    return null;
+  }
+
+  if (
+    youtubeConfig.mode === YOUTUBE_RENDER_MODE.EMBED &&
+    youtubeConfig.embedUrl
+  ) {
+    return (
+      <View style={styles.youtubePlayer}>
+        {React.createElement("iframe", {
+          src: youtubeConfig.embedUrl,
+          title: "YouTube video player",
+          style: {
+            width: "100%",
+            height: "100%",
+            border: "0",
+            borderRadius: 14,
+            display: "block",
+          },
+          allow:
+            "accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
+          allowFullScreen: true,
+          referrerPolicy: "strict-origin-when-cross-origin",
+        })}
+      </View>
+    );
+  }
 
   return (
     <Pressable
       style={styles.youtubePreview}
-      onPress={() => onOpenUrl(url, URL_STATUS.TRUSTED)}
+      onPress={() => onOpenUrl(youtubeConfig.normalizedUrl)}
     >
       <Image
-        source={{ uri: thumbnailUrl }}
+        source={{ uri: youtubeConfig.thumbnailUrl }}
         style={styles.youtubeThumbnail}
         resizeMode="cover"
       />
@@ -419,7 +391,6 @@ function YouTubeThumbnail({ url, onOpenUrl }) {
     </Pressable>
   );
 }
-
 function MessageCard({
   item,
   onOpenUrl,
@@ -427,7 +398,9 @@ function MessageCard({
   forcedUsername = null,
 }) {
   const urls = useMemo(() => {
-    return getUniqueValues(getNormalizedUrlsFromText(item?.text || ""));
+    return getUniqueValues(getNormalizedUrlsFromText(item?.text || "")).filter(
+      isYouTubeUrl,
+    );
   }, [item?.text]);
 
   const firstUrl = urls[0] || null;
@@ -464,39 +437,22 @@ function MessageCard({
         </View>
       </View>
 
-      {/* <MessageText message={item} onOpenUrl={onOpenUrl} /> */}
-
       {firstUrl ? (
-        <WebPreviewCard
-          url={firstUrl}
-          compact={compact}
-          previewEndpoint={LINK_PREVIEW_ENDPOINT}
-          onPress={(targetUrl) => onOpenUrl(targetUrl, URL_STATUS.TRUSTED)}
-        />
-      ) : null}
-
-      {firstUrl && getYouTubeThumbnailUrl(firstUrl) ? (
         <View style={styles.youtubePreviewBlock}>
-          <YouTubeThumbnail
+          <YouTubePlayer
             url={firstUrl}
-            onOpenUrl={(targetUrl) => onOpenUrl(targetUrl, URL_STATUS.TRUSTED)}
+            onOpenUrl={onOpenUrl}
+            mode={DEFAULT_YOUTUBE_RENDER_MODE}
           />
-        </View>
-      ) : null}
 
-      {urls.length > 0 ? (
-        <View style={styles.urlBadgesBlock}>
-          {urls.map((url) => {
-            const normalizedUrl = normalizeUrl(url);
-            const status = getUrlStatusFromMessage(item, normalizedUrl);
-
-            return (
-              <UrlBadge
-                key={`${item.id || item._id}-${normalizedUrl}`}
-                status={status}
-              />
-            );
-          })}
+          <View style={styles.youtubeOnlyBadge}>
+            <Ionicons name="logo-youtube" size={15} color="#b91c1c" />
+            <Text style={styles.youtubeOnlyBadgeText}>
+              {DEFAULT_YOUTUBE_RENDER_MODE === YOUTUBE_RENDER_MODE.EMBED
+                ? "YouTube embebido"
+                : "YouTube permitido"}
+            </Text>
+          </View>
         </View>
       ) : null}
 
@@ -623,24 +579,15 @@ export default function ChatScreen() {
     }
   }, [filteredMessages.length]);
 
-  const handleOpenUrl = useCallback(async (url, status) => {
-    const safeStatus = status || getInitialUrlStatus(url);
+  const handleOpenUrl = useCallback(async (url) => {
+    const normalizedUrl = normalizeUrl(url);
 
-    if (!canOpenUrlByStatus(safeStatus)) {
-      const reason = getUrlBlockedReason(safeStatus);
-
-      safeAlert("Enlace no disponible", reason);
+    if (!normalizedUrl || !isYouTubeUrl(normalizedUrl)) {
+      safeAlert("Enlace no permitido", "Solo se permiten enlaces de YouTube.");
       return;
     }
 
     try {
-      const normalizedUrl = normalizeUrl(url);
-
-      if (!normalizedUrl) {
-        safeAlert("URL no válida", "La URL no es válida.");
-        return;
-      }
-
       const supported = await Linking.canOpenURL(normalizedUrl);
 
       if (!supported) {
@@ -676,7 +623,7 @@ export default function ChatScreen() {
     if (urlsInPost.length > 1) {
       safeAlert(
         "Demasiados enlaces",
-        "Solo se permite publicar un enlace por mensaje.",
+        "Solo se permite publicar un enlace de YouTube por mensaje.",
       );
       return;
     }
@@ -685,6 +632,16 @@ export default function ChatScreen() {
       safeAlert(
         "URL duplicada",
         "El mensaje contiene la misma URL más de una vez.",
+      );
+      return;
+    }
+
+    const hasNonYouTubeUrl = uniqueUrlsInPost.some((url) => !isYouTubeUrl(url));
+
+    if (hasNonYouTubeUrl) {
+      safeAlert(
+        "Enlace no permitido",
+        "Solo se permite publicar enlaces de YouTube.",
       );
       return;
     }
@@ -904,7 +861,7 @@ export default function ChatScreen() {
                       />
 
                       <Text style={styles.inputHint} numberOfLines={1}>
-                        Se permite 1 enlace por mensaje: http:// o https://
+                        Solo se permite 1 enlace de YouTube por mensaje.
                       </Text>
                     </View>
 
@@ -1356,80 +1313,6 @@ const styles = StyleSheet.create({
     color: "#6b7280",
   },
 
-  messageText: {
-    fontSize: 16,
-    lineHeight: 23,
-    color: "#111827",
-    fontWeight: "500",
-  },
-
-  messageLink: {
-    color: "#0066cc",
-    fontWeight: "800",
-    textDecorationLine: "underline",
-  },
-
-  messageLinkDisabled: {
-    color: "#8a6d00",
-    textDecorationLine: "none",
-  },
-
-  urlBadgesBlock: {
-    marginTop: 12,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-
-  urlBadge: {
-    alignSelf: "flex-start",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-  },
-
-  urlBadgeSafe: {
-    backgroundColor: "#ecfdf3",
-    borderColor: "#b7ebc6",
-  },
-
-  urlBadgePending: {
-    backgroundColor: "#fff8db",
-    borderColor: "#f0d264",
-  },
-
-  urlBadgeSuspicious: {
-    backgroundColor: "#fff1e5",
-    borderColor: "#f5b66d",
-  },
-
-  urlBadgeMalicious: {
-    backgroundColor: "#fee2e2",
-    borderColor: "#fca5a5",
-  },
-
-  urlBadgeText: {
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  urlBadgeTextSafe: {
-    color: "#147a32",
-  },
-
-  urlBadgeTextPending: {
-    color: "#7a5a00",
-  },
-
-  urlBadgeTextSuspicious: {
-    color: "#9a4b00",
-  },
-
-  urlBadgeTextMalicious: {
-    color: "#991b1b",
-  },
-
   selfDeleteText: {
     marginTop: 10,
     fontSize: 12,
@@ -1535,6 +1418,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
+  youtubePlayer: {
+    width: "100%",
+    maxWidth: 520,
+    aspectRatio: 16 / 9,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+
   youtubePreview: {
     width: "100%",
     maxWidth: 360,
@@ -1564,5 +1458,24 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.65)",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  youtubeOnlyBadge: {
+    alignSelf: "flex-start",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fef2f2",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  youtubeOnlyBadgeText: {
+    color: "#b91c1c",
+    fontSize: 12,
+    fontWeight: "900",
   },
 });

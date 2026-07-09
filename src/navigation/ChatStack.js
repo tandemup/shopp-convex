@@ -7,6 +7,7 @@ import ChatScreenResponsive from "@/src/screens/chat/ChatScreenResponsive";
 import YesterdayNewsScreen from "@/src/screens/chat/YesterdayNewsScreen";
 import ParkingScreen from "@/src/screens/parking/ParkingScreen";
 import ParkingSettingsScreen from "@/src/screens/parking/ParkingSettingsScreen";
+import ParkingGpsDebugScreen from "@/src/screens/parking/ParkingGpsDebugScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -68,6 +69,14 @@ export default function ChatStack() {
           contentStyle: {
             backgroundColor: "#f8fafc",
           },
+        }}
+      />
+      <Stack.Screen
+        name={ROUTES.PARKING_GPS_DEBUG}
+        component={ParkingGpsDebugScreen}
+        options={{
+          title: "GPS Debug",
+          headerShown: false,
         }}
       />
     </Stack.Navigator>

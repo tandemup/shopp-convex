@@ -53,21 +53,18 @@ function MenuNavegacion2({
     });
   }, [navigation]);
 
+  const openParkingGpsDebug = React.useCallback(() => {
+    navigation.navigate(ROUTES.CHAT_TAB, {
+      screen: ROUTES.PARKING_GPS_DEBUG,
+    });
+  }, [navigation]);
+
   const openCarrefourTest = React.useCallback(() => {
     navigation.navigate(ROUTES.SHOPPING_TAB, {
       screen: ROUTES.CARREFOUR_TEST,
     });
   }, [navigation]);
-  /*    
-    {
-      key: "chat2",
-      label: "Chat2",
-      icon: "chatbox-ellipses-outline",
-      isNew: true,
-      variant: "purple",
-      onPress: openChatResponsive,
-    },
- */
+
   const actions = [
     {
       key: "new",
@@ -100,14 +97,6 @@ function MenuNavegacion2({
       badge: scannedCount,
     },
     {
-      key: "carrefour",
-      label: "Carrefour",
-      icon: "cart-outline",
-      isNew: true,
-      variant: "green",
-      onPress: openCarrefourTest,
-    },
-    {
       key: "chat",
       label: "Chat",
       icon: "chatbubble-ellipses-outline",
@@ -123,6 +112,27 @@ function MenuNavegacion2({
       variant: "green",
       onPress: openParking,
     },
+    ...(__DEV__
+      ? [
+          {
+            key: "carrefour",
+            label: "Carrefour",
+            icon: "cart-outline",
+            isNew: true,
+            variant: "green",
+            onPress: openCarrefourTest,
+          },
+
+          {
+            key: "parkingGpsDebug",
+            label: "GPS Debug",
+            icon: "locate-outline",
+            isNew: true,
+            variant: "orange",
+            onPress: openParkingGpsDebug,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -138,6 +148,7 @@ function MenuNavegacion2({
         {actions.map((action) => {
           const isPurple = action.variant === "purple";
           const isGreen = action.variant === "green";
+          const isOrange = action.variant === "orange";
 
           return (
             <Pressable
@@ -158,6 +169,7 @@ function MenuNavegacion2({
                 quickStyles.card,
                 isPurple && quickStyles.cardPurple,
                 isGreen && quickStyles.cardGreen,
+                isOrange && quickStyles.cardOrange,
                 pressed && quickStyles.cardPressed,
               ]}
             >
@@ -172,12 +184,21 @@ function MenuNavegacion2({
                   quickStyles.iconBox,
                   isPurple && quickStyles.iconBoxPurple,
                   isGreen && quickStyles.iconBoxGreen,
+                  isOrange && quickStyles.iconBoxOrange,
                 ]}
               >
                 <Ionicons
                   name={action.icon}
                   size={24}
-                  color={isPurple ? "#6d28d9" : isGreen ? "#15803d" : "#2563eb"}
+                  color={
+                    isPurple
+                      ? "#6d28d9"
+                      : isGreen
+                        ? "#15803d"
+                        : isOrange
+                          ? "#c2410c"
+                          : "#2563eb"
+                  }
                 />
 
                 {action.badge > 0 ? (
@@ -194,6 +215,7 @@ function MenuNavegacion2({
                   quickStyles.label,
                   isPurple && quickStyles.labelPurple,
                   isGreen && quickStyles.labelGreen,
+                  isOrange && quickStyles.labelOrange,
                 ]}
               >
                 {action.label}
@@ -536,6 +558,11 @@ const quickStyles = StyleSheet.create({
     backgroundColor: "#f0fdf4",
   },
 
+  cardOrange: {
+    borderColor: "#fdba74",
+    backgroundColor: "#fff7ed",
+  },
+
   cardPressed: {
     opacity: 0.8,
     transform: [{ scale: 0.98 }],
@@ -557,6 +584,10 @@ const quickStyles = StyleSheet.create({
 
   iconBoxGreen: {
     backgroundColor: "#dcfce7",
+  },
+
+  iconBoxOrange: {
+    backgroundColor: "#ffedd5",
   },
 
   badge: {
@@ -592,6 +623,11 @@ const quickStyles = StyleSheet.create({
 
   labelGreen: {
     color: "#14532d",
+    fontWeight: "800",
+  },
+
+  labelOrange: {
+    color: "#9a3412",
     fontWeight: "800",
   },
 

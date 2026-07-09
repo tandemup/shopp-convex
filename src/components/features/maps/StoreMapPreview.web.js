@@ -1,12 +1,24 @@
 import React, { useEffect, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  Marker,
+  Popup,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 import L from "leaflet";
 
 import "leaflet/dist/leaflet.css";
 
 const DEFAULT_LAT = 43.5322;
 const DEFAULT_LNG = -5.6611;
+
+const DEFAULT_ZOOM = 15;
+const DEFAULT_MIN_ZOOM = 13;
+const DEFAULT_MAX_ZOOM = 21;
+const DEFAULT_FIT_MAX_ZOOM = 18;
 
 function isValidNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
@@ -83,12 +95,55 @@ const parkingIcon = createPinIcon({
   label: "P",
 });
 
-function MapAutoFit({ destinationPoint, userPoint, parkingPoints }) {
+const selectedIcon = createPinIcon({
+  color: "#dc2626",
+  label: "X",
+});
+
+function MapClickHandler({ onMapPress }) {
+  useMapEvents({
+    click(event) {
+      if (typeof onMapPress !== "function") {
+        return;
+      }
+
+      const lat = Number(event?.latlng?.lat);
+      const lng = Number(event?.latlng?.lng);
+
+      if (!isValidCoords(lat, lng)) {
+        return;
+      }
+
+      onMapPress({
+        lat,
+        lng,
+        latitude: lat,
+        longitude: lng,
+      });
+    },
+  });
+
+  return null;
+}
+
+function MapAutoFit({
+  destinationPoint,
+  userPoint,
+  selectedPoint,
+  parkingPoints,
+  defaultZoom = DEFAULT_ZOOM,
+  fitMaxZoom = DEFAULT_FIT_MAX_ZOOM,
+}) {
   const map = useMap();
 
   const points = useMemo(() => {
-    return [destinationPoint, userPoint, ...parkingPoints].filter(Boolean);
-  }, [destinationPoint, userPoint, parkingPoints]);
+    return [
+      destinationPoint,
+      userPoint,
+      selectedPoint,
+      ...parkingPoints,
+    ].filter(Boolean);
+  }, [destinationPoint, userPoint, selectedPoint, parkingPoints]);
 
   const pointsKey = useMemo(() => {
     return points
@@ -172,6 +227,13 @@ export default function StoreMapPreview({
   userLat,
   userLng,
   parkingSpots = [],
+  onMapPress,
+  selectedLat,
+  selectedLng,
+  defaultZoom = DEFAULT_ZOOM,
+  minZoom = DEFAULT_MIN_ZOOM,
+  maxZoom = DEFAULT_MAX_ZOOM,
+  fitMaxZoom = DEFAULT_FIT_MAX_ZOOM,
 }) {
   const destinationPoint = useMemo(() => {
     const nextLat = Number(lat);
@@ -201,6 +263,20 @@ export default function StoreMapPreview({
     };
   }, [userLat, userLng]);
 
+  const selectedPoint = useMemo(() => {
+    const nextLat = Number(selectedLat);
+    const nextLng = Number(selectedLng);
+
+    if (!isValidCoords(nextLat, nextLng)) {
+      return null;
+    }
+
+    return {
+      lat: nextLat,
+      lng: nextLng,
+    };
+  }, [selectedLat, selectedLng]);
+
   const parkingPoints = useMemo(() => {
     if (!Array.isArray(parkingSpots)) {
       return [];
@@ -210,7 +286,8 @@ export default function StoreMapPreview({
   }, [parkingSpots]);
 
   const center = destinationPoint ||
-    userPoint || {
+    userPoint ||
+    selectedPoint || {
       lat: DEFAULT_LAT,
       lng: DEFAULT_LNG,
     };
@@ -219,7 +296,9 @@ export default function StoreMapPreview({
     <View style={styles.container}>
       <MapContainer
         center={[center.lat, center.lng]}
-        zoom={15}
+        zoom={defaultZoom}
+        minZoom={minZoom}
+        maxZoom={maxZoom}
         scrollWheelZoom
         style={styles.map}
         attributionControl
@@ -227,14 +306,19 @@ export default function StoreMapPreview({
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={maxZoom}
+          maxNativeZoom={19}
         />
+        <MapClickHandler onMapPress={onMapPress} />
 
         <MapAutoFit
           destinationPoint={destinationPoint}
           userPoint={userPoint}
+          selectedPoint={selectedPoint}
           parkingPoints={parkingPoints}
+          defaultZoom={defaultZoom}
+          fitMaxZoom={fitMaxZoom}
         />
-
         {destinationPoint ? (
           <Marker
             position={[destinationPoint.lat, destinationPoint.lng]}
@@ -259,9 +343,22 @@ export default function StoreMapPreview({
           </Marker>
         ) : null}
 
+        {selectedPoint ? (
+          <Marker
+            position={[selectedPoint.lat, selectedPoint.lng]}
+            icon={selectedIcon}
+          >
+            <Popup>
+              <strong>Punto seleccionado</strong>
+              <br />
+              {selectedPoint.lat.toFixed(6)}, {selectedPoint.lng.toFixed(6)}
+            </Popup>
+          </Marker>
+        ) : null}
+
         {parkingPoints.map((spot, index) => (
           <Marker
-            key={spot.id || `${spot.lat}-${spot.lng}-${index}`}
+            key={spot.id || spot._id || `${spot.lat}-${spot.lng}-${index}`}
             position={[spot.lat, spot.lng]}
             icon={parkingIcon}
           >
@@ -269,6 +366,12 @@ export default function StoreMapPreview({
               <strong>Plaza comunicada</strong>
               <br />
               {spot.lat.toFixed(6)}, {spot.lng.toFixed(6)}
+              {spot.revealedBy ? (
+                <>
+                  <br />
+                  {`Por: ${spot.revealedBy}`}
+                </>
+              ) : null}
             </Popup>
           </Marker>
         ))}
@@ -288,6 +391,11 @@ export default function StoreMapPreview({
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.parkingDot]} />
           <Text style={styles.legendText}>Plaza</Text>
+        </View>
+
+        <View style={styles.legendItem}>
+          <View style={[styles.legendDot, styles.selectedDot]} />
+          <Text style={styles.legendText}>Click</Text>
         </View>
       </View>
 
@@ -351,6 +459,10 @@ const styles = StyleSheet.create({
 
   parkingDot: {
     backgroundColor: "#f97316",
+  },
+
+  selectedDot: {
+    backgroundColor: "#dc2626",
   },
 
   legendText: {
