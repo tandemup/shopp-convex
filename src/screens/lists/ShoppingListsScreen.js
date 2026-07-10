@@ -112,6 +112,14 @@ function MenuNavegacion2({
       variant: "green",
       onPress: openParking,
     },
+    {
+      key: "parkingGpsDebug",
+      label: "GPS Debug",
+      icon: "locate-outline",
+      isNew: true,
+      variant: "orange",
+      onPress: openParkingGpsDebug,
+    },
     ...(__DEV__
       ? [
           {
@@ -121,15 +129,6 @@ function MenuNavegacion2({
             isNew: true,
             variant: "green",
             onPress: openCarrefourTest,
-          },
-
-          {
-            key: "parkingGpsDebug",
-            label: "GPS Debug",
-            icon: "locate-outline",
-            isNew: true,
-            variant: "orange",
-            onPress: openParkingGpsDebug,
           },
         ]
       : []),
