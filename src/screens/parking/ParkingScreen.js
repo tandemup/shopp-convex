@@ -467,6 +467,181 @@ function CoordinateMapToggle({ label, value, onToggle, disabled }) {
   );
 }
 
+function ParkingSpotsDropdown({ spots, loading, open, onToggle }) {
+  const spotCount = Array.isArray(spots) ? spots.length : 0;
+
+  return (
+    <CoordinateDropdown
+      title="Tabla parkingSpots"
+      subtitle={
+        loading
+          ? "Consultando plazas guardadas en Convex..."
+          : `${spotCount} ${
+              spotCount === 1 ? "registro visible" : "registros visibles"
+            }.`
+      }
+      open={open}
+      onToggle={onToggle}
+    >
+      {loading ? (
+        <View style={styles.parkingSpotsEmptyBox}>
+          <Ionicons name="cloud-download-outline" size={22} color="#64748b" />
+
+          <Text style={styles.parkingSpotsEmptyTitle}>
+            Cargando parkingSpots
+          </Text>
+
+          <Text style={styles.parkingSpotsEmptyText}>
+            Esperando la respuesta de Convex.
+          </Text>
+        </View>
+      ) : spotCount === 0 ? (
+        <View style={styles.parkingSpotsEmptyBox}>
+          <Ionicons name="location-outline" size={22} color="#94a3b8" />
+
+          <Text style={styles.parkingSpotsEmptyTitle}>
+            Sin plazas registradas
+          </Text>
+
+          <Text style={styles.parkingSpotsEmptyText}>
+            La consulta no ha devuelto registros de parkingSpots dentro del
+            radio actual.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.parkingSpotsList}>
+          {spots.map((spot, index) => {
+            const spotId = spot.id || spot._id || `parking-spot-${index}`;
+
+            const statusLabel = spot.status || "sin estado";
+
+            const dateValue =
+              spot.revealedAt ||
+              spot.updatedAt ||
+              spot.createdAt ||
+              spot._creationTime;
+
+            const hasCoordinates =
+              typeof spot.lat === "number" && typeof spot.lng === "number";
+
+            return (
+              <View key={String(spotId)} style={styles.parkingSpotRow}>
+                <View style={styles.parkingSpotHeader}>
+                  <View style={styles.parkingSpotTitleBox}>
+                    <Text style={styles.parkingSpotTitle}>
+                      Plaza {index + 1}
+                    </Text>
+
+                    <Text numberOfLines={1} style={styles.parkingSpotId}>
+                      {String(spotId)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.parkingSpotStatusBadge}>
+                    <Text style={styles.parkingSpotStatusText}>
+                      {statusLabel}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.parkingSpotDataRow}>
+                  <Text style={styles.parkingSpotDataLabel}>Coordenadas</Text>
+
+                  <Text style={styles.parkingSpotDataValue}>
+                    {hasCoordinates
+                      ? `${spot.lat.toFixed(6)}, ${spot.lng.toFixed(6)}`
+                      : "Sin coordenadas"}
+                  </Text>
+                </View>
+
+                <View style={styles.parkingSpotDataRow}>
+                  <Text style={styles.parkingSpotDataLabel}>Alias</Text>
+
+                  <Text style={styles.parkingSpotDataValue}>
+                    {spot.alias ||
+                      spot.revealedBy ||
+                      spot.parkingAlias ||
+                      "anonymous"}
+                  </Text>
+                </View>
+
+                {spot.city ? (
+                  <View style={styles.parkingSpotDataRow}>
+                    <Text style={styles.parkingSpotDataLabel}>Ciudad</Text>
+
+                    <Text style={styles.parkingSpotDataValue}>{spot.city}</Text>
+                  </View>
+                ) : null}
+
+                {spot.zone ? (
+                  <View style={styles.parkingSpotDataRow}>
+                    <Text style={styles.parkingSpotDataLabel}>Zona</Text>
+
+                    <Text style={styles.parkingSpotDataValue}>{spot.zone}</Text>
+                  </View>
+                ) : null}
+
+                {typeof spot.accuracy === "number" ? (
+                  <View style={styles.parkingSpotDataRow}>
+                    <Text style={styles.parkingSpotDataLabel}>Precisión</Text>
+
+                    <Text style={styles.parkingSpotDataValue}>
+                      {Math.round(spot.accuracy)} m
+                    </Text>
+                  </View>
+                ) : null}
+
+                {spot.locationSource ? (
+                  <View style={styles.parkingSpotDataRow}>
+                    <Text style={styles.parkingSpotDataLabel}>Origen</Text>
+
+                    <Text style={styles.parkingSpotDataValue}>
+                      {spot.locationSource}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {spot.destinationName ? (
+                  <View style={styles.parkingSpotDataRow}>
+                    <Text style={styles.parkingSpotDataLabel}>Destino</Text>
+
+                    <Text style={styles.parkingSpotDataValue}>
+                      {spot.destinationName}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {spot.destinationAddress ? (
+                  <View style={styles.parkingSpotDataRow}>
+                    <Text style={styles.parkingSpotDataLabel}>Dirección</Text>
+
+                    <Text style={styles.parkingSpotDataValue}>
+                      {spot.destinationAddress}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <View
+                  style={[
+                    styles.parkingSpotDataRow,
+                    styles.parkingSpotDataRowLast,
+                  ]}
+                >
+                  <Text style={styles.parkingSpotDataLabel}>Actualización</Text>
+
+                  <Text style={styles.parkingSpotDataValue}>
+                    {dateValue ? formatDateTime(dateValue) : "Sin datos"}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </CoordinateDropdown>
+  );
+}
+
 function LocationSummary({
   userLatitude,
   userLongitude,
@@ -598,6 +773,7 @@ function LocationSection({
   mapCenter,
   userCoords,
   activeParkingSpots,
+  parkingSpotsLoading,
   onMarkValidSpot,
   markingValidSpot,
   validParkingSpotsCount,
@@ -605,6 +781,7 @@ function LocationSection({
   const [userCoordinatesExpanded, setUserCoordinatesExpanded] = useState(false);
   const [destinationCoordinatesExpanded, setDestinationCoordinatesExpanded] =
     useState(false);
+  const [parkingSpotsExpanded, setParkingSpotsExpanded] = useState(false);
 
   const [showUserOnMap, setShowUserOnMap] = useState(true);
   const [showDestinationOnMap, setShowDestinationOnMap] = useState(true);
@@ -700,7 +877,12 @@ function LocationSection({
               setShowDestinationOnMap((value) => !value)
             }
           />
-
+          <ParkingSpotsDropdown
+            spots={activeParkingSpots}
+            loading={parkingSpotsLoading}
+            open={parkingSpotsExpanded}
+            onToggle={() => setParkingSpotsExpanded((value) => !value)}
+          />
           <Pressable
             accessibilityRole="button"
             style={[
@@ -930,7 +1112,6 @@ export default function ParkingScreen({ navigation }) {
 
     return null;
   }, [currentState.latitude, currentState.longitude]);
-
   const activeParkingSpots = useMemo(() => {
     if (!Array.isArray(validParkingSpots)) {
       return [];
@@ -941,12 +1122,26 @@ export default function ParkingScreen({ navigation }) {
         return typeof spot.lat === "number" && typeof spot.lng === "number";
       })
       .map((spot) => ({
+        ...spot,
+
         id: spot.id || String(spot._id),
+
         lat: spot.lat,
         lng: spot.lng,
-        revealedBy: spot.revealedBy || "anonymous",
+
+        alias:
+          spot.alias || spot.revealedBy || spot.parkingAlias || "anonymous",
+
+        revealedBy:
+          spot.revealedBy || spot.alias || spot.parkingAlias || "anonymous",
+
         status: spot.status || "free",
-        createdAt: spot.revealedAt || spot.updatedAt,
+
+        createdAt:
+          spot.createdAt ||
+          spot.revealedAt ||
+          spot.updatedAt ||
+          spot._creationTime,
       }));
   }, [validParkingSpots]);
   const availableNextStatuses = useMemo(
@@ -1896,6 +2091,7 @@ export default function ParkingScreen({ navigation }) {
           mapCenter={mapCenter}
           userCoords={userCoords}
           activeParkingSpots={activeParkingSpots}
+          parkingSpotsLoading={validParkingSpots === undefined}
           onMarkValidSpot={markCurrentPositionAsValidSpot}
           markingValidSpot={markingValidSpot}
           validParkingSpotsCount={activeParkingSpots.length}
@@ -2634,7 +2830,118 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
   },
+  parkingSpotsList: {
+    gap: 10,
+  },
 
+  parkingSpotsEmptyBox: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 22,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+
+  parkingSpotsEmptyTitle: {
+    marginTop: 7,
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  parkingSpotsEmptyText: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#64748b",
+    textAlign: "center",
+    fontWeight: "600",
+  },
+
+  parkingSpotRow: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    overflow: "hidden",
+  },
+
+  parkingSpotHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+
+  parkingSpotTitleBox: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  parkingSpotTitle: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  parkingSpotId: {
+    marginTop: 2,
+    fontSize: 10,
+    color: "#64748b",
+    fontWeight: "600",
+  },
+
+  parkingSpotStatusBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#dcfce7",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+  },
+
+  parkingSpotStatusText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#15803d",
+    textTransform: "uppercase",
+  },
+
+  parkingSpotDataRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+
+  parkingSpotDataRowLast: {
+    borderBottomWidth: 0,
+  },
+
+  parkingSpotDataLabel: {
+    fontSize: 12,
+    color: "#64748b",
+    fontWeight: "800",
+  },
+
+  parkingSpotDataValue: {
+    flex: 1,
+    fontSize: 12,
+    color: "#0f172a",
+    fontWeight: "900",
+    textAlign: "right",
+  },
   collapsibleHeaderText: {
     flex: 1,
     minWidth: 0,
