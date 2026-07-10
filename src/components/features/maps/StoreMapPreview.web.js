@@ -90,9 +90,88 @@ const userIcon = createPinIcon({
   label: "U",
 });
 
-const parkingIcon = createPinIcon({
+function createPrecisionPinIcon({
+  color = "#f97316",
+  centerColor = "#ffffff",
+  size = 42,
+}) {
+  const width = size;
+  const height = Math.round(size * 1.35);
+
+  return L.divIcon({
+    className: "shopp-precision-marker",
+
+    html: `
+      <div
+        style="
+          width: ${width}px;
+          height: ${height}px;
+          display: flex;
+          align-items: flex-start;
+          justify-content: center;
+          pointer-events: auto;
+        "
+      >
+        <svg
+          width="${width}"
+          height="${height}"
+          viewBox="0 0 42 56"
+          xmlns="http://www.w3.org/2000/svg"
+          style="
+            display: block;
+            overflow: visible;
+            filter: drop-shadow(
+              0 5px 5px rgba(15, 23, 42, 0.32)
+            );
+          "
+        >
+          <path
+            d="
+              M21 1
+              C10.2 1 1.5 9.7 1.5 20.5
+              C1.5 34.3 15.3 48.6 21 55
+              C26.7 48.6 40.5 34.3 40.5 20.5
+              C40.5 9.7 31.8 1 21 1
+              Z
+            "
+            fill="${color}"
+            stroke="#ffffff"
+            stroke-width="3"
+            stroke-linejoin="round"
+          />
+
+          <circle
+            cx="21"
+            cy="20.5"
+            r="8"
+            fill="${centerColor}"
+          />
+
+          <circle
+            cx="21"
+            cy="20.5"
+            r="5"
+            fill="rgba(15, 23, 42, 0.10)"
+          />
+        </svg>
+      </div>
+    `,
+
+    iconSize: [width, height],
+
+    /*
+     * El extremo inferior del SVG coincide exactamente
+     * con la coordenada del parkingSpot.
+     */
+    iconAnchor: [Math.round(width / 2), height],
+
+    popupAnchor: [0, -height + 8],
+  });
+}
+const parkingIcon = createPrecisionPinIcon({
   color: "#f97316",
-  label: "P",
+  centerColor: "#ffffff",
+  size: 25,
 });
 
 const selectedIcon = createPinIcon({
@@ -126,6 +205,13 @@ function MapClickHandler({ onMapPress }) {
   return null;
 }
 
+/*
+ * Este componente solo se monta cuando preserveViewportOnMarkerChange
+ * es false.
+ *
+ * En la pantalla GPS Debug no se monta, por lo que añadir o borrar
+ * marcadores no cambia automáticamente el centro ni el zoom.
+ */
 function MapAutoFit({
   destinationPoint,
   userPoint,
@@ -157,28 +243,37 @@ function MapAutoFit({
     let frameTwo = null;
 
     const fitMap = () => {
-      if (cancelled || !map) return;
+      if (cancelled || !map) {
+        return;
+      }
 
       const container =
         typeof map.getContainer === "function" ? map.getContainer() : null;
 
-      if (!container || !container.isConnected) return;
-      if (!map._container || !map._mapPane) return;
+      if (!container || !container.isConnected) {
+        return;
+      }
+
+      if (!map._container || !map._mapPane) {
+        return;
+      }
 
       try {
         map.invalidateSize(false);
 
         if (points.length === 0) {
-          map.setView([DEFAULT_LAT, DEFAULT_LNG], 14, {
+          map.setView([DEFAULT_LAT, DEFAULT_LNG], defaultZoom, {
             animate: false,
           });
+
           return;
         }
 
         if (points.length === 1) {
-          map.setView([points[0].lat, points[0].lng], 16, {
+          map.setView([points[0].lat, points[0].lng], defaultZoom, {
             animate: false,
           });
+
           return;
         }
 
@@ -189,7 +284,7 @@ function MapAutoFit({
         if (bounds.isValid()) {
           map.fitBounds(bounds, {
             padding: [34, 34],
-            maxZoom: 17,
+            maxZoom: fitMaxZoom,
             animate: false,
           });
         }
@@ -216,7 +311,7 @@ function MapAutoFit({
         cancelAnimationFrame(frameTwo);
       }
     };
-  }, [map, pointsKey, points.length]);
+  }, [map, pointsKey, points.length, defaultZoom, fitMaxZoom]);
 
   return null;
 }
@@ -234,6 +329,9 @@ export default function StoreMapPreview({
   minZoom = DEFAULT_MIN_ZOOM,
   maxZoom = DEFAULT_MAX_ZOOM,
   fitMaxZoom = DEFAULT_FIT_MAX_ZOOM,
+  zoomControlsEnabled = true,
+  zoomGesturesEnabled = false,
+  preserveViewportOnMarkerChange = false,
 }) {
   const destinationPoint = useMemo(() => {
     const nextLat = Number(lat);
@@ -285,7 +383,12 @@ export default function StoreMapPreview({
     return parkingSpots.map(normalizePoint).filter(Boolean);
   }, [parkingSpots]);
 
-  const center = destinationPoint ||
+  /*
+   * MapContainer utiliza center solo durante su creación.
+   * No se proporciona una key variable y, por tanto, no se
+   * reconstruye cuando cambian los marcadores.
+   */
+  const initialCenter = destinationPoint ||
     userPoint ||
     selectedPoint || {
       lat: DEFAULT_LAT,
@@ -295,13 +398,18 @@ export default function StoreMapPreview({
   return (
     <View style={styles.container}>
       <MapContainer
-        center={[center.lat, center.lng]}
+        center={[initialCenter.lat, initialCenter.lng]}
         zoom={defaultZoom}
         minZoom={minZoom}
         maxZoom={maxZoom}
-        scrollWheelZoom
+        dragging
+        zoomControl={zoomControlsEnabled}
+        scrollWheelZoom={zoomGesturesEnabled}
+        touchZoom={zoomGesturesEnabled}
+        doubleClickZoom={zoomGesturesEnabled}
+        boxZoom={zoomGesturesEnabled}
+        keyboard={zoomGesturesEnabled}
         style={styles.map}
-        attributionControl
       >
         <TileLayer
           attribution="&copy; OpenStreetMap contributors"
@@ -309,16 +417,20 @@ export default function StoreMapPreview({
           maxZoom={maxZoom}
           maxNativeZoom={19}
         />
+
         <MapClickHandler onMapPress={onMapPress} />
 
-        <MapAutoFit
-          destinationPoint={destinationPoint}
-          userPoint={userPoint}
-          selectedPoint={selectedPoint}
-          parkingPoints={parkingPoints}
-          defaultZoom={defaultZoom}
-          fitMaxZoom={fitMaxZoom}
-        />
+        {!preserveViewportOnMarkerChange ? (
+          <MapAutoFit
+            destinationPoint={destinationPoint}
+            userPoint={userPoint}
+            selectedPoint={selectedPoint}
+            parkingPoints={parkingPoints}
+            defaultZoom={defaultZoom}
+            fitMaxZoom={fitMaxZoom}
+          />
+        ) : null}
+
         {destinationPoint ? (
           <Marker
             position={[destinationPoint.lat, destinationPoint.lng]}
@@ -363,13 +475,13 @@ export default function StoreMapPreview({
             icon={parkingIcon}
           >
             <Popup>
-              <strong>Plaza comunicada</strong>
+              <strong>Muestra GPS</strong>
               <br />
               {spot.lat.toFixed(6)}, {spot.lng.toFixed(6)}
               {spot.revealedBy ? (
                 <>
                   <br />
-                  {`Por: ${spot.revealedBy}`}
+                  {spot.revealedBy}
                 </>
               ) : null}
             </Popup>
@@ -385,24 +497,24 @@ export default function StoreMapPreview({
 
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.destinationDot]} />
-          <Text style={styles.legendText}>Destino</Text>
+          <Text style={styles.legendText}>Centro</Text>
         </View>
 
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.parkingDot]} />
-          <Text style={styles.legendText}>Plaza</Text>
+          <Text style={styles.legendText}>Muestra</Text>
         </View>
 
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, styles.selectedDot]} />
-          <Text style={styles.legendText}>Click</Text>
+          <Text style={styles.legendText}>Punto tocado</Text>
         </View>
       </View>
 
       {!parkingPoints.length ? (
         <View style={styles.emptySpotsBox} pointerEvents="none">
           <Text style={styles.emptySpotsText}>
-            No hay plazas libres reveladas ahora mismo.
+            No hay muestras GPS guardadas.
           </Text>
         </View>
       ) : null}

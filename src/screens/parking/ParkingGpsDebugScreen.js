@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -19,6 +20,11 @@ import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
 
 moment.locale("es");
+
+const MAP_MODE = {
+  EXPLORE: "explore",
+  ADD_SAMPLE: "add-sample",
+};
 
 const DEFAULT_CENTER = {
   lat: 43.5322,
@@ -247,6 +253,7 @@ function GpsPointCard({ spot, index, onDelete }) {
       ) : null}
 
       {spot.note ? <Text style={styles.pointNote}>{spot.note}</Text> : null}
+
       <Pressable
         style={styles.deleteSampleButton}
         onPress={() => onDelete?.(spot)}
@@ -262,6 +269,7 @@ export default function ParkingGpsDebugScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   const [lastLocation, setLastLocation] = useState(null);
   const [selectedPoint, setSelectedPoint] = useState(null);
+  const [mapMode, setMapMode] = useState(MAP_MODE.EXPLORE);
 
   const createGpsDebugParkingSpot = useMutation(
     api.parking.createGpsDebugParkingSpot,
@@ -296,14 +304,13 @@ export default function ParkingGpsDebugScreen({ navigation }) {
       }));
   }, [spots]);
 
+  /*
+   * selectedPoint no forma parte de mapCenter.
+   *
+   * De esta forma, tocar el mapa o guardar una nueva muestra no modifica
+   * el centro ni la escala actual.
+   */
   const mapCenter = useMemo(() => {
-    if (selectedPoint) {
-      return {
-        lat: selectedPoint.lat,
-        lng: selectedPoint.lng,
-      };
-    }
-
     if (lastLocation) {
       return {
         lat: lastLocation.latitude,
@@ -319,9 +326,9 @@ export default function ParkingGpsDebugScreen({ navigation }) {
     }
 
     return DEFAULT_CENTER;
-  }, [selectedPoint, lastLocation, parkingSpots]);
+  }, [lastLocation, parkingSpots]);
 
-  const handleMapPress = (point) => {
+  const handleMapPress = async (point) => {
     const lat = Number(point?.lat ?? point?.latitude);
     const lng = Number(point?.lng ?? point?.longitude);
 
@@ -329,13 +336,46 @@ export default function ParkingGpsDebugScreen({ navigation }) {
       return;
     }
 
-    setSelectedPoint({
+    const nextPoint = {
       lat,
       lng,
       latitude: lat,
       longitude: lng,
       selectedAt: Date.now(),
-    });
+    };
+
+    /*
+     * En ambos modos mostramos las coordenadas tocadas.
+     *
+     * En modo EXPLORE no se guarda nada.
+     * En modo ADD_SAMPLE se crea inmediatamente una muestra.
+     */
+    setSelectedPoint(nextPoint);
+
+    if (mapMode !== MAP_MODE.ADD_SAMPLE || saving) {
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      await createGpsDebugParkingSpot({
+        lat,
+        lng,
+        accuracy: undefined,
+        locationSource: "map-click",
+        note: `Muestra manual ${formatDateTime(Date.now())}`,
+      });
+    } catch (error) {
+      console.warn("[ParkingGpsDebugScreen] Error saving map sample:", error);
+
+      safeAlert(
+        "No se pudo guardar",
+        error?.message || "No se pudo guardar la muestra seleccionada.",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveCurrentPosition = async () => {
@@ -367,39 +407,6 @@ export default function ParkingGpsDebugScreen({ navigation }) {
       safeAlert(
         "No se pudo guardar",
         error?.message || "No se pudo leer o guardar la ubicación.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const saveSelectedPoint = async () => {
-    if (saving || !selectedPoint) return;
-
-    setSaving(true);
-
-    try {
-      await createGpsDebugParkingSpot({
-        lat: selectedPoint.latitude,
-        lng: selectedPoint.longitude,
-        accuracy: undefined,
-        locationSource: "map-click",
-        note: `Punto seleccionado en mapa ${formatDateTime(Date.now())}`,
-      });
-
-      safeAlert(
-        "Punto guardado",
-        "Las coordenadas seleccionadas en el mapa se han guardado en parkingSpots.",
-      );
-    } catch (error) {
-      console.warn(
-        "[ParkingGpsDebugScreen] Error saving selected point:",
-        error,
-      );
-
-      safeAlert(
-        "No se pudo guardar",
-        error?.message || "No se pudo guardar el punto seleccionado.",
       );
     } finally {
       setSaving(false);
@@ -459,6 +466,11 @@ export default function ParkingGpsDebugScreen({ navigation }) {
     setSelectedPoint(null);
   };
 
+  const changeMapMode = (nextMode) => {
+    setMapMode(nextMode);
+    setSelectedPoint(null);
+  };
+
   return (
     <ScrollView
       style={styles.screen}
@@ -485,6 +497,7 @@ export default function ParkingGpsDebugScreen({ navigation }) {
 
       <View style={styles.privateBox}>
         <Ionicons name="lock-closed-outline" size={18} color="#92400e" />
+
         <Text style={styles.privateText}>
           No mostrar esta pantalla en menús públicos. Úsala solo para pruebas
           internas.
@@ -495,6 +508,7 @@ export default function ParkingGpsDebugScreen({ navigation }) {
         <View style={styles.cardHeader}>
           <View style={styles.cardHeaderText}>
             <Text style={styles.cardTitle}>Mapa de muestras GPS</Text>
+
             <Text style={styles.cardSubtitle}>
               Puntos guardados: {parkingSpots.length}
             </Text>
@@ -503,15 +517,98 @@ export default function ParkingGpsDebugScreen({ navigation }) {
           {saving ? <ActivityIndicator size="small" color="#15803d" /> : null}
         </View>
 
+        <View style={styles.modeSelector}>
+          <Pressable
+            style={[
+              styles.modeOption,
+              mapMode === MAP_MODE.EXPLORE && styles.modeOptionActive,
+            ]}
+            onPress={() => changeMapMode(MAP_MODE.EXPLORE)}
+          >
+            <Ionicons
+              name="hand-left-outline"
+              size={18}
+              color={mapMode === MAP_MODE.EXPLORE ? "#ffffff" : "#334155"}
+            />
+
+            <View style={styles.modeOptionText}>
+              <Text
+                style={[
+                  styles.modeOptionTitle,
+                  mapMode === MAP_MODE.EXPLORE && styles.modeOptionTitleActive,
+                ]}
+              >
+                Explorar y consultar
+              </Text>
+
+              <Text
+                style={[
+                  styles.modeOptionDescription,
+                  mapMode === MAP_MODE.EXPLORE &&
+                    styles.modeOptionDescriptionActive,
+                ]}
+              >
+                Zoom, desplazamiento y lectura de coordenadas
+              </Text>
+            </View>
+          </Pressable>
+
+          <View
+            style={[
+              styles.modeSwitchBox,
+              mapMode === MAP_MODE.ADD_SAMPLE && styles.modeSwitchBoxActive,
+            ]}
+          >
+            <View style={styles.modeSwitchText}>
+              <Text
+                style={[
+                  styles.modeSwitchLabel,
+                  mapMode === MAP_MODE.ADD_SAMPLE &&
+                    styles.modeSwitchLabelActive,
+                ]}
+              >
+                Añadir muestra al tocar
+              </Text>
+
+              <Text
+                style={[
+                  styles.modeSwitchDescription,
+                  mapMode === MAP_MODE.ADD_SAMPLE &&
+                    styles.modeSwitchDescriptionActive,
+                ]}
+              >
+                Cada toque crea una muestra nueva
+              </Text>
+            </View>
+
+            <Switch
+              value={mapMode === MAP_MODE.ADD_SAMPLE}
+              onValueChange={(enabled) =>
+                changeMapMode(enabled ? MAP_MODE.ADD_SAMPLE : MAP_MODE.EXPLORE)
+              }
+              trackColor={{
+                false: "#cbd5e1",
+                true: "#86efac",
+              }}
+              thumbColor={
+                mapMode === MAP_MODE.ADD_SAMPLE ? "#15803d" : "#f8fafc"
+              }
+              ios_backgroundColor="#cbd5e1"
+            />
+          </View>
+        </View>
+
         <View style={styles.mapHintBox}>
           <Ionicons
             name="information-circle-outline"
             size={17}
             color="#475569"
           />
+
           <Text style={styles.mapHintText}>
-            Pulsa en el mapa para obtener las coordenadas de un punto concreto.
-            Después puedes guardarlo como muestra manual.
+            {mapMode === MAP_MODE.ADD_SAMPLE
+              ? "Modo añadir activo: cada toque válido crea inmediatamente una nueva muestra. El mapa mantiene su centro y su escala."
+              : "Modo consulta activo: usa zoom y desplazamiento libremente. Al tocar solo se muestran las coordenadas; no se crea ninguna muestra."}
           </Text>
         </View>
 
@@ -529,6 +626,9 @@ export default function ParkingGpsDebugScreen({ navigation }) {
             minZoom={14}
             maxZoom={21}
             fitMaxZoom={18}
+            preserveViewportOnMarkerChange
+            zoomControlsEnabled
+            zoomGesturesEnabled={false}
           />
         </View>
 
@@ -537,8 +637,11 @@ export default function ParkingGpsDebugScreen({ navigation }) {
             <View style={styles.selectedPointHeader}>
               <View style={styles.selectedPointTitleRow}>
                 <Ionicons name="pin-outline" size={18} color="#dc2626" />
+
                 <Text style={styles.selectedPointTitle}>
-                  Punto seleccionado en el mapa
+                  {mapMode === MAP_MODE.ADD_SAMPLE
+                    ? "Última muestra añadida"
+                    : "Punto consultado en el mapa"}
                 </Text>
               </View>
 
@@ -567,24 +670,11 @@ export default function ParkingGpsDebugScreen({ navigation }) {
 
             <View style={styles.pointRow}>
               <Text style={styles.pointLabel}>Seleccionado</Text>
+
               <Text style={styles.pointValue}>
                 {formatDateTime(selectedPoint.selectedAt)}
               </Text>
             </View>
-
-            <Pressable
-              style={[
-                styles.saveSelectedButton,
-                saving && styles.saveButtonDisabled,
-              ]}
-              onPress={saveSelectedPoint}
-              disabled={saving}
-            >
-              <Ionicons name="add-circle-outline" size={18} color="#ffffff" />
-              <Text style={styles.saveSelectedButtonText}>
-                Guardar punto seleccionado
-              </Text>
-            </Pressable>
           </View>
         ) : null}
 
@@ -594,6 +684,7 @@ export default function ParkingGpsDebugScreen({ navigation }) {
           disabled={saving}
         >
           <Ionicons name="locate-outline" size={18} color="#ffffff" />
+
           <Text style={styles.saveButtonText}>
             {saving
               ? "Leyendo y guardando..."
@@ -622,6 +713,7 @@ export default function ParkingGpsDebugScreen({ navigation }) {
 
           <View style={styles.pointRow}>
             <Text style={styles.pointLabel}>Precisión declarada</Text>
+
             <Text style={styles.pointValue}>
               {typeof lastLocation.accuracy === "number"
                 ? `±${Math.round(lastLocation.accuracy)} m`
@@ -743,8 +835,11 @@ const styles = StyleSheet.create({
         boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
       },
       default: {
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 3 },
+        shadowColor: "#000000",
+        shadowOffset: {
+          width: 0,
+          height: 3,
+        },
         shadowOpacity: 0.08,
         shadowRadius: 8,
         elevation: 2,
@@ -775,6 +870,100 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontSize: 13,
     fontWeight: "800",
+  },
+
+  modeSelector: {
+    marginBottom: 12,
+    gap: 10,
+  },
+
+  modeOption: {
+    minHeight: 64,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#f8fafc",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  modeOptionActive: {
+    borderColor: "#15803d",
+    backgroundColor: "#15803d",
+  },
+
+  modeOptionText: {
+    flex: 1,
+  },
+
+  modeOptionTitle: {
+    color: "#334155",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  modeOptionTitleActive: {
+    color: "#ffffff",
+  },
+
+  modeOptionDescription: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
+
+  modeOptionDescriptionActive: {
+    color: "#dcfce7",
+  },
+
+  modeSwitchBox: {
+    minHeight: 64,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    backgroundColor: "#f0fdf4",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  modeSwitchBoxActive: {
+    borderColor: "#15803d",
+    backgroundColor: "#dcfce7",
+  },
+
+  modeSwitchText: {
+    flex: 1,
+  },
+
+  modeSwitchLabel: {
+    color: "#166534",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  modeSwitchLabelActive: {
+    color: "#14532d",
+  },
+
+  modeSwitchDescription: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+  },
+
+  modeSwitchDescriptionActive: {
+    color: "#166534",
   },
 
   mapHintBox: {
@@ -816,6 +1005,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    paddingHorizontal: 14,
   },
 
   saveButtonDisabled: {
@@ -826,6 +1016,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 15,
     fontWeight: "900",
+    textAlign: "center",
   },
 
   selectedPointBox: {
@@ -865,23 +1056,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#fee2e2",
-  },
-
-  saveSelectedButton: {
-    marginTop: 10,
-    minHeight: 46,
-    borderRadius: 15,
-    backgroundColor: "#dc2626",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-
-  saveSelectedButtonText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "900",
   },
 
   pointRow: {
@@ -971,6 +1145,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
+
   deleteSampleButton: {
     marginTop: 10,
     minHeight: 38,

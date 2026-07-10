@@ -718,23 +718,6 @@ function LocationSection({
                 : "Actualizar ubicación"}
             </Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={[
-              styles.validSpotButton,
-              markingValidSpot && styles.actionButtonDisabled,
-            ]}
-            onPress={onMarkValidSpot}
-            disabled={markingValidSpot}
-          >
-            <Ionicons name="add-circle-outline" size={18} color="#15803d" />
-
-            <Text style={styles.validSpotButtonText}>
-              {markingValidSpot
-                ? "Guardando plaza..."
-                : "Marcar posición válida para aparcar"}
-            </Text>
-          </Pressable>
 
           <Text style={styles.validSpotCounterText}>
             {validParkingSpotsCount > 0
@@ -838,6 +821,8 @@ export default function ParkingScreen({ navigation }) {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [locationExpanded, setLocationExpanded] = useState(false);
+  const [statusExpanded, setStatusExpanded] = useState(false);
+  const [activityExpanded, setActivityExpanded] = useState(false);
   const [locationPermissionStatus, setLocationPermissionStatus] =
     useState(null);
   const [markingValidSpot, setMarkingValidSpot] = useState(false);
@@ -1811,36 +1796,68 @@ export default function ParkingScreen({ navigation }) {
         </View>
 
         <View style={styles.card}>
-          <View style={styles.sectionHeader}>
+          <Pressable
+            style={styles.collapsibleHeader}
+            onPress={() => setStatusExpanded((value) => !value)}
+            accessibilityRole="button"
+            accessibilityState={{
+              expanded: statusExpanded,
+            }}
+            accessibilityLabel="Cambiar estado"
+          >
+            <View style={styles.sectionHeaderLeft}>
+              <Ionicons
+                name="swap-horizontal-outline"
+                size={22}
+                color="#2563eb"
+              />
+
+              <View style={styles.collapsibleHeaderText}>
+                <Text style={styles.sectionTitle}>Cambiar estado</Text>
+
+                <Text style={styles.sectionSubtitle}>
+                  Estado actual:{" "}
+                  {PARKING_STATUS_LABELS[currentState.status] || "Sin estado"}
+                </Text>
+              </View>
+            </View>
+
             <Ionicons
-              name="swap-horizontal-outline"
+              name={statusExpanded ? "chevron-up" : "chevron-down"}
               size={22}
-              color="#2563eb"
+              color="#111827"
             />
-            <Text style={styles.sectionTitle}>Cambiar estado</Text>
-          </View>
+          </Pressable>
 
-          <View style={styles.statusButtons}>
-            {renderStatusButton(PARKING_STATUS.LOOKING, "search-outline")}
-            {renderStatusButton(PARKING_STATUS.PARKED, "car-outline")}
-            {renderStatusButton(PARKING_STATUS.LEAVING, "exit-outline")}
-            {renderStatusButton(PARKING_STATUS.ABANDONED, "walk-outline")}
-            {renderStatusButton(
-              PARKING_STATUS.CANCELLED,
-              "close-circle-outline",
-            )}
-          </View>
+          {statusExpanded ? (
+            <View style={styles.statusDropdownContent}>
+              <View style={styles.statusButtons}>
+                {renderStatusButton(PARKING_STATUS.LOOKING, "search-outline")}
 
-          {canShowRestartButton ? (
-            <Pressable style={styles.resetButton} onPress={resetFlow}>
-              <Ionicons name="refresh-outline" size={18} color="#2563eb" />
-              <Text style={styles.resetButtonText}>
-                Empezar de nuevo como buscando plaza
-              </Text>
-            </Pressable>
+                {renderStatusButton(PARKING_STATUS.PARKED, "car-outline")}
+
+                {renderStatusButton(PARKING_STATUS.LEAVING, "exit-outline")}
+
+                {renderStatusButton(PARKING_STATUS.ABANDONED, "walk-outline")}
+
+                {renderStatusButton(
+                  PARKING_STATUS.CANCELLED,
+                  "close-circle-outline",
+                )}
+              </View>
+
+              {canShowRestartButton ? (
+                <Pressable style={styles.resetButton} onPress={resetFlow}>
+                  <Ionicons name="refresh-outline" size={18} color="#2563eb" />
+
+                  <Text style={styles.resetButtonText}>
+                    Empezar de nuevo como buscando plaza
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
           ) : null}
         </View>
-
         <View style={styles.card}>
           <View style={styles.sectionHeader}>
             <Ionicons
@@ -1885,46 +1902,82 @@ export default function ParkingScreen({ navigation }) {
         />
 
         <View style={styles.card}>
-          <View style={styles.activityHeader}>
-            <View style={styles.sectionHeaderLeft}>
-              <Ionicons name="time-outline" size={22} color="#2563eb" />
+          <View style={styles.activityCollapsibleHeader}>
+            <Pressable
+              style={styles.activityToggleButton}
+              onPress={() => setActivityExpanded((value) => !value)}
+              accessibilityRole="button"
+              accessibilityState={{
+                expanded: activityExpanded,
+              }}
+              accessibilityLabel="Actividad de parking"
+            >
+              <View style={styles.sectionHeaderLeft}>
+                <Ionicons name="time-outline" size={22} color="#2563eb" />
 
-              <View>
-                <Text style={styles.sectionTitle}>Actividad</Text>
-                <Text style={styles.sectionSubtitle}>
-                  Últimos cambios de estado de parking.
-                </Text>
+                <View style={styles.collapsibleHeaderText}>
+                  <Text style={styles.sectionTitle}>Actividad</Text>
+
+                  <Text style={styles.sectionSubtitle}>
+                    {events.length === 0
+                      ? "Sin cambios de estado."
+                      : `${events.length} ${
+                          events.length === 1
+                            ? "evento guardado"
+                            : "eventos guardados"
+                        }.`}
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            {events.length > 0 ? (
-              <Pressable onPress={clearLocalEvents}>
+              <Ionicons
+                name={activityExpanded ? "chevron-up" : "chevron-down"}
+                size={22}
+                color="#111827"
+              />
+            </Pressable>
+
+            {activityExpanded && events.length > 0 ? (
+              <Pressable
+                onPress={clearLocalEvents}
+                accessibilityRole="button"
+                accessibilityLabel="Limpiar actividad"
+                hitSlop={8}
+                style={styles.clearActivityButton}
+              >
                 <Text style={styles.clearText}>Limpiar</Text>
               </Pressable>
             ) : null}
           </View>
 
-          {events.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Ionicons name="chatbox-outline" size={24} color="#9ca3af" />
-              <Text style={styles.emptyTitle}>Sin actividad todavía</Text>
-              <Text style={styles.emptyText}>
-                Publica un estado para crear el primer mensaje.
-              </Text>
+          {activityExpanded ? (
+            <View style={styles.activityDropdownContent}>
+              {events.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Ionicons name="chatbox-outline" size={24} color="#9ca3af" />
+
+                  <Text style={styles.emptyTitle}>Sin actividad todavía</Text>
+
+                  <Text style={styles.emptyText}>
+                    Publica un estado para crear el primer mensaje.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.eventsList}>
+                  {events.map((event) => (
+                    <EventCard
+                      key={event.id}
+                      event={event}
+                      isOwnUser={
+                        (event.parkingAlias || event.userId) ===
+                        displayParkingAlias
+                      }
+                    />
+                  ))}
+                </View>
+              )}
             </View>
-          ) : (
-            <View style={styles.eventsList}>
-              {events.map((event) => (
-                <EventCard
-                  key={event.id}
-                  event={event}
-                  isOwnUser={
-                    (event.parkingAlias || event.userId) === displayParkingAlias
-                  }
-                />
-              ))}
-            </View>
-          )}
+          ) : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -2328,14 +2381,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#e5e7eb",
   },
 
-  activityHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 12,
-  },
-
   clearText: {
     fontSize: 13,
     fontWeight: "900",
@@ -2588,6 +2633,50 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontWeight: "700",
     textAlign: "center",
+  },
+
+  collapsibleHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  statusDropdownContent: {
+    marginTop: 14,
+  },
+  activityHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  activityDropdownContent: {
+    marginTop: 14,
+  },
+
+  activityCollapsibleHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+
+  activityToggleButton: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  clearActivityButton: {
+    minHeight: 36,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  activityDropdownContent: {
+    marginTop: 14,
   },
 });
 
