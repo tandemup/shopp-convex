@@ -103,8 +103,19 @@ export default function AuthHomeScreen({ navigation }) {
             >
               <Text style={styles.secondaryButtonText}>Crear cuenta</Text>
             </Pressable>
-          </View>
 
+            <Pressable
+              style={({ pressed }) => [
+                styles.resetPasswordButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => navigation.navigate("ResetPassword")}
+            >
+              <Text style={styles.resetPasswordButtonText}>
+                ¿Has olvidado tu contraseña?
+              </Text>
+            </Pressable>
+          </View>
           <Text style={styles.footerText}>
             Accede con tu cuenta para mantener tus datos guardados.
           </Text>
@@ -310,6 +321,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: "#94a3b8",
+    textAlign: "center",
+  },
+  resetPasswordButton: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+
+  resetPasswordButtonText: {
+    color: "#2563eb",
+    fontSize: 14,
+    fontWeight: "700",
     textAlign: "center",
   },
 });

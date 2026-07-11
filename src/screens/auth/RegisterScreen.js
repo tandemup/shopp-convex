@@ -40,7 +40,19 @@ export default function RegisterScreen({ navigation }) {
 
   const aliasIsValid = normalizedAlias.length >= 3;
   const emailIsValid = normalizedEmail.includes("@");
-  const passwordIsValid = password.length >= 8;
+
+  const passwordChecks = {
+    length: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /\d/.test(password),
+  };
+
+  const passwordIsValid =
+    passwordChecks.length &&
+    passwordChecks.uppercase &&
+    passwordChecks.lowercase &&
+    passwordChecks.number;
 
   const canSubmit =
     aliasIsValid && emailIsValid && passwordIsValid && !submitting;
@@ -323,7 +335,7 @@ export default function RegisterScreen({ navigation }) {
                     passwordIsValid && styles.helperTextValid,
                   ]}
                 >
-                  La contraseña debe tener al menos 8 caracteres.
+                  Mínimo 8 caracteres, con mayúscula, minúscula y número.
                 </Text>
               </View>
 
