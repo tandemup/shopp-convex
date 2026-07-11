@@ -5,7 +5,7 @@ import { generateRandomString } from "@oslojs/crypto/random";
 export const ResendOTPPasswordReset = ResendProvider({
   id: "resend-password-reset",
 
-  apiKey: process.env.AUTH_RESEND_KEY,
+  apiKey: process.env.RESEND_API_KEY,
 
   async generateVerificationToken() {
     const randomReader = {
@@ -18,60 +18,111 @@ export const ResendOTPPasswordReset = ResendProvider({
   },
 
   async sendVerificationRequest({ identifier: email, provider, token }) {
-    const resend = new Resend(provider.apiKey);
+    const apiKey = provider.apiKey;
 
-    const { error } = await resend.emails.send({
-      from: process.env.AUTH_EMAIL_FROM || "Shopp <onboarding@resend.dev>",
+    if (!apiKey) {
+      throw new Error("Falta la variable de entorno RESEND_API_KEY en Convex.");
+    }
 
-      to: [email],
-
-      subject: "Código para cambiar tu contraseña de Shopp",
-
-      text: [
-        "Has solicitado cambiar la contraseña de tu cuenta Shopp.",
-        "",
-        `Tu código de verificación es: ${token}`,
-        "",
-        "Si no has solicitado este cambio, ignora este mensaje.",
-      ].join("\n"),
-
-      html: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.5;">
-          <h2>Cambiar contraseña de Shopp</h2>
-
-          <p>
-            Has solicitado cambiar la contraseña de tu cuenta.
-          </p>
-
-          <p>Introduce este código en Shopp:</p>
-
-          <div
-            style="
-              display: inline-block;
-              padding: 14px 20px;
-              margin: 12px 0;
-              border-radius: 8px;
-              background-color: #eff6ff;
-              color: #1d4ed8;
-              font-size: 26px;
-              font-weight: 700;
-              letter-spacing: 5px;
-            "
-          >
-            ${token}
-          </div>
-
-          <p>
-            Si no has solicitado este cambio, ignora este mensaje.
-          </p>
-        </div>
-      `,
+    console.log("[Password reset] Intentando enviar código:", {
+      to: email,
+      hasApiKey: Boolean(apiKey),
+      tokenLength: token?.length,
+      tokenIsNumeric: /^\d{8}$/.test(token || ""),
     });
 
-    if (error) {
-      console.error("Error enviando el código de recuperación:", error);
+    const resend = new Resend(apiKey);
 
-      throw new Error("No se pudo enviar el código de recuperación.");
+    try {
+      const { data, error } = await resend.emails.send({
+        from: "Shopp <onboarding@resend.dev>",
+        to: [email],
+        subject: "Código para restablecer tu contraseña",
+
+        text: [
+          "Has solicitado cambiar la contraseña de tu cuenta de Shopp.",
+          "",
+          `Tu código de verificación es: ${token}`,
+          "",
+          "Si no solicitaste este cambio, puedes ignorar este correo.",
+        ].join("\n"),
+
+        html: `
+          <!DOCTYPE html>
+          <html lang="es">
+            <body
+              style="
+                font-family: Arial, sans-serif;
+                color: #0f172a;
+              "
+            >
+              <div
+                style="
+                  max-width: 520px;
+                  margin: 0 auto;
+                  padding: 24px;
+                "
+              >
+                <h1 style="font-size: 24px;">
+                  Restablecer contraseña
+                </h1>
+
+                <p>
+                  Has solicitado cambiar la contraseña de tu cuenta
+                  de Shopp.
+                </p>
+
+                <p>Tu código de verificación es:</p>
+
+                <div
+                  style="
+                    margin: 24px 0;
+                    padding: 18px;
+                    border-radius: 12px;
+                    background: #eef2ff;
+                    text-align: center;
+                    font-size: 30px;
+                    font-weight: bold;
+                    letter-spacing: 8px;
+                  "
+                >
+                  ${token}
+                </div>
+
+                <p>
+                  Si no solicitaste este cambio, puedes ignorar este
+                  correo.
+                </p>
+              </div>
+            </body>
+          </html>
+        `,
+      });
+
+      if (error) {
+        console.error("[Password reset] Resend rechazó el envío:", {
+          name: error.name,
+          message: error.message,
+          statusCode: error.statusCode,
+        });
+
+        throw new Error(
+          `Resend rechazó el envío: ${error.message || "error desconocido"}`,
+        );
+      }
+
+      console.log("[Password reset] Código enviado correctamente:", {
+        id: data?.id,
+        to: email,
+      });
+    } catch (error) {
+      console.error("[Password reset] Error completo:", error);
+
+      if (error instanceof Error) {
+        throw error;
+      }
+
+      throw new Error("Error desconocido al enviar el código.");
     }
   },
 });

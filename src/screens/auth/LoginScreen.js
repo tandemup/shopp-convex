@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,7 +14,33 @@ import {
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Ionicons } from "@expo/vector-icons";
 
-export default function LoginScreen({ navigation }) {
+function getLoginErrorMessage(error) {
+  const originalMessage =
+    error instanceof Error ? error.message : String(error || "");
+
+  const message = originalMessage.toLowerCase();
+
+  if (
+    message.includes("invalid credentials") ||
+    message.includes("invalid password") ||
+    message.includes("incorrect password") ||
+    message.includes("invalidaccountid")
+  ) {
+    return "El email o la contraseña no son correctos.";
+  }
+
+  if (
+    message.includes("network") ||
+    message.includes("fetch") ||
+    message.includes("connection")
+  ) {
+    return "No se pudo conectar con el servidor. Comprueba tu conexión.";
+  }
+
+  return "No se pudo iniciar sesión. Inténtalo de nuevo.";
+}
+
+export default function LoginScreen({ navigation, route }) {
   const { signIn } = useAuthActions();
 
   const { width, height } = useWindowDimensions();
@@ -23,15 +49,42 @@ export default function LoginScreen({ navigation }) {
   const isTablet = width >= 700 && width < 900;
   const isSmallMobile = width < 390;
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() =>
+    String(route?.params?.email || "")
+      .trim()
+      .toLowerCase(),
+  );
+
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const [showPasswordChangedMessage, setShowPasswordChangedMessage] = useState(
+    route?.params?.passwordChanged === true,
+  );
+
+  useEffect(() => {
+    const routeEmail = String(route?.params?.email || "")
+      .trim()
+      .toLowerCase();
+
+    if (routeEmail) {
+      setEmail(routeEmail);
+    }
+
+    if (route?.params?.passwordChanged) {
+      navigation.setParams({
+        passwordChanged: undefined,
+      });
+    }
+  }, [navigation, route?.params?.email, route?.params?.passwordChanged]);
+
   const normalizedEmail = email.trim().toLowerCase();
 
-  const emailIsValid = normalizedEmail.includes("@");
+  const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+
   const passwordIsValid = password.length > 0;
 
   const canSubmit = emailIsValid && passwordIsValid && !submitting;
@@ -86,6 +139,26 @@ export default function LoginScreen({ navigation }) {
     };
   }, [height, isDesktop, isTablet, isSmallMobile]);
 
+  const handleEmailChange = (value) => {
+    setEmail(value);
+    setErrorMessage("");
+    setShowPasswordChangedMessage(false);
+  };
+
+  const handlePasswordChange = (value) => {
+    setPassword(value);
+    setErrorMessage("");
+    setShowPasswordChangedMessage(false);
+  };
+
+  const handleForgotPassword = () => {
+    setErrorMessage("");
+
+    navigation.navigate("ResetPassword", {
+      email: emailIsValid ? normalizedEmail : "",
+    });
+  };
+
   const handleLogin = async () => {
     if (!canSubmit) {
       return;
@@ -102,10 +175,7 @@ export default function LoginScreen({ navigation }) {
       });
     } catch (error) {
       console.error("Login error:", error);
-
-      setErrorMessage(
-        "No se pudo iniciar sesión. Revisa el email y la contraseña.",
-      );
+      setErrorMessage(getLoginErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -141,6 +211,7 @@ export default function LoginScreen({ navigation }) {
                     size={20}
                     color="#bfdbfe"
                   />
+
                   <Text style={styles.featureText}>
                     Sincroniza tus listas de compra.
                   </Text>
@@ -148,6 +219,7 @@ export default function LoginScreen({ navigation }) {
 
                 <View style={styles.featureRow}>
                   <Ionicons name="barcode-outline" size={20} color="#bfdbfe" />
+
                   <Text style={styles.featureText}>
                     Guarda productos escaneados.
                   </Text>
@@ -159,6 +231,7 @@ export default function LoginScreen({ navigation }) {
                     size={20}
                     color="#bfdbfe"
                   />
+
                   <Text style={styles.featureText}>
                     Consulta tiendas y preferencias.
                   </Text>
@@ -169,10 +242,14 @@ export default function LoginScreen({ navigation }) {
 
           <View style={layoutStyles.formPanel}>
             <Pressable
-              style={styles.backButton}
+              style={({ pressed }) => [
+                styles.backButton,
+                pressed && styles.pressedButton,
+              ]}
               onPress={() => navigation.goBack()}
             >
               <Ionicons name="chevron-back" size={20} color="#64748b" />
+
               <Text style={styles.backText}>Volver</Text>
             </Pressable>
 
@@ -181,6 +258,21 @@ export default function LoginScreen({ navigation }) {
             <Text style={layoutStyles.subtitle}>
               Accede con tu email y contraseña para continuar.
             </Text>
+
+            {showPasswordChangedMessage ? (
+              <View style={styles.successBox}>
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={20}
+                  color="#166534"
+                />
+
+                <Text style={styles.successText}>
+                  La contraseña se ha cambiado correctamente. Ya puedes iniciar
+                  sesión.
+                </Text>
+              </View>
+            ) : null}
 
             <View style={styles.form}>
               <View style={styles.field}>
@@ -201,7 +293,7 @@ export default function LoginScreen({ navigation }) {
 
                   <TextInput
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={handleEmailChange}
                     placeholder="tu@email.com"
                     placeholderTextColor="#94a3b8"
                     autoCapitalize="none"
@@ -209,6 +301,8 @@ export default function LoginScreen({ navigation }) {
                     keyboardType="email-address"
                     textContentType="emailAddress"
                     autoComplete="email"
+                    returnKeyType="next"
+                    editable={!submitting}
                     style={styles.input}
                   />
                 </View>
@@ -233,18 +327,53 @@ export default function LoginScreen({ navigation }) {
 
                   <TextInput
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={handlePasswordChange}
                     placeholder="Tu contraseña"
                     placeholderTextColor="#94a3b8"
-                    secureTextEntry
+                    secureTextEntry={!showPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
                     textContentType="password"
                     autoComplete="password"
+                    returnKeyType="done"
+                    onSubmitEditing={handleLogin}
+                    editable={!submitting}
                     style={styles.input}
                   />
+
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.passwordVisibilityButton,
+                      pressed && styles.pressedButton,
+                    ]}
+                    onPress={() => setShowPassword((current) => !current)}
+                    disabled={submitting}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                    }
+                  >
+                    <Ionicons
+                      name={showPassword ? "eye-off-outline" : "eye-outline"}
+                      size={21}
+                      color="#64748b"
+                    />
+                  </Pressable>
                 </View>
               </View>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.forgotPasswordButton,
+                  pressed && styles.pressedButton,
+                ]}
+                onPress={handleForgotPassword}
+                disabled={submitting}
+              >
+                <Text style={styles.forgotPasswordText}>
+                  ¿Has olvidado tu contraseña?
+                </Text>
+              </Pressable>
 
               {errorMessage ? (
                 <View style={styles.errorBox}>
@@ -253,14 +382,16 @@ export default function LoginScreen({ navigation }) {
                     size={20}
                     color="#991b1b"
                   />
+
                   <Text style={styles.errorText}>{errorMessage}</Text>
                 </View>
               ) : null}
 
               <Pressable
-                style={[
+                style={({ pressed }) => [
                   styles.primaryButton,
                   !canSubmit && styles.disabledButton,
+                  pressed && canSubmit && styles.primaryButtonPressed,
                 ]}
                 onPress={handleLogin}
                 disabled={!canSubmit}
@@ -270,6 +401,7 @@ export default function LoginScreen({ navigation }) {
                 ) : (
                   <>
                     <Text style={styles.primaryButtonText}>Entrar</Text>
+
                     <Ionicons name="arrow-forward" size={20} color="#ffffff" />
                   </>
                 )}
@@ -278,7 +410,14 @@ export default function LoginScreen({ navigation }) {
               <View style={styles.registerBox}>
                 <Text style={styles.registerText}>¿No tienes cuenta?</Text>
 
-                <Pressable onPress={() => navigation.navigate("Register")}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.registerButton,
+                    pressed && styles.pressedButton,
+                  ]}
+                  onPress={() => navigation.navigate("Register")}
+                  disabled={submitting}
+                >
                   <Text style={styles.registerLink}>Crear cuenta</Text>
                 </Pressable>
               </View>
@@ -489,6 +628,27 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
+  successBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "#dcfce7",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+  },
+
+  successText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: "#166534",
+  },
+
   form: {
     marginTop: 28,
   },
@@ -533,12 +693,34 @@ const styles = StyleSheet.create({
     outlineStyle: "none",
   },
 
+  passwordVisibilityButton: {
+    minWidth: 40,
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: -8,
+  },
+
   fieldHintError: {
     marginTop: 6,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "700",
     color: "#dc2626",
+  },
+
+  forgotPasswordButton: {
+    alignSelf: "flex-end",
+    marginTop: -10,
+    marginBottom: 18,
+    paddingVertical: 6,
+    paddingLeft: 12,
+  },
+
+  forgotPasswordText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#2563eb",
   },
 
   errorBox: {
@@ -580,6 +762,11 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
+  primaryButtonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.995 }],
+  },
+
   disabledButton: {
     opacity: 0.55,
   },
@@ -605,9 +792,18 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
 
+  registerButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+
   registerLink: {
     fontSize: 14,
     fontWeight: "900",
     color: "#2563eb",
+  },
+
+  pressedButton: {
+    opacity: 0.65,
   },
 });

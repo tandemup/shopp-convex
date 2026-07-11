@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -8,376 +8,519 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
-  View,
 } from "react-native";
+
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
-import { Ionicons } from "@expo/vector-icons";
-import { api } from "@/convex/_generated/api";
+
+import { api } from "../../../convex/_generated/api";
+
+const STEP_REGISTER = "register";
+const STEP_VERIFY = "verify";
+
+const VERIFICATION_CODE_LENGTH = 8;
+
+function wait(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
+function extractErrorMessage(error) {
+  return error?.data?.message || error?.message || String(error || "");
+}
+
+function getRegisterError(error) {
+  const message = extractErrorMessage(error);
+  const normalizedMessage = message.toLowerCase();
+
+  console.error("Error completo de registro:", error);
+  console.error("Mensaje de registro:", message);
+
+  if (
+    normalizedMessage.includes("already exists") ||
+    normalizedMessage.includes("invalidaccountid") ||
+    normalizedMessage.includes("account already")
+  ) {
+    return "Ya existe una cuenta asociada a este correo.";
+  }
+
+  if (
+    normalizedMessage.includes("invalidsecret") ||
+    normalizedMessage.includes("password") ||
+    normalizedMessage.includes("contraseña")
+  ) {
+    return "La contraseña no cumple los requisitos de seguridad.";
+  }
+
+  if (
+    normalizedMessage.includes("resend") ||
+    normalizedMessage.includes("sendverificationrequest") ||
+    normalizedMessage.includes("no se pudo enviar")
+  ) {
+    return "No se pudo enviar el código de verificación.";
+  }
+
+  if (
+    normalizedMessage.includes("schema") ||
+    normalizedMessage.includes("validator") ||
+    normalizedMessage.includes("extra field")
+  ) {
+    return "Los datos de la cuenta no coinciden con el esquema de Convex.";
+  }
+
+  return message || "No se pudo crear la cuenta.";
+}
+
+function getVerificationError(error) {
+  const message = extractErrorMessage(error);
+  const normalizedMessage = message.toLowerCase();
+
+  console.error("Error completo de verificación:", error);
+  console.error("Mensaje de verificación:", message);
+
+  if (
+    normalizedMessage.includes("invalidverificationcode") ||
+    normalizedMessage.includes("invalid verification") ||
+    normalizedMessage.includes("verification code") ||
+    normalizedMessage.includes("expired") ||
+    normalizedMessage.includes("caduc")
+  ) {
+    return "El código de verificación no es válido o ha caducado.";
+  }
+
+  if (
+    normalizedMessage.includes("too many") ||
+    normalizedMessage.includes("rate limit")
+  ) {
+    return "Se han realizado demasiados intentos. Espera unos minutos.";
+  }
+
+  return message || "No se pudo verificar el correo.";
+}
 
 export default function RegisterScreen({ navigation }) {
   const { signIn } = useAuthActions();
+
   const upsertMyProfile = useMutation(api.users.upsertMyProfile);
 
-  const { width, height } = useWindowDimensions();
+  const [step, setStep] = useState(STEP_REGISTER);
 
-  const isDesktop = width >= 900;
-  const isTablet = width >= 700 && width < 900;
-  const isSmallMobile = width < 390;
-
+  const [name, setName] = useState("");
   const [alias, setAlias] = useState("");
   const [phone, setPhone] = useState("");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
 
-  const [submitting, setSubmitting] = useState(false);
+  const [code, setCode] = useState("");
+
+  const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const normalizedAlias = alias.trim();
-  const normalizedPhone = phone.trim();
   const normalizedEmail = email.trim().toLowerCase();
 
-  const aliasIsValid = normalizedAlias.length >= 3;
-  const emailIsValid = normalizedEmail.includes("@");
+  const validateRegisterForm = () => {
+    if (!name.trim()) {
+      return "Introduce tu nombre.";
+    }
 
-  const passwordChecks = {
-    length: password.length >= 8,
-    uppercase: /[A-Z]/.test(password),
-    lowercase: /[a-z]/.test(password),
-    number: /\d/.test(password),
+    if (!alias.trim()) {
+      return "Introduce un alias.";
+    }
+
+    if (!normalizedEmail) {
+      return "Introduce tu correo electrónico.";
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return "Introduce un correo electrónico válido.";
+    }
+
+    if (password.length < 8) {
+      return "La contraseña debe tener al menos 8 caracteres.";
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      return "La contraseña debe contener al menos una letra mayúscula.";
+    }
+
+    if (!/[a-z]/.test(password)) {
+      return "La contraseña debe contener al menos una letra minúscula.";
+    }
+
+    if (!/\d/.test(password)) {
+      return "La contraseña debe contener al menos un número.";
+    }
+
+    if (password !== passwordConfirmation) {
+      return "Las contraseñas no coinciden.";
+    }
+
+    return null;
   };
 
-  const passwordIsValid =
-    passwordChecks.length &&
-    passwordChecks.uppercase &&
-    passwordChecks.lowercase &&
-    passwordChecks.number;
+  const saveUserProfile = async () => {
+    const profileData = {
+      alias: alias.trim() || name.trim() || "anonymous",
 
-  const canSubmit =
-    aliasIsValid && emailIsValid && passwordIsValid && !submitting;
-
-  const layoutStyles = useMemo(() => {
-    return {
-      screen: [
-        styles.screen,
-        isDesktop && styles.screenDesktop,
-        isTablet && styles.screenTablet,
-      ],
-      shell: [
-        styles.shell,
-        isDesktop && styles.shellDesktop,
-        isTablet && styles.shellTablet,
-      ],
-      brandPanel: [
-        styles.brandPanel,
-        isDesktop && styles.brandPanelDesktop,
-        !isDesktop && styles.brandPanelMobile,
-      ],
-      formPanel: [
-        styles.formPanel,
-        isDesktop && styles.formPanelDesktop,
-        isTablet && styles.formPanelTablet,
-        isSmallMobile && styles.formPanelSmallMobile,
-      ],
-      title: [
-        styles.title,
-        isDesktop && styles.titleDesktop,
-        isSmallMobile && styles.titleSmallMobile,
-      ],
-      subtitle: [
-        styles.subtitle,
-        isDesktop && styles.subtitleDesktop,
-        isSmallMobile && styles.subtitleSmallMobile,
-      ],
+      phoneVisible: false,
     };
-  }, [isDesktop, isTablet, isSmallMobile]);
+
+    if (phone.trim()) {
+      profileData.phone = phone.trim();
+    }
+
+    /*
+     * Tras verificar el correo, el token de sesión puede tardar
+     * un instante en propagarse al cliente Convex.
+     */
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await upsertMyProfile(profileData);
+        return;
+      } catch (error) {
+        lastError = error;
+
+        const message = extractErrorMessage(error).toLowerCase();
+
+        const authIsNotReady =
+          message.includes("usuario no autenticado") ||
+          message.includes("unauthenticated") ||
+          message.includes("not authenticated");
+
+        if (!authIsNotReady || attempt === 3) {
+          throw error;
+        }
+
+        await wait(250 * attempt);
+      }
+    }
+
+    throw lastError;
+  };
 
   const handleRegister = async () => {
-    if (!canSubmit) {
+    const validationError = validateRegisterForm();
+
+    if (validationError) {
+      setErrorMessage(validationError);
       return;
     }
 
-    setSubmitting(true);
+    setLoading(true);
     setErrorMessage("");
 
     try {
-      await signIn("password", {
-        email: normalizedEmail,
-        password,
-        flow: "signUp",
-      });
+      const formData = new FormData();
 
-      try {
-        await upsertMyProfile({
-          alias: normalizedAlias,
-          phone: normalizedPhone || undefined,
-          phoneVisible: false,
-        });
-      } catch (profileError) {
-        console.warn("Profile creation after sign up failed:", profileError);
-      }
+      formData.append("flow", "signUp");
+      formData.append("email", normalizedEmail);
+      formData.append("password", password);
+      formData.append("name", name.trim());
+
+      /*
+       * alias y phone no se incluyen aquí porque no forman
+       * parte del usuario interno gestionado por Convex Auth.
+       */
+      await signIn("password", formData);
+
+      setCode("");
+      setStep(STEP_VERIFY);
     } catch (error) {
-      console.error("Register error:", error);
-
-      setErrorMessage(
-        "No se pudo crear la cuenta. Puede que el email ya esté registrado.",
-      );
+      setErrorMessage(getRegisterError(error));
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
+  const handleVerifyEmail = async () => {
+    const normalizedCode = code.replace(/\s/g, "").trim();
+
+    if (!normalizedCode) {
+      setErrorMessage("Introduce el código recibido por correo.");
+      return;
+    }
+
+    if (
+      !new RegExp(`^\\d{${VERIFICATION_CODE_LENGTH}}$`).test(normalizedCode)
+    ) {
+      setErrorMessage(
+        `El código debe contener ${VERIFICATION_CODE_LENGTH} dígitos.`,
+      );
+      return;
+    }
+
+    setLoading(true);
+    setErrorMessage("");
+
+    try {
+      const formData = new FormData();
+
+      formData.append("flow", "email-verification");
+
+      formData.append("email", normalizedEmail);
+
+      formData.append("code", normalizedCode);
+
+      /*
+       * Verifica el correo e inicia la sesión.
+       */
+      await signIn("password", formData);
+
+      /*
+       * Guarda alias y teléfono en la tabla userProfiles.
+       */
+      await saveUserProfile();
+
+      /*
+       * Normalmente no es necesario navegar manualmente.
+       * El componente raíz detectará que el usuario está autenticado.
+       */
+    } catch (error) {
+      setErrorMessage(getVerificationError(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBackToRegister = () => {
+    setCode("");
+    setErrorMessage("");
+    setStep(STEP_REGISTER);
+  };
+
+  const handleCancel = () => {
+    setErrorMessage("");
+
+    if (navigation?.canGoBack?.()) {
+      navigation.goBack();
+      return;
+    }
+
+    navigation?.navigate?.("AuthHome");
+  };
+
+  if (step === STEP_VERIFY) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.screen}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.title}>Verifica tu correo</Text>
+
+          <Text style={styles.description}>
+            Hemos enviado un código de verificación a:
+          </Text>
+
+          <Text style={styles.email}>{normalizedEmail}</Text>
+
+          <TextInput
+            value={code}
+            onChangeText={(value) => {
+              const digitsOnly = value.replace(/\D/g, "");
+
+              setCode(digitsOnly.slice(0, VERIFICATION_CODE_LENGTH));
+
+              if (errorMessage) {
+                setErrorMessage("");
+              }
+            }}
+            placeholder={`Código de ${VERIFICATION_CODE_LENGTH} dígitos`}
+            keyboardType="number-pad"
+            inputMode="numeric"
+            autoCapitalize="none"
+            autoCorrect={false}
+            maxLength={VERIFICATION_CODE_LENGTH}
+            editable={!loading}
+            style={styles.input}
+            onSubmitEditing={handleVerifyEmail}
+          />
+
+          {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+
+          <Pressable
+            onPress={handleVerifyEmail}
+            disabled={loading}
+            style={({ pressed }) => [
+              styles.primaryButton,
+              pressed && !loading && styles.pressedButton,
+              loading && styles.disabledButton,
+            ]}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Verificar correo</Text>
+            )}
+          </Pressable>
+
+          <Pressable
+            onPress={handleBackToRegister}
+            disabled={loading}
+            style={({ pressed }) => [
+              styles.secondaryButton,
+              pressed && !loading && styles.pressedSecondaryButton,
+            ]}
+          >
+            <Text style={styles.secondaryButtonText}>Cambiar correo</Text>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
-      style={layoutStyles.screen}
+      style={styles.screen}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
+        contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            minHeight: height,
-          },
-          isDesktop && styles.scrollContentDesktop,
-        ]}
       >
-        <View style={layoutStyles.shell}>
-          <View style={layoutStyles.brandPanel}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="person-add-outline" size={42} color="#ffffff" />
-            </View>
+        <Text style={styles.title}>Crear una cuenta</Text>
 
-            <Text style={styles.brandTitle}>Shopp</Text>
+        <TextInput
+          value={name}
+          onChangeText={(value) => {
+            setName(value);
 
-            <Text style={styles.brandSubtitle}>
-              Crea tu cuenta para sincronizar listas, tiendas, escaneos,
-              historial y preferencias.
-            </Text>
+            if (errorMessage) {
+              setErrorMessage("");
+            }
+          }}
+          placeholder="Nombre"
+          autoCapitalize="words"
+          autoCorrect={false}
+          editable={!loading}
+          style={styles.input}
+        />
 
-            {isDesktop ? (
-              <View style={styles.desktopFeatureBox}>
-                <View style={styles.featureRow}>
-                  <Ionicons
-                    name="cloud-done-outline"
-                    size={20}
-                    color="#bfdbfe"
-                  />
-                  <Text style={styles.featureText}>
-                    Guarda tus datos de forma sincronizada.
-                  </Text>
-                </View>
+        <TextInput
+          value={alias}
+          onChangeText={(value) => {
+            setAlias(value);
 
-                <View style={styles.featureRow}>
-                  <Ionicons name="cart-outline" size={20} color="#bfdbfe" />
-                  <Text style={styles.featureText}>
-                    Recupera tus listas desde otros dispositivos.
-                  </Text>
-                </View>
+            if (errorMessage) {
+              setErrorMessage("");
+            }
+          }}
+          placeholder="Alias"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!loading}
+          style={styles.input}
+        />
 
-                <View style={styles.featureRow}>
-                  <Ionicons
-                    name="shield-checkmark-outline"
-                    size={20}
-                    color="#bfdbfe"
-                  />
-                  <Text style={styles.featureText}>
-                    Accede con tu email y contraseña.
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-          </View>
+        <TextInput
+          value={phone}
+          onChangeText={(value) => {
+            setPhone(value);
 
-          <View style={layoutStyles.formPanel}>
-            <Pressable
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="chevron-back" size={20} color="#64748b" />
-              <Text style={styles.backText}>Volver</Text>
-            </Pressable>
+            if (errorMessage) {
+              setErrorMessage("");
+            }
+          }}
+          placeholder="Teléfono (opcional)"
+          keyboardType="phone-pad"
+          inputMode="tel"
+          editable={!loading}
+          style={styles.input}
+        />
 
-            <Text style={layoutStyles.title}>Crear cuenta</Text>
+        <TextInput
+          value={email}
+          onChangeText={(value) => {
+            setEmail(value);
 
-            <Text style={layoutStyles.subtitle}>
-              Regístrate para sincronizar tus datos de Shopp.
-            </Text>
+            if (errorMessage) {
+              setErrorMessage("");
+            }
+          }}
+          placeholder="Correo electrónico"
+          keyboardType="email-address"
+          inputMode="email"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!loading}
+          style={styles.input}
+        />
 
-            <View style={styles.form}>
-              <View style={styles.field}>
-                <Text style={styles.label}>Alias público</Text>
+        <TextInput
+          value={password}
+          onChangeText={(value) => {
+            setPassword(value);
 
-                <View style={styles.inputBox}>
-                  <Ionicons
-                    name="person-circle-outline"
-                    size={20}
-                    color="#64748b"
-                    style={styles.inputIcon}
-                  />
+            if (errorMessage) {
+              setErrorMessage("");
+            }
+          }}
+          placeholder="Contraseña"
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!loading}
+          style={styles.input}
+        />
 
-                  <TextInput
-                    value={alias}
-                    onChangeText={setAlias}
-                    placeholder="Ej. 4104-BZG"
-                    placeholderTextColor="#94a3b8"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textContentType="nickname"
-                    maxLength={40}
-                    style={styles.input}
-                  />
-                </View>
+        <TextInput
+          value={passwordConfirmation}
+          onChangeText={(value) => {
+            setPasswordConfirmation(value);
 
-                <Text style={styles.fieldHelp}>
-                  Se mostrará en Chat y Parking. No uses tu nombre real si no
-                  quieres identificarte.
-                </Text>
-              </View>
+            if (errorMessage) {
+              setErrorMessage("");
+            }
+          }}
+          placeholder="Repite la contraseña"
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!loading}
+          style={styles.input}
+          onSubmitEditing={handleRegister}
+        />
 
-              <View style={styles.field}>
-                <Text style={styles.label}>Teléfono móvil opcional</Text>
+        <Text style={styles.passwordHelp}>
+          Mínimo 8 caracteres, una mayúscula, una minúscula y un número.
+        </Text>
 
-                <View style={styles.inputBox}>
-                  <Ionicons
-                    name="call-outline"
-                    size={20}
-                    color="#64748b"
-                    style={styles.inputIcon}
-                  />
+        {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
 
-                  <TextInput
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholder="Solo si quieres añadir contacto"
-                    placeholderTextColor="#94a3b8"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="phone-pad"
-                    textContentType="telephoneNumber"
-                    maxLength={30}
-                    style={styles.input}
-                  />
-                </View>
+        <Pressable
+          onPress={handleRegister}
+          disabled={loading}
+          style={({ pressed }) => [
+            styles.primaryButton,
+            pressed && !loading && styles.pressedButton,
+            loading && styles.disabledButton,
+          ]}
+        >
+          {loading ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Crear cuenta</Text>
+          )}
+        </Pressable>
 
-                <Text style={styles.fieldHelp}>
-                  Se guarda privado. En Parking no se muestra salvo que lo
-                  actives expresamente más adelante.
-                </Text>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Email</Text>
-
-                <View style={styles.inputBox}>
-                  <Ionicons
-                    name="mail-outline"
-                    size={20}
-                    color="#64748b"
-                    style={styles.inputIcon}
-                  />
-
-                  <TextInput
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="tu@email.com"
-                    placeholderTextColor="#94a3b8"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    keyboardType="email-address"
-                    textContentType="emailAddress"
-                    style={styles.input}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={styles.label}>Contraseña</Text>
-
-                <View style={styles.inputBox}>
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={20}
-                    color="#64748b"
-                    style={styles.inputIcon}
-                  />
-
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="Mínimo 8 caracteres"
-                    placeholderTextColor="#94a3b8"
-                    secureTextEntry
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textContentType="newPassword"
-                    style={styles.input}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.passwordHintBox}>
-                <Ionicons
-                  name={
-                    passwordIsValid
-                      ? "checkmark-circle-outline"
-                      : "information-circle-outline"
-                  }
-                  size={18}
-                  color={passwordIsValid ? "#16a34a" : "#64748b"}
-                />
-
-                <Text
-                  style={[
-                    styles.helperText,
-                    passwordIsValid && styles.helperTextValid,
-                  ]}
-                >
-                  Mínimo 8 caracteres, con mayúscula, minúscula y número.
-                </Text>
-              </View>
-
-              {errorMessage ? (
-                <View style={styles.errorBox}>
-                  <Ionicons
-                    name="alert-circle-outline"
-                    size={20}
-                    color="#991b1b"
-                  />
-                  <Text style={styles.errorText}>{errorMessage}</Text>
-                </View>
-              ) : null}
-
-              <Pressable
-                style={[
-                  styles.primaryButton,
-                  !canSubmit && styles.disabledButton,
-                ]}
-                onPress={handleRegister}
-                disabled={!canSubmit}
-              >
-                {submitting ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <>
-                    <Text style={styles.primaryButtonText}>Crear cuenta</Text>
-                    <Ionicons name="arrow-forward" size={20} color="#ffffff" />
-                  </>
-                )}
-              </Pressable>
-
-              <View style={styles.loginBox}>
-                <Text style={styles.loginText}>¿Ya tienes cuenta?</Text>
-
-                <Pressable onPress={() => navigation.navigate("Login")}>
-                  <Text style={styles.loginLink}>Entrar</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </View>
+        <Pressable
+          onPress={handleCancel}
+          disabled={loading}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            pressed && !loading && styles.pressedSecondaryButton,
+          ]}
+        >
+          <Text style={styles.secondaryButtonText}>Cancelar</Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -386,331 +529,105 @@ export default function RegisterScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#ffffff",
   },
 
-  screenDesktop: {
-    backgroundColor: "#e2e8f0",
-  },
-
-  screenTablet: {
-    backgroundColor: "#eef2ff",
-  },
-
-  scrollContent: {
+  container: {
     flexGrow: 1,
-    justifyContent: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 28,
-  },
-
-  scrollContentDesktop: {
-    paddingHorizontal: 48,
-    paddingVertical: 48,
-  },
-
-  shell: {
     width: "100%",
-    maxWidth: 440,
+    maxWidth: 680,
     alignSelf: "center",
-    borderRadius: 28,
-    overflow: "hidden",
-    backgroundColor: "#ffffff",
-    shadowColor: "#0f172a",
-    shadowOffset: {
-      width: 0,
-      height: 18,
-    },
-    shadowOpacity: 0.12,
-    shadowRadius: 30,
-    elevation: 8,
-  },
-
-  shellDesktop: {
-    maxWidth: 1040,
-    minHeight: 620,
-    flexDirection: "row",
-  },
-
-  shellTablet: {
-    maxWidth: 560,
-  },
-
-  brandPanel: {
-    backgroundColor: "#2563eb",
-  },
-
-  brandPanelDesktop: {
-    flex: 1,
-    paddingHorizontal: 46,
-    paddingVertical: 48,
     justifyContent: "center",
-  },
-
-  brandPanelMobile: {
     paddingHorizontal: 24,
-    paddingTop: 34,
-    paddingBottom: 28,
-    alignItems: "center",
-  },
-
-  logoCircle: {
-    width: 82,
-    height: 82,
-    borderRadius: 28,
-    backgroundColor: "rgba(255, 255, 255, 0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.24)",
-  },
-
-  brandTitle: {
-    fontSize: 42,
-    lineHeight: 48,
-    fontWeight: "900",
-    color: "#ffffff",
-    textAlign: "center",
-  },
-
-  brandSubtitle: {
-    marginTop: 12,
-    maxWidth: 360,
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: "600",
-    color: "#dbeafe",
-    textAlign: "center",
-  },
-
-  desktopFeatureBox: {
-    marginTop: 34,
-    gap: 16,
-  },
-
-  featureRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  featureText: {
-    marginLeft: 10,
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: "600",
-    color: "#eff6ff",
-  },
-
-  formPanel: {
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 30,
-  },
-
-  formPanelDesktop: {
-    flex: 1,
-    paddingHorizontal: 52,
-    paddingVertical: 48,
-    justifyContent: "center",
-  },
-
-  formPanelTablet: {
-    paddingHorizontal: 34,
-    paddingVertical: 36,
-  },
-
-  formPanelSmallMobile: {
-    paddingHorizontal: 18,
-  },
-
-  backButton: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 22,
-    paddingVertical: 6,
-    paddingRight: 10,
-  },
-
-  backText: {
-    marginLeft: 4,
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#64748b",
+    paddingVertical: 32,
+    gap: 14,
   },
 
   title: {
     fontSize: 28,
-    lineHeight: 34,
-    fontWeight: "900",
-    color: "#0f172a",
-    textAlign: "left",
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 4,
   },
 
-  titleDesktop: {
-    fontSize: 34,
-    lineHeight: 40,
-  },
-
-  titleSmallMobile: {
-    fontSize: 25,
-    lineHeight: 31,
-  },
-
-  subtitle: {
-    marginTop: 8,
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: "500",
-    color: "#64748b",
-  },
-
-  subtitleDesktop: {
+  description: {
     fontSize: 16,
-    lineHeight: 24,
+    lineHeight: 23,
+    color: "#4b5563",
   },
 
-  subtitleSmallMobile: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-
-  form: {
-    marginTop: 28,
-  },
-
-  field: {
-    marginBottom: 18,
-  },
-
-  label: {
+  email: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
     marginBottom: 8,
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#334155",
-  },
-
-  inputBox: {
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#cbd5e1",
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 14,
-  },
-
-  inputIcon: {
-    marginRight: 10,
   },
 
   input: {
-    flex: 1,
+    width: "100%",
     minHeight: 52,
-    paddingVertical: Platform.OS === "ios" ? 14 : 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 10,
+    backgroundColor: "#ffffff",
     fontSize: 16,
-    color: "#0f172a",
-    outlineStyle: "none",
+    color: "#111827",
   },
 
-  fieldHelp: {
-    marginTop: 7,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "600",
-    color: "#64748b",
-  },
-
-  passwordHintBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: -6,
-    marginBottom: 18,
-  },
-
-  helperText: {
-    flex: 1,
+  passwordHelp: {
+    marginTop: -4,
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: "600",
-    color: "#64748b",
+    color: "#6b7280",
   },
 
-  helperTextValid: {
-    color: "#16a34a",
-  },
-
-  errorBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    marginBottom: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: "#fee2e2",
-    borderWidth: 1,
-    borderColor: "#fecaca",
-  },
-
-  errorText: {
-    flex: 1,
+  error: {
+    color: "#b91c1c",
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: "600",
-    color: "#991b1b",
   },
 
   primaryButton: {
-    minHeight: 54,
-    borderRadius: 16,
-    backgroundColor: "#2563eb",
+    width: "100%",
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-    shadowColor: "#2563eb",
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.24,
-    shadowRadius: 16,
-    elevation: 4,
-  },
-
-  disabledButton: {
-    opacity: 0.55,
+    borderRadius: 10,
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 18,
+    marginTop: 4,
   },
 
   primaryButtonText: {
     color: "#ffffff",
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: "700",
   },
 
-  loginBox: {
-    marginTop: 22,
-    flexDirection: "row",
-    justifyContent: "center",
+  secondaryButton: {
+    minHeight: 46,
     alignItems: "center",
-    flexWrap: "wrap",
-    gap: 6,
+    justifyContent: "center",
+    paddingHorizontal: 18,
   },
 
-  loginText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#64748b",
-  },
-
-  loginLink: {
-    fontSize: 14,
-    fontWeight: "900",
+  secondaryButtonText: {
     color: "#2563eb",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  pressedButton: {
+    opacity: 0.86,
+  },
+
+  pressedSecondaryButton: {
+    opacity: 0.65,
+  },
+
+  disabledButton: {
+    opacity: 0.6,
   },
 });

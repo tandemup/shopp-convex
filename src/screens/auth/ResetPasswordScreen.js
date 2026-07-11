@@ -146,12 +146,42 @@ export default function ResetPasswordScreen({ navigation, route }) {
       setEmail(normalizedEmail);
       setStep(STEP_CODE);
     } catch (error) {
-      console.error("Password reset request error:", error);
-      setErrorMessage(getErrorMessage(error));
+      console.error("PASSWORD RESET ERROR COMPLETO:", error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : String(error || "Error desconocido");
+
+      setErrorMessage(message);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  function validateNewPassword(password) {
+    if (typeof password !== "string") {
+      return "La contraseña no es válida.";
+    }
+
+    if (password.length < 8) {
+      return "La contraseña debe tener al menos 8 caracteres.";
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      return "La contraseña debe contener al menos una letra mayúscula.";
+    }
+
+    if (!/[a-z]/.test(password)) {
+      return "La contraseña debe contener al menos una letra minúscula.";
+    }
+
+    if (!/\d/.test(password)) {
+      return "La contraseña debe contener al menos un número.";
+    }
+
+    return "";
+  }
 
   const handleResetPassword = async () => {
     const passwordError = validateNewPassword(newPassword);
@@ -244,7 +274,7 @@ export default function ResetPasswordScreen({ navigation, route }) {
         >
           <View style={styles.container}>
             <Pressable
-              onPress={goBackToLogin}
+              onPress={goToLogin}
               style={({ pressed }) => [
                 styles.backButton,
                 pressed && styles.buttonPressed,
@@ -263,7 +293,7 @@ export default function ResetPasswordScreen({ navigation, route }) {
                   isSubmitting={isSubmitting}
                   canSubmit={canSubmitEmail}
                   onSubmit={handleSendCode}
-                  onBack={goBackToLogin}
+                  onBack={goToLogin}
                 />
               )}
 
