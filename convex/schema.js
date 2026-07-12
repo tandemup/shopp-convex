@@ -491,4 +491,38 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_store", ["storeId"])
     .index("by_createdAt", ["createdAt"]),
+
+  productCache: defineTable({
+    barcode: v.string(),
+
+    name: v.optional(v.string()),
+    brand: v.optional(v.string()),
+    category: v.optional(v.string()),
+
+    imageUrl: v.optional(v.string()),
+    productUrl: v.optional(v.string()),
+
+    source: v.optional(
+      v.union(
+        v.literal("convex"),
+        v.literal("internet"),
+        v.literal("manual"),
+        v.literal("scanner"),
+      ),
+    ),
+
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("complete"),
+        v.literal("not_found"),
+      ),
+    ),
+
+    accessCount: v.number(),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastAccessedAt: v.number(),
+  }).index("by_barcode", ["barcode"]),
 });
