@@ -1,95 +1,80 @@
-import ResendProvider from "@auth/core/providers/resend";
-import { Resend } from "resend";
+import Resend from "@auth/core/providers/resend";
+import { Resend as ResendAPI } from "resend";
 import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
 
-export const ResendOTPEmailVerification = ResendProvider({
-  // Es mejor que no coincida con el proveedor de reset.
+const random = /** @type {RandomReader} */ ({
+  read(bytes) {
+    crypto.getRandomValues(bytes);
+  },
+});
+
+export const ResendOTPEmailVerification = Resend({
   id: "resend-email-verification",
 
   apiKey: process.env.AUTH_RESEND_KEY,
 
   async generateVerificationToken() {
-    const random = {
-      read(bytes) {
-        crypto.getRandomValues(bytes);
-      },
-    };
-
     return generateRandomString(random, "0123456789", 8);
   },
 
-  async sendVerificationRequest({ identifier: email, provider, token }) {
-    if (!provider.apiKey) {
-      throw new Error("AUTH_RESEND_KEY no está configurada en Convex");
+  async sendVerificationRequest({ identifier, provider, token }) {
+    const email = identifier?.trim().toLowerCase();
+
+    if (!email) {
+      throw new Error("No se ha recibido una dirección de correo válida.");
     }
 
-    const resend = new Resend(provider.apiKey);
+    if (!provider.apiKey) {
+      throw new Error(
+        "AUTH_RESEND_KEY no está configurada en el deployment de Convex.",
+      );
+    }
 
-    const { data, error } = await resend.emails.send({
-      // Durante las pruebas puedes usar onboarding@resend.dev.
-      // En producción sustituye shopp.app por un dominio verificado.
-      from: "Shopp <onboarding@resend.dev>",
+    const resend = new ResendAPI(provider.apiKey);
+
+    const { error } = await resend.emails.send({
+      from: "Shopp <auth@ramshopp.com>",
       to: [email],
-      subject: "Verifica tu correo en Shopp",
-
+      subject: "Verifica tu correo electrónico en Shopp",
       text: [
-        "Bienvenido a Shopp.",
+        "Verificación de correo electrónico",
         "",
         `Tu código de verificación es: ${token}`,
         "",
-        "Introduce este código en la aplicación para completar el registro.",
+        "Introduce este código en Shopp para completar el registro.",
         "",
         "Si no has creado una cuenta, puedes ignorar este mensaje.",
       ].join("\n"),
-
       html: `
-        <div style="
-          max-width: 520px;
-          margin: 0 auto;
-          padding: 24px;
-          font-family: Arial, sans-serif;
-          color: #202124;
-        ">
-          <h1 style="font-size: 24px; margin-bottom: 16px;">
-            Verifica tu correo
-          </h1>
+        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: auto;">
+          <h2>Verifica tu correo electrónico</h2>
 
-          <p>Bienvenido a <strong>Shopp</strong>.</p>
-
-          <p>
-            Introduce este código en la aplicación para completar
-            la creación de tu cuenta:
-          </p>
+          <p>Introduce este código en Shopp para completar el registro:</p>
 
           <div style="
             margin: 24px 0;
-            padding: 18px;
-            border-radius: 10px;
-            background: #f1f3f4;
+            padding: 16px;
             text-align: center;
             font-size: 30px;
             font-weight: bold;
             letter-spacing: 8px;
+            background: #f3f4f6;
+            border-radius: 10px;
           ">
             ${token}
           </div>
 
-          <p style="color: #5f6368; font-size: 14px;">
-            Si no has creado una cuenta en Shopp, puedes ignorar
-            este mensaje.
-          </p>
+          <p>Si no has creado una cuenta en Shopp, puedes ignorar este mensaje.</p>
         </div>
       `,
     });
 
     if (error) {
-      console.error("Error enviando código de verificación:", error);
+      console.error("Error Resend durante la verificación:", error);
 
       throw new Error(
-        error.message || "No se pudo enviar el código de verificación.",
+        `Resend rechazó el envío: ${error.message ?? "Error desconocido"}`,
       );
     }
-
-    console.log("Código de verificación enviado:", data?.id);
   },
 });
