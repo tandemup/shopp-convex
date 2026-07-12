@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -8,8 +8,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
+  View,
 } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
 
@@ -17,7 +20,6 @@ import { api } from "../../../convex/_generated/api";
 
 const STEP_REGISTER = "register";
 const STEP_VERIFY = "verify";
-
 const VERIFICATION_CODE_LENGTH = 8;
 
 function wait(milliseconds) {
@@ -99,27 +101,128 @@ function getVerificationError(error) {
   return message || "No se pudo verificar el correo.";
 }
 
+function PasswordRequirement({ valid, children }) {
+  return (
+    <View style={styles.requirementRow}>
+      <Ionicons
+        name={valid ? "checkmark-circle" : "ellipse-outline"}
+        size={16}
+        color={valid ? "#16a34a" : "#94a3b8"}
+      />
+
+      <Text
+        style={[styles.requirementText, valid && styles.requirementTextValid]}
+      >
+        {children}
+      </Text>
+    </View>
+  );
+}
+
 export default function RegisterScreen({ navigation }) {
   const { signIn } = useAuthActions();
-
   const upsertMyProfile = useMutation(api.users.upsertMyProfile);
+
+  const { width, height } = useWindowDimensions();
+
+  const isDesktop = width >= 980;
+  const isTablet = width >= 700 && width < 980;
+  const isSmallMobile = width < 390;
 
   const [step, setStep] = useState(STEP_REGISTER);
 
   const [name, setName] = useState("");
   const [alias, setAlias] = useState("");
   const [phone, setPhone] = useState("");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
-
   const [code, setCode] = useState("");
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirmation, setShowPasswordConfirmation] =
+    useState(false);
 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const normalizedEmail = email.trim().toLowerCase();
+
+  const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+
+  const passwordChecks = {
+    length: password.length >= 8,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    number: /\d/.test(password),
+  };
+
+  const passwordIsValid = Object.values(passwordChecks).every(Boolean);
+
+  const passwordsMatch =
+    passwordConfirmation.length > 0 && password === passwordConfirmation;
+
+  const registerFormIsValid =
+    name.trim().length > 0 &&
+    alias.trim().length > 0 &&
+    emailIsValid &&
+    passwordIsValid &&
+    passwordsMatch;
+
+  const verificationCodeIsValid = new RegExp(
+    `^\\d{${VERIFICATION_CODE_LENGTH}}$`,
+  ).test(code);
+
+  const layoutStyles = useMemo(
+    () => ({
+      screen: [
+        styles.screen,
+        isDesktop && styles.screenDesktop,
+        isTablet && styles.screenTablet,
+      ],
+
+      scrollContent: [
+        styles.scrollContent,
+        {
+          minHeight: height,
+        },
+        isDesktop && styles.scrollContentDesktop,
+        isSmallMobile && styles.scrollContentSmallMobile,
+      ],
+
+      shell: [
+        styles.shell,
+        isDesktop && styles.shellDesktop,
+        isTablet && styles.shellTablet,
+      ],
+
+      brandPanel: [
+        styles.brandPanel,
+        isDesktop && styles.brandPanelDesktop,
+        !isDesktop && styles.brandPanelMobile,
+      ],
+
+      formPanel: [
+        styles.formPanel,
+        isDesktop && styles.formPanelDesktop,
+        isTablet && styles.formPanelTablet,
+        isSmallMobile && styles.formPanelSmallMobile,
+      ],
+
+      title: [
+        styles.title,
+        isDesktop && styles.titleDesktop,
+        isSmallMobile && styles.titleSmallMobile,
+      ],
+    }),
+    [height, isDesktop, isSmallMobile, isTablet],
+  );
+
+  const clearError = () => {
+    if (errorMessage) {
+      setErrorMessage("");
+    }
+  };
 
   const validateRegisterForm = () => {
     if (!name.trim()) {
@@ -134,23 +237,23 @@ export default function RegisterScreen({ navigation }) {
       return "Introduce tu correo electrónico.";
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    if (!emailIsValid) {
       return "Introduce un correo electrónico válido.";
     }
 
-    if (password.length < 8) {
+    if (!passwordChecks.length) {
       return "La contraseña debe tener al menos 8 caracteres.";
     }
 
-    if (!/[A-Z]/.test(password)) {
+    if (!passwordChecks.uppercase) {
       return "La contraseña debe contener al menos una letra mayúscula.";
     }
 
-    if (!/[a-z]/.test(password)) {
+    if (!passwordChecks.lowercase) {
       return "La contraseña debe contener al menos una letra minúscula.";
     }
 
-    if (!/\d/.test(password)) {
+    if (!passwordChecks.number) {
       return "La contraseña debe contener al menos un número.";
     }
 
@@ -164,7 +267,6 @@ export default function RegisterScreen({ navigation }) {
   const saveUserProfile = async () => {
     const profileData = {
       alias: alias.trim() || name.trim() || "anonymous",
-
       phoneVisible: false,
     };
 
@@ -172,10 +274,6 @@ export default function RegisterScreen({ navigation }) {
       profileData.phone = phone.trim();
     }
 
-    /*
-     * Tras verificar el correo, el token de sesión puede tardar
-     * un instante en propagarse al cliente Convex.
-     */
     let lastError = null;
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
@@ -222,10 +320,6 @@ export default function RegisterScreen({ navigation }) {
       formData.append("password", password);
       formData.append("name", name.trim());
 
-      /*
-       * alias y phone no se incluyen aquí porque no forman
-       * parte del usuario interno gestionado por Convex Auth.
-       */
       await signIn("password", formData);
 
       setCode("");
@@ -245,9 +339,7 @@ export default function RegisterScreen({ navigation }) {
       return;
     }
 
-    if (
-      !new RegExp(`^\\d{${VERIFICATION_CODE_LENGTH}}$`).test(normalizedCode)
-    ) {
+    if (!verificationCodeIsValid) {
       setErrorMessage(
         `El código debe contener ${VERIFICATION_CODE_LENGTH} dígitos.`,
       );
@@ -261,25 +353,11 @@ export default function RegisterScreen({ navigation }) {
       const formData = new FormData();
 
       formData.append("flow", "email-verification");
-
       formData.append("email", normalizedEmail);
-
       formData.append("code", normalizedCode);
 
-      /*
-       * Verifica el correo e inicia la sesión.
-       */
       await signIn("password", formData);
-
-      /*
-       * Guarda alias y teléfono en la tabla userProfiles.
-       */
       await saveUserProfile();
-
-      /*
-       * Normalmente no es necesario navegar manualmente.
-       * El componente raíz detectará que el usuario está autenticado.
-       */
     } catch (error) {
       setErrorMessage(getVerificationError(error));
     } finally {
@@ -304,223 +382,547 @@ export default function RegisterScreen({ navigation }) {
     navigation?.navigate?.("AuthHome");
   };
 
-  if (step === STEP_VERIFY) {
-    return (
-      <KeyboardAvoidingView
-        style={styles.screen}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
-        >
-          <Text style={styles.title}>Verifica tu correo</Text>
+  const renderBrandPanel = () => (
+    <View style={layoutStyles.brandPanel}>
+      <View style={styles.logoCircle}>
+        <Ionicons
+          name={
+            step === STEP_VERIFY ? "mail-open-outline" : "person-add-outline"
+          }
+          size={42}
+          color="#ffffff"
+        />
+      </View>
 
-          <Text style={styles.description}>
-            Hemos enviado un código de verificación a:
+      <Text style={styles.brandTitle}>Shopp</Text>
+
+      <Text style={styles.brandSubtitle}>
+        {step === STEP_VERIFY
+          ? "Solo falta confirmar tu correo para activar la cuenta."
+          : "Crea tu cuenta y mantén tus listas y preferencias sincronizadas."}
+      </Text>
+
+      {isDesktop ? (
+        <View style={styles.desktopFeatureBox}>
+          <View style={styles.featureRow}>
+            <Ionicons name="cloud-done-outline" size={20} color="#bfdbfe" />
+
+            <Text style={styles.featureText}>
+              Tus datos disponibles en todos tus dispositivos.
+            </Text>
+          </View>
+
+          <View style={styles.featureRow}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={20}
+              color="#bfdbfe"
+            />
+
+            <Text style={styles.featureText}>
+              Acceso protegido mediante verificación por email.
+            </Text>
+          </View>
+
+          <View style={styles.featureRow}>
+            <Ionicons name="people-outline" size={20} color="#bfdbfe" />
+
+            <Text style={styles.featureText}>
+              Elige un alias para identificarte en Shopp.
+            </Text>
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+
+  const renderError = () =>
+    errorMessage ? (
+      <View style={styles.errorBox}>
+        <Ionicons name="alert-circle-outline" size={20} color="#991b1b" />
+
+        <Text style={styles.errorText}>{errorMessage}</Text>
+      </View>
+    ) : null;
+
+  const renderRegisterForm = () => (
+    <View style={layoutStyles.formPanel}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.backButton,
+          pressed && styles.pressedButton,
+        ]}
+        onPress={handleCancel}
+        disabled={loading}
+      >
+        <Ionicons name="chevron-back" size={20} color="#64748b" />
+
+        <Text style={styles.backText}>Volver</Text>
+      </Pressable>
+
+      <View style={styles.stepBadge}>
+        <Text style={styles.stepBadgeText}>PASO 1 DE 2</Text>
+      </View>
+
+      <Text style={layoutStyles.title}>Crear una cuenta</Text>
+
+      <Text style={styles.subtitle}>
+        Completa tus datos para empezar a utilizar Shopp.
+      </Text>
+
+      <View style={styles.form}>
+        <View style={styles.twoColumnRow}>
+          <View style={[styles.field, styles.flexField]}>
+            <Text style={styles.label}>Nombre</Text>
+
+            <View style={styles.inputBox}>
+              <Ionicons
+                name="person-outline"
+                size={20}
+                color="#64748b"
+                style={styles.inputIcon}
+              />
+
+              <TextInput
+                value={name}
+                onChangeText={(value) => {
+                  setName(value);
+                  clearError();
+                }}
+                placeholder="Tu nombre"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="words"
+                autoCorrect={false}
+                textContentType="name"
+                autoComplete="name"
+                editable={!loading}
+                style={styles.input}
+              />
+            </View>
+          </View>
+
+          <View style={[styles.field, styles.flexField]}>
+            <Text style={styles.label}>Alias</Text>
+
+            <View style={styles.inputBox}>
+              <Ionicons
+                name="at-outline"
+                size={20}
+                color="#64748b"
+                style={styles.inputIcon}
+              />
+
+              <TextInput
+                value={alias}
+                onChangeText={(value) => {
+                  setAlias(value);
+                  clearError();
+                }}
+                placeholder="Tu alias"
+                placeholderTextColor="#94a3b8"
+                autoCapitalize="none"
+                autoCorrect={false}
+                editable={!loading}
+                style={styles.input}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.field}>
+          <View style={styles.labelRow}>
+            <Text style={styles.label}>Teléfono</Text>
+            <Text style={styles.optionalLabel}>Opcional</Text>
+          </View>
+
+          <View style={styles.inputBox}>
+            <Ionicons
+              name="call-outline"
+              size={20}
+              color="#64748b"
+              style={styles.inputIcon}
+            />
+
+            <TextInput
+              value={phone}
+              onChangeText={(value) => {
+                setPhone(value);
+                clearError();
+              }}
+              placeholder="Número de teléfono"
+              placeholderTextColor="#94a3b8"
+              keyboardType="phone-pad"
+              inputMode="tel"
+              textContentType="telephoneNumber"
+              autoComplete="tel"
+              editable={!loading}
+              style={styles.input}
+            />
+          </View>
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Email</Text>
+
+          <View
+            style={[
+              styles.inputBox,
+              email.length > 0 && !emailIsValid && styles.inputBoxError,
+            ]}
+          >
+            <Ionicons
+              name="mail-outline"
+              size={20}
+              color="#64748b"
+              style={styles.inputIcon}
+            />
+
+            <TextInput
+              value={email}
+              onChangeText={(value) => {
+                setEmail(value);
+                clearError();
+              }}
+              placeholder="tu@email.com"
+              placeholderTextColor="#94a3b8"
+              keyboardType="email-address"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="emailAddress"
+              autoComplete="email"
+              editable={!loading}
+              style={styles.input}
+            />
+          </View>
+
+          {email.length > 0 && !emailIsValid ? (
+            <Text style={styles.fieldHintError}>
+              Introduce un email válido.
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.twoColumnRow}>
+          <View style={[styles.field, styles.flexField]}>
+            <Text style={styles.label}>Contraseña</Text>
+
+            <View style={styles.inputBox}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color="#64748b"
+                style={styles.inputIcon}
+              />
+
+              <TextInput
+                value={password}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  clearError();
+                }}
+                placeholder="Contraseña"
+                placeholderTextColor="#94a3b8"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="newPassword"
+                autoComplete="new-password"
+                editable={!loading}
+                style={styles.input}
+              />
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.passwordButton,
+                  pressed && styles.pressedButton,
+                ]}
+                onPress={() => setShowPassword((current) => !current)}
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                }
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={21}
+                  color="#64748b"
+                />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={[styles.field, styles.flexField]}>
+            <Text style={styles.label}>Repetir contraseña</Text>
+
+            <View
+              style={[
+                styles.inputBox,
+                passwordConfirmation.length > 0 &&
+                  !passwordsMatch &&
+                  styles.inputBoxError,
+              ]}
+            >
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color="#64748b"
+                style={styles.inputIcon}
+              />
+
+              <TextInput
+                value={passwordConfirmation}
+                onChangeText={(value) => {
+                  setPasswordConfirmation(value);
+                  clearError();
+                }}
+                placeholder="Repite la contraseña"
+                placeholderTextColor="#94a3b8"
+                secureTextEntry={!showPasswordConfirmation}
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="newPassword"
+                autoComplete="new-password"
+                returnKeyType="done"
+                onSubmitEditing={handleRegister}
+                editable={!loading}
+                style={styles.input}
+              />
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.passwordButton,
+                  pressed && styles.pressedButton,
+                ]}
+                onPress={() =>
+                  setShowPasswordConfirmation((current) => !current)
+                }
+                disabled={loading}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  showPasswordConfirmation
+                    ? "Ocultar contraseña"
+                    : "Mostrar contraseña"
+                }
+              >
+                <Ionicons
+                  name={
+                    showPasswordConfirmation ? "eye-off-outline" : "eye-outline"
+                  }
+                  size={21}
+                  color="#64748b"
+                />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.passwordRequirementsBox}>
+          <Text style={styles.requirementsTitle}>
+            La contraseña debe incluir:
           </Text>
 
-          <Text style={styles.email}>{normalizedEmail}</Text>
+          <View style={styles.requirementsGrid}>
+            <PasswordRequirement valid={passwordChecks.length}>
+              8 caracteres
+            </PasswordRequirement>
 
-          <TextInput
-            value={code}
-            onChangeText={(value) => {
-              const digitsOnly = value.replace(/\D/g, "");
+            <PasswordRequirement valid={passwordChecks.uppercase}>
+              Una mayúscula
+            </PasswordRequirement>
 
-              setCode(digitsOnly.slice(0, VERIFICATION_CODE_LENGTH));
+            <PasswordRequirement valid={passwordChecks.lowercase}>
+              Una minúscula
+            </PasswordRequirement>
 
-              if (errorMessage) {
-                setErrorMessage("");
-              }
-            }}
-            placeholder={`Código de ${VERIFICATION_CODE_LENGTH} dígitos`}
-            keyboardType="number-pad"
-            inputMode="numeric"
-            autoCapitalize="none"
-            autoCorrect={false}
-            maxLength={VERIFICATION_CODE_LENGTH}
-            editable={!loading}
-            style={styles.input}
-            onSubmitEditing={handleVerifyEmail}
-          />
+            <PasswordRequirement valid={passwordChecks.number}>
+              Un número
+            </PasswordRequirement>
+          </View>
 
-          {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+          {passwordConfirmation.length > 0 ? (
+            <PasswordRequirement valid={passwordsMatch}>
+              Las contraseñas coinciden
+            </PasswordRequirement>
+          ) : null}
+        </View>
 
-          <Pressable
-            onPress={handleVerifyEmail}
-            disabled={loading}
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && !loading && styles.pressedButton,
-              loading && styles.disabledButton,
-            ]}
-          >
-            {loading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Verificar correo</Text>
-            )}
-          </Pressable>
-
-          <Pressable
-            onPress={handleBackToRegister}
-            disabled={loading}
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed && !loading && styles.pressedSecondaryButton,
-            ]}
-          >
-            <Text style={styles.secondaryButtonText}>Cambiar correo</Text>
-          </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    );
-  }
-
-  return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.title}>Crear una cuenta</Text>
-
-        <TextInput
-          value={name}
-          onChangeText={(value) => {
-            setName(value);
-
-            if (errorMessage) {
-              setErrorMessage("");
-            }
-          }}
-          placeholder="Nombre"
-          autoCapitalize="words"
-          autoCorrect={false}
-          editable={!loading}
-          style={styles.input}
-        />
-
-        <TextInput
-          value={alias}
-          onChangeText={(value) => {
-            setAlias(value);
-
-            if (errorMessage) {
-              setErrorMessage("");
-            }
-          }}
-          placeholder="Alias"
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!loading}
-          style={styles.input}
-        />
-
-        <TextInput
-          value={phone}
-          onChangeText={(value) => {
-            setPhone(value);
-
-            if (errorMessage) {
-              setErrorMessage("");
-            }
-          }}
-          placeholder="Teléfono (opcional)"
-          keyboardType="phone-pad"
-          inputMode="tel"
-          editable={!loading}
-          style={styles.input}
-        />
-
-        <TextInput
-          value={email}
-          onChangeText={(value) => {
-            setEmail(value);
-
-            if (errorMessage) {
-              setErrorMessage("");
-            }
-          }}
-          placeholder="Correo electrónico"
-          keyboardType="email-address"
-          inputMode="email"
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!loading}
-          style={styles.input}
-        />
-
-        <TextInput
-          value={password}
-          onChangeText={(value) => {
-            setPassword(value);
-
-            if (errorMessage) {
-              setErrorMessage("");
-            }
-          }}
-          placeholder="Contraseña"
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!loading}
-          style={styles.input}
-        />
-
-        <TextInput
-          value={passwordConfirmation}
-          onChangeText={(value) => {
-            setPasswordConfirmation(value);
-
-            if (errorMessage) {
-              setErrorMessage("");
-            }
-          }}
-          placeholder="Repite la contraseña"
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={!loading}
-          style={styles.input}
-          onSubmitEditing={handleRegister}
-        />
-
-        <Text style={styles.passwordHelp}>
-          Mínimo 8 caracteres, una mayúscula, una minúscula y un número.
-        </Text>
-
-        {!!errorMessage && <Text style={styles.error}>{errorMessage}</Text>}
+        {renderError()}
 
         <Pressable
-          onPress={handleRegister}
-          disabled={loading}
           style={({ pressed }) => [
             styles.primaryButton,
-            pressed && !loading && styles.pressedButton,
-            loading && styles.disabledButton,
+            (!registerFormIsValid || loading) && styles.disabledButton,
+            pressed &&
+              registerFormIsValid &&
+              !loading &&
+              styles.primaryButtonPressed,
           ]}
+          onPress={handleRegister}
+          disabled={!registerFormIsValid || loading}
         >
           {loading ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.primaryButtonText}>Crear cuenta</Text>
+            <>
+              <Text style={styles.primaryButtonText}>Crear cuenta</Text>
+
+              <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+            </>
+          )}
+        </Pressable>
+
+        <View style={styles.loginBox}>
+          <Text style={styles.loginText}>¿Ya tienes una cuenta?</Text>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.loginButton,
+              pressed && styles.pressedButton,
+            ]}
+            onPress={() =>
+              navigation.navigate("Login", {
+                email: normalizedEmail,
+              })
+            }
+            disabled={loading}
+          >
+            <Text style={styles.loginLink}>Iniciar sesión</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderVerificationForm = () => (
+    <View style={layoutStyles.formPanel}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.backButton,
+          pressed && styles.pressedButton,
+        ]}
+        onPress={handleBackToRegister}
+        disabled={loading}
+      >
+        <Ionicons name="chevron-back" size={20} color="#64748b" />
+
+        <Text style={styles.backText}>Cambiar datos</Text>
+      </Pressable>
+
+      <View style={styles.stepBadge}>
+        <Text style={styles.stepBadgeText}>PASO 2 DE 2</Text>
+      </View>
+
+      <Text style={layoutStyles.title}>Verifica tu correo</Text>
+
+      <Text style={styles.subtitle}>
+        Introduce el código de {VERIFICATION_CODE_LENGTH} dígitos que acabamos
+        de enviar.
+      </Text>
+
+      <View style={styles.emailDestinationBox}>
+        <View style={styles.emailDestinationIcon}>
+          <Ionicons name="mail-outline" size={22} color="#2563eb" />
+        </View>
+
+        <View style={styles.emailDestinationContent}>
+          <Text style={styles.emailDestinationLabel}>Código enviado a</Text>
+
+          <Text style={styles.emailDestinationValue}>{normalizedEmail}</Text>
+        </View>
+      </View>
+
+      <View style={styles.verificationForm}>
+        <Text style={styles.label}>Código de verificación</Text>
+
+        <TextInput
+          value={code}
+          onChangeText={(value) => {
+            const digitsOnly = value.replace(/\D/g, "");
+
+            setCode(digitsOnly.slice(0, VERIFICATION_CODE_LENGTH));
+
+            clearError();
+          }}
+          placeholder="00000000"
+          placeholderTextColor="#cbd5e1"
+          keyboardType="number-pad"
+          inputMode="numeric"
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={VERIFICATION_CODE_LENGTH}
+          editable={!loading}
+          style={styles.codeInput}
+          onSubmitEditing={handleVerifyEmail}
+        />
+
+        <Text style={styles.codeHelp}>
+          Revisa también las carpetas de correo no deseado o promociones.
+        </Text>
+
+        {renderError()}
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.primaryButton,
+            (!verificationCodeIsValid || loading) && styles.disabledButton,
+            pressed &&
+              verificationCodeIsValid &&
+              !loading &&
+              styles.primaryButtonPressed,
+          ]}
+          onPress={handleVerifyEmail}
+          disabled={!verificationCodeIsValid || loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <>
+              <Text style={styles.primaryButtonText}>
+                Verificar y continuar
+              </Text>
+
+              <Ionicons name="checkmark" size={21} color="#ffffff" />
+            </>
           )}
         </Pressable>
 
         <Pressable
-          onPress={handleCancel}
-          disabled={loading}
           style={({ pressed }) => [
             styles.secondaryButton,
-            pressed && !loading && styles.pressedSecondaryButton,
+            pressed && styles.pressedButton,
           ]}
+          onPress={handleBackToRegister}
+          disabled={loading}
         >
-          <Text style={styles.secondaryButtonText}>Cancelar</Text>
+          <Ionicons name="create-outline" size={18} color="#2563eb" />
+
+          <Text style={styles.secondaryButtonText}>
+            Cambiar correo electrónico
+          </Text>
         </Pressable>
+      </View>
+    </View>
+  );
+
+  return (
+    <KeyboardAvoidingView
+      style={layoutStyles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={layoutStyles.scrollContent}
+      >
+        <View style={layoutStyles.shell}>
+          {renderBrandPanel()}
+
+          {step === STEP_VERIFY
+            ? renderVerificationForm()
+            : renderRegisterForm()}
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -529,105 +931,500 @@ export default function RegisterScreen({ navigation }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f8fafc",
   },
 
-  container: {
+  screenDesktop: {
+    backgroundColor: "#e2e8f0",
+  },
+
+  screenTablet: {
+    backgroundColor: "#eef2ff",
+  },
+
+  scrollContent: {
     flexGrow: 1,
-    width: "100%",
-    maxWidth: 680,
-    alignSelf: "center",
     justifyContent: "center",
+    paddingHorizontal: 18,
+    paddingVertical: 28,
+  },
+
+  scrollContentDesktop: {
+    paddingHorizontal: 48,
+    paddingVertical: 48,
+  },
+
+  scrollContentSmallMobile: {
+    paddingHorizontal: 14,
+    paddingVertical: 20,
+  },
+
+  shell: {
+    width: "100%",
+    maxWidth: 620,
+    alignSelf: "center",
+    borderRadius: 28,
+    overflow: "hidden",
+    backgroundColor: "#ffffff",
+    shadowColor: "#0f172a",
+    shadowOffset: {
+      width: 0,
+      height: 18,
+    },
+    shadowOpacity: 0.12,
+    shadowRadius: 30,
+    elevation: 8,
+  },
+
+  shellDesktop: {
+    maxWidth: 1180,
+    minHeight: 720,
+    flexDirection: "row",
+  },
+
+  shellTablet: {
+    maxWidth: 680,
+  },
+
+  brandPanel: {
+    backgroundColor: "#2563eb",
+  },
+
+  brandPanelDesktop: {
+    width: "38%",
+    paddingHorizontal: 44,
+    paddingVertical: 52,
+    justifyContent: "center",
+  },
+
+  brandPanelMobile: {
     paddingHorizontal: 24,
-    paddingVertical: 32,
-    gap: 14,
+    paddingTop: 30,
+    paddingBottom: 26,
+    alignItems: "center",
+  },
+
+  logoCircle: {
+    width: 82,
+    height: 82,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.24)",
+  },
+
+  brandTitle: {
+    fontSize: 42,
+    lineHeight: 48,
+    fontWeight: "900",
+    color: "#ffffff",
+    textAlign: "center",
+  },
+
+  brandSubtitle: {
+    marginTop: 12,
+    maxWidth: 350,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: "600",
+    color: "#dbeafe",
+    textAlign: "center",
+  },
+
+  desktopFeatureBox: {
+    marginTop: 34,
+    gap: 17,
+  },
+
+  featureRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+
+  featureText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "600",
+    color: "#eff6ff",
+  },
+
+  formPanel: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 30,
+  },
+
+  formPanelDesktop: {
+    paddingHorizontal: 48,
+    paddingVertical: 42,
+  },
+
+  formPanelTablet: {
+    paddingHorizontal: 36,
+    paddingVertical: 36,
+  },
+
+  formPanelSmallMobile: {
+    paddingHorizontal: 18,
+  },
+
+  backButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 18,
+    paddingVertical: 6,
+    paddingRight: 10,
+  },
+
+  backText: {
+    marginLeft: 4,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+
+  stepBadge: {
+    alignSelf: "flex-start",
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#dbeafe",
+  },
+
+  stepBadgeText: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.8,
+    color: "#1d4ed8",
   },
 
   title: {
     fontSize: 28,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 4,
+    lineHeight: 34,
+    fontWeight: "900",
+    color: "#0f172a",
   },
 
-  description: {
-    fontSize: 16,
-    lineHeight: 23,
-    color: "#4b5563",
+  titleDesktop: {
+    fontSize: 34,
+    lineHeight: 40,
   },
 
-  email: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#111827",
+  titleSmallMobile: {
+    fontSize: 25,
+    lineHeight: 31,
+  },
+
+  subtitle: {
+    marginTop: 8,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "500",
+    color: "#64748b",
+  },
+
+  form: {
+    marginTop: 26,
+  },
+
+  verificationForm: {
+    marginTop: 26,
+  },
+
+  twoColumnRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+  },
+
+  flexField: {
+    flexGrow: 1,
+    flexBasis: 230,
+  },
+
+  field: {
+    marginBottom: 16,
+  },
+
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  label: {
     marginBottom: 8,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#334155",
+  },
+
+  optionalLabel: {
+    marginBottom: 8,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94a3b8",
+  },
+
+  inputBox: {
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+  },
+
+  inputBoxError: {
+    borderColor: "#fca5a5",
+    backgroundColor: "#fff7f7",
+  },
+
+  inputIcon: {
+    marginRight: 10,
   },
 
   input: {
-    width: "100%",
+    flex: 1,
     minHeight: 52,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    backgroundColor: "#ffffff",
+    paddingVertical: Platform.OS === "ios" ? 14 : 10,
     fontSize: 16,
-    color: "#111827",
+    color: "#0f172a",
+    outlineStyle: "none",
   },
 
-  passwordHelp: {
-    marginTop: -4,
+  passwordButton: {
+    minWidth: 40,
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: -8,
+  },
+
+  fieldHintError: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "700",
+    color: "#dc2626",
+  },
+
+  passwordRequirementsBox: {
+    marginTop: -2,
+    marginBottom: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderRadius: 15,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+
+  requirementsTitle: {
+    marginBottom: 9,
     fontSize: 13,
-    lineHeight: 18,
-    color: "#6b7280",
+    fontWeight: "800",
+    color: "#475569",
   },
 
-  error: {
-    color: "#b91c1c",
+  requirementsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 18,
+    rowGap: 7,
+  },
+
+  requirementRow: {
+    minWidth: 130,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+
+  requirementText: {
+    marginLeft: 6,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+
+  requirementTextValid: {
+    color: "#15803d",
+  },
+
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginBottom: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "#fee2e2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+
+  errorText: {
+    flex: 1,
     fontSize: 14,
     lineHeight: 20,
+    fontWeight: "600",
+    color: "#991b1b",
   },
 
   primaryButton: {
-    width: "100%",
-    minHeight: 52,
+    minHeight: 54,
+    borderRadius: 16,
+    backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 10,
-    backgroundColor: "#2563eb",
-    paddingHorizontal: 18,
-    marginTop: 4,
+    flexDirection: "row",
+    gap: 8,
+    shadowColor: "#2563eb",
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    elevation: 4,
+  },
+
+  primaryButtonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.995 }],
+  },
+
+  disabledButton: {
+    opacity: 0.5,
   },
 
   primaryButtonText: {
     color: "#ffffff",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "900",
   },
 
   secondaryButton: {
-    minHeight: 46,
+    minHeight: 48,
+    marginTop: 12,
+    borderRadius: 14,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 18,
+    gap: 7,
   },
 
   secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: "800",
     color: "#2563eb",
-    fontSize: 16,
+  },
+
+  loginBox: {
+    marginTop: 20,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+
+  loginText: {
+    fontSize: 14,
     fontWeight: "600",
+    color: "#64748b",
+  },
+
+  loginButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+
+  loginLink: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#2563eb",
+  },
+
+  emailDestinationBox: {
+    marginTop: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+
+  emailDestinationIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#dbeafe",
+  },
+
+  emailDestinationContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  emailDestinationLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748b",
+  },
+
+  emailDestinationValue: {
+    marginTop: 2,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "900",
+    color: "#1e3a8a",
+  },
+
+  codeInput: {
+    width: "100%",
+    minHeight: 70,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: "#93c5fd",
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 8,
+    textAlign: "center",
+    color: "#0f172a",
+    outlineStyle: "none",
+  },
+
+  codeHelp: {
+    marginTop: 10,
+    marginBottom: 18,
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#64748b",
+    textAlign: "center",
   },
 
   pressedButton: {
-    opacity: 0.86,
-  },
-
-  pressedSecondaryButton: {
     opacity: 0.65,
-  },
-
-  disabledButton: {
-    opacity: 0.6,
   },
 });
