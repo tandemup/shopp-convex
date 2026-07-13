@@ -553,7 +553,31 @@ export default function EditScannedItemScreen({ route, navigation }) {
     }
   }, [barcode, navigation]);
 
+  const openGoogleAIMode = async (query) => {
+    const url = `https://www.google.com/search?udm=50&q=${encodeURIComponent(
+      query,
+    )}`;
+
+    await Linking.openURL(url);
+  };
+
   const handleGoogleSearch = useCallback(async () => {
+    if (!barcode) {
+      setLocalError("No hay código de barras para buscar.");
+      return;
+    }
+
+    try {
+      setLocalError(null);
+      await openGoogleAIMode(barcode);
+    } catch (error) {
+      setLocalError(
+        error?.message || "No se pudo abrir la búsqueda de Google.",
+      );
+    }
+  }, [barcode]);
+
+  const handleGoogleSearch1 = useCallback(async () => {
     if (!barcode) {
       setLocalError("No hay código de barras para buscar.");
       return;
