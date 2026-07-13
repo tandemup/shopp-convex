@@ -20,7 +20,7 @@ export const TRUSTED_DOMAINS = [
   "foxnews.com",
   "esdiario.com",
   "eldiario.es",
-  "elmundo.esc",
+  "elmundo.es",
 ];
 
 export function normalizeUrl(rawUrl) {

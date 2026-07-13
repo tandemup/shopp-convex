@@ -21,6 +21,10 @@ import { useMutation } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
 import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
+import {
+  openGoogleProductSearch,
+  openGoogleShoppingSearch,
+} from "@/src/services/googleProductSearch";
 
 import {
   getProductBrand,
@@ -742,7 +746,33 @@ export default function EditScannedItemScreen({ route, navigation }) {
             <Text style={styles.cancelButtonText}>Cancelar</Text>
           </Pressable>
         </View>
+        <Pressable
+          style={styles.googleButton}
+          onPress={async () => {
+            try {
+              await openGoogleProductSearch(barcode);
+            } catch (error) {
+              setLocalError(error.message);
+            }
+          }}
+        >
+          <Text style={styles.googleButtonText}>Buscar en Google</Text>
+        </Pressable>
 
+        <Pressable
+          style={styles.shoppingButton}
+          onPress={async () => {
+            try {
+              await openGoogleShoppingSearch(barcode);
+            } catch (error) {
+              setLocalError(error.message);
+            }
+          }}
+        >
+          <Text style={styles.shoppingButtonText}>
+            Buscar en Google Shopping
+          </Text>
+        </Pressable>
         <Text style={styles.footerNote}>
           Eliminarlo del historial no borra el registro de Convex ni su contador
           de accesos.
