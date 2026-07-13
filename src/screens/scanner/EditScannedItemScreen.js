@@ -596,7 +596,6 @@ export default function EditScannedItemScreen({ route, navigation }) {
             </Text>
           </View>
         </View>
-
         <StatusCard
           source={dataSource}
           created={recordCreated}
@@ -605,7 +604,6 @@ export default function EditScannedItemScreen({ route, navigation }) {
           loading={initializing}
           consultingInternet={consultingInternet || internetLookupLoading}
         />
-
         {visibleError ? (
           <View style={styles.errorBox}>
             <View style={styles.errorIcon}>
@@ -615,11 +613,9 @@ export default function EditScannedItemScreen({ route, navigation }) {
             <Text style={styles.errorText}>{visibleError}</Text>
           </View>
         ) : null}
-
         <View style={styles.imageCard}>
           <ProductImage uri={imageUrl} productName={resolvedName} />
         </View>
-
         <View style={styles.formCard}>
           <View style={styles.sectionHeader}>
             <View>
@@ -677,7 +673,6 @@ export default function EditScannedItemScreen({ route, navigation }) {
             keyboardType="url"
           />
         </View>
-
         <View style={styles.actionsCard}>
           <Pressable
             style={({ pressed }) => [
@@ -746,33 +741,105 @@ export default function EditScannedItemScreen({ route, navigation }) {
             <Text style={styles.cancelButtonText}>Cancelar</Text>
           </Pressable>
         </View>
-        <Pressable
-          style={styles.googleButton}
-          onPress={async () => {
-            try {
-              await openGoogleProductSearch(barcode);
-            } catch (error) {
-              setLocalError(error.message);
-            }
-          }}
-        >
-          <Text style={styles.googleButtonText}>Buscar en Google</Text>
-        </Pressable>
+        <View style={styles.googleSearchCard}>
+          <View style={styles.googleSearchHeader}>
+            <View style={styles.googleSearchHeaderIcon}>
+              <Text style={styles.googleSearchHeaderIconText}>⌕</Text>
+            </View>
 
-        <Pressable
-          style={styles.shoppingButton}
-          onPress={async () => {
-            try {
-              await openGoogleShoppingSearch(barcode);
-            } catch (error) {
-              setLocalError(error.message);
-            }
-          }}
-        >
-          <Text style={styles.shoppingButtonText}>
-            Buscar en Google Shopping
-          </Text>
-        </Pressable>
+            <View style={styles.googleSearchHeaderContent}>
+              <Text style={styles.googleSearchTitle}>
+                Buscar más información
+              </Text>
+
+              <Text style={styles.googleSearchDescription}>
+                Consulta Google usando el código de barras del producto.
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Buscar producto en Google"
+            style={({ pressed }) => [
+              styles.googleButton,
+              pressed && styles.googleButtonPressed,
+              busy && styles.disabledButton,
+            ]}
+            disabled={busy || !barcode}
+            onPress={async () => {
+              try {
+                setLocalError(null);
+                await openGoogleProductSearch(barcode);
+              } catch (error) {
+                setLocalError(
+                  error?.message || "No se pudo abrir la búsqueda de Google.",
+                );
+              }
+            }}
+          >
+            <View style={styles.googleLogo}>
+              <Text style={styles.googleLogoText}>G</Text>
+            </View>
+
+            <View style={styles.externalButtonContent}>
+              <Text style={styles.googleButtonText}>Buscar en Google</Text>
+
+              <Text style={styles.googleButtonDescription}>
+                Nombre, marca, fabricante e información general
+              </Text>
+            </View>
+
+            <Text style={styles.externalButtonArrow}>›</Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Buscar producto en Google Shopping"
+            style={({ pressed }) => [
+              styles.shoppingButton,
+              pressed && styles.shoppingButtonPressed,
+              busy && styles.disabledButton,
+            ]}
+            disabled={busy || !barcode}
+            onPress={async () => {
+              try {
+                setLocalError(null);
+                await openGoogleShoppingSearch(barcode);
+              } catch (error) {
+                setLocalError(
+                  error?.message ||
+                    "No se pudo abrir la búsqueda de Google Shopping.",
+                );
+              }
+            }}
+          >
+            <View style={styles.shoppingIcon}>
+              <Text style={styles.shoppingIconText}>▱</Text>
+            </View>
+
+            <View style={styles.externalButtonContent}>
+              <Text style={styles.shoppingButtonText}>
+                Buscar en Google Shopping
+              </Text>
+
+              <Text style={styles.shoppingButtonDescription}>
+                Precios, tiendas y ofertas disponibles
+              </Text>
+            </View>
+
+            <Text style={styles.shoppingButtonArrow}>›</Text>
+          </Pressable>
+
+          <View style={styles.externalSearchNotice}>
+            <Text style={styles.externalSearchNoticeIcon}>↗</Text>
+
+            <Text style={styles.externalSearchNoticeText}>
+              La búsqueda se abrirá en el navegador.
+            </Text>
+          </View>
+        </View>
+
         <Text style={styles.footerNote}>
           Eliminarlo del historial no borra el registro de Convex ni su contador
           de accesos.
@@ -1203,7 +1270,223 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.5,
   },
+  googleSearchCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 16,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: "#E4E7EC",
+    gap: 11,
 
+    ...Platform.select({
+      web: {
+        boxShadow: "0 8px 28px rgba(16, 24, 40, 0.06)",
+      },
+      default: {
+        shadowColor: "#101828",
+        shadowOffset: {
+          width: 0,
+          height: 5,
+        },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 2,
+      },
+    }),
+  },
+
+  googleSearchHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 3,
+  },
+
+  googleSearchHeaderIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#F2F4F7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  googleSearchHeaderIconText: {
+    color: "#344054",
+    fontSize: 23,
+    fontWeight: "900",
+  },
+
+  googleSearchHeaderContent: {
+    flex: 1,
+  },
+
+  googleSearchTitle: {
+    color: "#101828",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+
+  googleSearchDescription: {
+    color: "#667085",
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 3,
+  },
+
+  googleButton: {
+    minHeight: 66,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#D0D5DD",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+
+  googleButtonPressed: {
+    backgroundColor: "#F8FAFC",
+    borderColor: "#4285F4",
+    transform: [{ scale: 0.992 }],
+  },
+
+  googleLogo: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E4E7EC",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  googleLogoText: {
+    color: "#4285F4",
+    fontSize: 23,
+    fontWeight: "900",
+  },
+
+  externalButtonContent: {
+    flex: 1,
+    paddingRight: 8,
+  },
+
+  googleButtonText: {
+    color: "#101828",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  googleButtonDescription: {
+    color: "#667085",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+
+  externalButtonArrow: {
+    color: "#667085",
+    fontSize: 29,
+    lineHeight: 30,
+    fontWeight: "400",
+  },
+
+  shoppingButton: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2563EB",
+    borderWidth: 1,
+    borderColor: "#1D4ED8",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+
+    ...Platform.select({
+      web: {
+        boxShadow: "0 6px 16px rgba(37, 99, 235, 0.18)",
+      },
+      default: {
+        shadowColor: "#2563EB",
+        shadowOffset: {
+          width: 0,
+          height: 5,
+        },
+        shadowOpacity: 0.18,
+        shadowRadius: 9,
+        elevation: 3,
+      },
+    }),
+  },
+
+  shoppingButtonPressed: {
+    backgroundColor: "#1D4ED8",
+    transform: [{ scale: 0.992 }],
+  },
+
+  shoppingIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.26)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+
+  shoppingIconText: {
+    color: "#FFFFFF",
+    fontSize: 25,
+    fontWeight: "900",
+    transform: [{ rotate: "180deg" }],
+  },
+
+  shoppingButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  shoppingButtonDescription: {
+    color: "#DBEAFE",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+
+  shoppingButtonArrow: {
+    color: "#FFFFFF",
+    fontSize: 29,
+    lineHeight: 30,
+    fontWeight: "400",
+  },
+
+  externalSearchNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 2,
+  },
+
+  externalSearchNoticeIcon: {
+    color: "#98A2B3",
+    fontSize: 13,
+    fontWeight: "900",
+    marginRight: 5,
+  },
+
+  externalSearchNoticeText: {
+    color: "#98A2B3",
+    fontSize: 11,
+    fontWeight: "700",
+  },
   footerNote: {
     color: "#667085",
     fontSize: 11,
