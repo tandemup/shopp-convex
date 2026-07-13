@@ -99,14 +99,19 @@ function safeAccuracy(value) {
   return Math.max(0, Math.min(value, 10000));
 }
 
-function safeLocationSource(value) {
-  const source = cleanText(value);
+const VALID_LOCATION_SOURCES = new Set([
+  "gps",
+  "manual",
+  "message",
+  "shared",
+  "test",
+  "unknown",
+]);
 
-  if (!source) {
-    return undefined;
-  }
+function safeLocationSource(value, fallback = "unknown") {
+  const source = cleanText(value).toLowerCase();
 
-  return source.slice(0, 80);
+  return VALID_LOCATION_SOURCES.has(source) ? source : fallback;
 }
 
 function clampLimit(value, defaultValue, minValue, maxValue) {
@@ -173,9 +178,12 @@ function findNearestSpot(spots, lat, lng, maxDistanceMeters) {
   let nearestDistance = Number.POSITIVE_INFINITY;
 
   for (const spot of spots) {
-    const spotLat = typeof spot.lat === "number" ? spot.lat : spot.latitude;
+    const spotLat = spot.location?.lat;
+    const spotLng = spot.location?.lng;
 
-    const spotLng = typeof spot.lng === "number" ? spot.lng : spot.longitude;
+    if (!hasValidCoords(spotLat, spotLng)) {
+      continue;
+    }
 
     const distance = distanceMeters(lat, lng, spotLat, spotLng);
 
@@ -521,11 +529,8 @@ export const listReleasedParkingSpots = query({
         }
 
         if (hasValidCoords(args.lat, args.lng)) {
-          const spotLat =
-            typeof spot.lat === "number" ? spot.lat : spot.latitude;
-
-          const spotLng =
-            typeof spot.lng === "number" ? spot.lng : spot.longitude;
+          const spotLat = spot.location?.lat;
+          const spotLng = spot.location?.lng;
 
           return distanceMeters(args.lat, args.lng, spotLat, spotLng) <= radius;
         }
@@ -867,17 +872,11 @@ export const sendParkingMessage = mutation({
 
       if (nearest.spot) {
         await ctx.db.patch(nearest.spot._id, {
-          lat: args.lat,
-          lng: args.lng,
-          latitude: args.lat,
-          longitude: args.lng,
-          accuracy,
-          locationSource,
-
           location: {
             lat: args.lat,
             lng: args.lng,
-            source: locationSource,
+            source: safeLocationSource(args.locationSource, "message"),
+            accuracy: accuracy ?? null,
           },
 
           status: "free",
@@ -906,21 +905,14 @@ export const sendParkingMessage = mutation({
           parkingAlias: ownerAlias,
 
           alias,
-          destination: cleanText(args.destinationName) || undefined,
           destinationName: cleanText(args.destinationName) || undefined,
           destinationAddress: cleanText(args.destinationAddress) || undefined,
-
-          lat: args.lat,
-          lng: args.lng,
-          latitude: args.lat,
-          longitude: args.lng,
-          accuracy,
-          locationSource,
 
           location: {
             lat: args.lat,
             lng: args.lng,
-            source: locationSource,
+            source: safeLocationSource(args.locationSource, "message"),
+            accuracy: accuracy ?? null,
           },
 
           status: "free",
@@ -933,6 +925,8 @@ export const sendParkingMessage = mutation({
 
           occupiedBy: undefined,
           occupiedAt: undefined,
+
+          isTest: false,
 
           createdAt: now,
           updatedAt: now,
@@ -998,17 +992,11 @@ export const sendParkingMessage = mutation({
 
       if (nearest.spot) {
         await ctx.db.patch(nearest.spot._id, {
-          lat: args.lat,
-          lng: args.lng,
-          latitude: args.lat,
-          longitude: args.lng,
-          accuracy,
-          locationSource,
-
           location: {
             lat: args.lat,
             lng: args.lng,
-            source: locationSource,
+            source: safeLocationSource(args.locationSource, "message"),
+            accuracy: accuracy ?? null,
           },
 
           status: "occupied",
@@ -1037,21 +1025,14 @@ export const sendParkingMessage = mutation({
           parkingAlias: ownerAlias,
 
           alias,
-          destination: cleanText(args.destinationName) || undefined,
           destinationName: cleanText(args.destinationName) || undefined,
           destinationAddress: cleanText(args.destinationAddress) || undefined,
-
-          lat: args.lat,
-          lng: args.lng,
-          latitude: args.lat,
-          longitude: args.lng,
-          accuracy,
-          locationSource,
 
           location: {
             lat: args.lat,
             lng: args.lng,
-            source: locationSource,
+            source: safeLocationSource(args.locationSource, "message"),
+            accuracy: accuracy ?? null,
           },
 
           status: "occupied",
@@ -1061,6 +1042,8 @@ export const sendParkingMessage = mutation({
 
           revealedBy: undefined,
           revealedAt: undefined,
+
+          isTest: false,
 
           createdAt: now,
           updatedAt: now,
@@ -1284,12 +1267,15 @@ export const markParkingSpotOccupied = mutation({
       expiresAt: now + OCCUPIED_SPOT_TTL_MS,
     });
 
-    if (hasValidCoords(spot.lat, spot.lng)) {
+    const lat = spot.location?.lat;
+    const lng = spot.location?.lng;
+
+    if (hasValidCoords(lat, lng)) {
       await incrementAreaParkedCount(ctx, {
         city: spot.city || DEFAULT_CITY,
         zone: spot.zone || DEFAULT_ZONE,
-        lat: spot.lat,
-        lng: spot.lng,
+        lat,
+        lng,
       });
     }
 
@@ -1314,8 +1300,8 @@ export const markParkingSpotFree = mutation({
       throw new Error("La plaza no existe.");
     }
 
-    const lat = typeof spot.lat === "number" ? spot.lat : spot.latitude;
-    const lng = typeof spot.lng === "number" ? spot.lng : spot.longitude;
+    const lat = spot.location?.lat;
+    const lng = spot.location?.lng;
 
     await ctx.db.patch(args.spotId, {
       status: "free",
@@ -1348,7 +1334,7 @@ export const markParkingSpotFree = mutation({
         lat,
         lng,
         spotId: args.spotId,
-        destinationName: spot.destinationName || spot.destination,
+        destinationName: spot.destinationName,
         destinationAddress: spot.destinationAddress,
       });
 
@@ -1554,8 +1540,6 @@ export const createValidParkingSpot = mutation({
     const zone = cleanZone(args.zone);
     const alias = cleanAlias(args.alias);
     const accuracy = safeAccuracy(args.accuracy);
-    const locationSource = safeLocationSource(args.locationSource);
-
     if (!hasValidCoords(args.lat, args.lng)) {
       throw new Error("Coordenadas no válidas.");
     }
@@ -1576,19 +1560,14 @@ export const createValidParkingSpot = mutation({
 
     if (nearest.spot) {
       await ctx.db.patch(nearest.spot._id, {
-        lat: args.lat,
-        lng: args.lng,
-        latitude: args.lat,
-        longitude: args.lng,
-        accuracy,
-        locationSource,
-
         location: {
           lat: args.lat,
           lng: args.lng,
-          source: locationSource,
+          source: safeLocationSource(args.locationSource, "gps"),
+          accuracy: accuracy ?? null,
         },
 
+        areaKey: buildAreaKey(args.lat, args.lng),
         status: "free",
 
         revealedBy: userId,
@@ -1600,9 +1579,10 @@ export const createValidParkingSpot = mutation({
         ownerAlias: alias || userId,
         parkingAlias: alias || userId,
 
-        destination: cleanText(args.destinationName) || undefined,
         destinationName: cleanText(args.destinationName) || undefined,
         destinationAddress: cleanText(args.destinationAddress) || undefined,
+
+        isTest: false,
 
         updatedAt: now,
         expiresAt: now + FREE_SPOT_TTL_MS,
@@ -1625,21 +1605,14 @@ export const createValidParkingSpot = mutation({
       parkingAlias: alias || userId,
 
       alias,
-      destination: cleanText(args.destinationName) || undefined,
       destinationName: cleanText(args.destinationName) || undefined,
       destinationAddress: cleanText(args.destinationAddress) || undefined,
-
-      lat: args.lat,
-      lng: args.lng,
-      latitude: args.lat,
-      longitude: args.lng,
-      accuracy,
-      locationSource,
 
       location: {
         lat: args.lat,
         lng: args.lng,
-        source: locationSource,
+        source: safeLocationSource(args.locationSource, "gps"),
+        accuracy: accuracy ?? null,
       },
 
       status: "free",
@@ -1652,6 +1625,8 @@ export const createValidParkingSpot = mutation({
 
       occupiedBy: undefined,
       occupiedAt: undefined,
+
+      isTest: false,
 
       createdAt: now,
       updatedAt: now,
@@ -1700,10 +1675,8 @@ export const listValidParkingSpots = query({
 
     return spots
       .filter((spot) => {
-        const spotLat = typeof spot.lat === "number" ? spot.lat : spot.latitude;
-
-        const spotLng =
-          typeof spot.lng === "number" ? spot.lng : spot.longitude;
+        const spotLat = spot.location?.lat;
+        const spotLng = spot.location?.lng;
 
         if (!hasValidCoords(spotLat, spotLng)) {
           return false;
@@ -1722,10 +1695,11 @@ export const listValidParkingSpots = query({
         city: spot.city,
         zone: spot.zone,
 
-        lat: typeof spot.lat === "number" ? spot.lat : spot.latitude,
-        lng: typeof spot.lng === "number" ? spot.lng : spot.longitude,
+        lat: spot.location.lat,
+        lng: spot.location.lng,
 
-        accuracy: spot.accuracy,
+        accuracy: spot.location.accuracy ?? null,
+        locationSource: spot.location.source,
         status: spot.status,
 
         revealedBy: spot.alias || spot.parkingAlias || spot.revealedBy,
@@ -1733,7 +1707,7 @@ export const listValidParkingSpots = query({
         updatedAt: spot.updatedAt,
         expiresAt: spot.expiresAt,
 
-        destinationName: spot.destinationName || spot.destination,
+        destinationName: spot.destinationName,
         destinationAddress: spot.destinationAddress,
       }))
       .sort((a, b) => (b.revealedAt || 0) - (a.revealedAt || 0));
@@ -1759,8 +1733,6 @@ export const createGpsDebugParkingSpot = mutation({
     }
 
     const accuracy = safeAccuracy(args.accuracy);
-    const locationSource = safeLocationSource(args.locationSource);
-
     const spotId = await ctx.db.insert("parkingSpots", {
       city: DEFAULT_CITY,
       zone: "gps-debug",
@@ -1771,21 +1743,14 @@ export const createGpsDebugParkingSpot = mutation({
       parkingAlias: userId,
 
       alias: "gps-debug",
-      destination: "GPS debug",
       destinationName: "GPS debug",
       destinationAddress: cleanText(args.note) || undefined,
-
-      lat: args.lat,
-      lng: args.lng,
-      latitude: args.lat,
-      longitude: args.lng,
-      accuracy,
-      locationSource,
 
       location: {
         lat: args.lat,
         lng: args.lng,
-        source: locationSource,
+        source: "test",
+        accuracy: accuracy ?? null,
       },
 
       status: "free",
@@ -1799,11 +1764,11 @@ export const createGpsDebugParkingSpot = mutation({
       occupiedBy: undefined,
       occupiedAt: undefined,
 
+      isTest: true,
+      testGroup: "gps-debug",
+
       createdAt: now,
       updatedAt: now,
-
-      // Para pruebas de GPS no conviene que expire enseguida.
-      expiresAt: now + 30 * 24 * 60 * 60 * 1000,
     });
 
     return {
@@ -1824,35 +1789,30 @@ export const listGpsDebugParkingSpots = query({
 
     const spots = await ctx.db
       .query("parkingSpots")
-      .withIndex("by_city_zone_updatedAt", (q) =>
-        q.eq("city", DEFAULT_CITY).eq("zone", "gps-debug"),
+      .withIndex("by_userId_city_zone_updatedAt", (q) =>
+        q.eq("userId", userId).eq("city", DEFAULT_CITY).eq("zone", "gps-debug"),
       )
       .order("desc")
       .take(limit);
 
-    return spots
-      .filter((spot) => spot.userId === userId)
-      .map((spot) => ({
-        _id: spot._id,
-        id: String(spot._id),
+    return spots.map((spot) => ({
+      _id: spot._id,
+      id: String(spot._id),
 
-        lat: typeof spot.lat === "number" ? spot.lat : spot.latitude,
-        lng: typeof spot.lng === "number" ? spot.lng : spot.longitude,
+      lat: spot.location.lat,
+      lng: spot.location.lng,
 
-        accuracy: spot.accuracy,
-        locationSource: spot.locationSource,
+      accuracy: spot.location.accuracy ?? null,
+      locationSource: spot.location.source,
 
-        status: spot.status,
+      status: spot.status,
 
-        createdAt: spot.createdAt,
-        updatedAt: spot.updatedAt,
-        revealedAt: spot.revealedAt,
+      createdAt: spot.createdAt,
+      updatedAt: spot.updatedAt,
+      revealedAt: spot.revealedAt,
 
-        note: spot.destinationAddress,
-      }))
-      .filter(
-        (spot) => typeof spot.lat === "number" && typeof spot.lng === "number",
-      );
+      note: spot.destinationAddress,
+    }));
   },
 });
 

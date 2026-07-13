@@ -165,86 +165,167 @@ export default defineSchema({
     .index("by_expiresAt", ["expiresAt"]),
 
   parkingSpots: defineTable({
-    // Compatibilidad con datos antiguos y nuevo flujo de plazas.
-    userId: v.optional(v.string()),
+    /**
+     * Usuario que publica o genera la plaza.
+     *
+     * Se mantiene como string porque en el proyecto se emplean
+     * identificadores lógicos además de los identificadores de Convex Auth.
+     */
+    userId: v.string(),
+
+    /**
+     * Alias visible del usuario que publica la plaza.
+     */
     ownerAlias: v.optional(v.string()),
+
+    /**
+     * Alias específico empleado por la utilidad Parking.
+     */
     parkingAlias: v.optional(v.string()),
 
-    city: v.optional(v.string()),
-    zone: v.optional(v.string()),
+    /**
+     * Clasificación geográfica y funcional.
+     *
+     * Ejemplo:
+     * city: "gijon"
+     * zone: "general"
+     * areaKey: "gijon:43.536:-5.606"
+     */
+    city: v.string(),
+    zone: v.string(),
     areaKey: v.optional(v.string()),
 
-    status: v.optional(
-      v.union(
-        // Nuevo flujo de plaza.
-        v.literal("free"),
-        v.literal("occupied"),
-        v.literal("leaving"),
-        v.literal("unknown"),
-        v.literal("expired"),
-
-        // Compatibilidad con documentos antiguos.
-        v.literal("looking"),
-        v.literal("parked"),
-        v.literal("heading"),
-        v.literal("offline"),
-      ),
+    /**
+     * Estado del lugar de aparcamiento.
+     *
+     * free:
+     *   La plaza está disponible.
+     *
+     * occupied:
+     *   La plaza ha sido ocupada.
+     *
+     * leaving:
+     *   El vehículo sigue en la plaza, pero su propietario
+     *   ha anunciado que va a abandonarla.
+     *
+     * unknown:
+     *   No se puede confirmar el estado actual.
+     *
+     * expired:
+     *   La información ha caducado.
+     */
+    status: v.union(
+      v.literal("free"),
+      v.literal("occupied"),
+      v.literal("leaving"),
+      v.literal("unknown"),
+      v.literal("expired"),
     ),
 
+    /**
+     * Coordenadas canónicas WGS 84 / EPSG:4326.
+     */
+    location: v.object({
+      lat: v.float64(),
+      lng: v.float64(),
+
+      source: v.union(
+        v.literal("gps"),
+        v.literal("manual"),
+        v.literal("message"),
+        v.literal("shared"),
+        v.literal("test"),
+        v.literal("unknown"),
+      ),
+
+      /**
+       * Precisión estimada en metros.
+       * Puede ser null cuando el origen no proporciona precisión.
+       */
+      accuracy: v.optional(v.union(v.float64(), v.null())),
+    }),
+
+    /**
+     * Nombre descriptivo opcional de la plaza.
+     *
+     * Ejemplo:
+     * "Plaza junto a la entrada principal"
+     */
     alias: v.optional(v.string()),
-    destination: v.optional(v.string()),
+
+    /**
+     * Lugar cercano utilizado como referencia.
+     */
     destinationName: v.optional(v.string()),
     destinationAddress: v.optional(v.string()),
 
-    lat: v.optional(v.float64()),
-    lng: v.optional(v.float64()),
-    latitude: v.optional(v.float64()),
-    longitude: v.optional(v.float64()),
-    accuracy: v.optional(v.union(v.float64(), v.null())),
-    locationSource: v.optional(v.string()),
-
-    location: v.optional(
-      v.object({
-        lat: v.float64(),
-        lng: v.float64(),
-        source: v.optional(v.string()),
-      }),
-    ),
-
+    /**
+     * Usuario que hizo visible o publicó la plaza.
+     */
     revealedBy: v.optional(v.string()),
     revealedAt: v.optional(v.float64()),
 
+    /**
+     * Usuario que ocupó la plaza.
+     */
     occupiedBy: v.optional(v.string()),
     occupiedAt: v.optional(v.float64()),
 
+    /**
+     * Usuario que notificó la liberación de la plaza.
+     */
     releasedBy: v.optional(v.string()),
     releasedAt: v.optional(v.float64()),
 
+    /**
+     * Mensaje de Parking que originó el registro.
+     */
     sourceMessageId: v.optional(v.id("parkingMessages")),
 
-    createdAt: v.optional(v.float64()),
-    updatedAt: v.optional(v.float64()),
+    /**
+     * Identificación explícita de datos de prueba.
+     */
+    isTest: v.boolean(),
+    testGroup: v.optional(v.string()),
+
+    /**
+     * Fechas Unix en milisegundos.
+     */
+    createdAt: v.float64(),
+    updatedAt: v.float64(),
+
+    /**
+     * Fecha de caducidad.
+     *
+     * Puede omitirse para plazas de prueba que deban conservarse
+     * indefinidamente.
+     */
     expiresAt: v.optional(v.float64()),
   })
-    .index("by_city_zone_status_expiresAt", [
-      "city",
-      "zone",
-      "status",
-      "expiresAt",
-    ])
     .index("by_city_zone_status_updatedAt", [
       "city",
       "zone",
       "status",
       "updatedAt",
     ])
+    .index("by_city_zone_status_expiresAt", [
+      "city",
+      "zone",
+      "status",
+      "expiresAt",
+    ])
     .index("by_city_zone_updatedAt", ["city", "zone", "updatedAt"])
-    .index("by_userId", ["userId"])
-    .index("by_ownerAlias", ["ownerAlias"])
-    .index("by_areaKey", ["areaKey"])
-    .index("by_status", ["status"])
+    .index("by_userId_updatedAt", ["userId", "updatedAt"])
+    .index("by_userId_city_zone_updatedAt", [
+      "userId",
+      "city",
+      "zone",
+      "updatedAt",
+    ])
+    .index("by_ownerAlias_updatedAt", ["ownerAlias", "updatedAt"])
+    .index("by_areaKey_status_updatedAt", ["areaKey", "status", "updatedAt"])
     .index("by_status_updatedAt", ["status", "updatedAt"])
-    .index("by_city_zone", ["city", "zone"])
+    .index("by_testGroup_updatedAt", ["testGroup", "updatedAt"])
     .index("by_expiresAt", ["expiresAt"]),
 
   parkingWatchers: defineTable({
