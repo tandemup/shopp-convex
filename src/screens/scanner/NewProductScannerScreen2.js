@@ -17,8 +17,6 @@ import {
   View,
 } from "react-native";
 
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -47,11 +45,17 @@ import {
   saveScannedEntry,
 } from "@/src/services/scannerHistory";
 
-import { lookupProductByBarcode } from "@/src/services/productLookup";
-
-const ZOOM_VALUES = [0, 0.15, 0.3, 0.45];
-
-const ZOOM_LABELS = ["1x", "1.2x", "1.5x", "2x"];
+import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
+import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
+import {
+  DEFAULT_SCANNER_ZOOM,
+  SCANNER_ZOOM_VALUES,
+  getNextScannerZoom,
+  getScannerZoomIndex,
+  getScannerZoomLabel,
+  loadScannerZoom,
+  saveScannerZoom,
+} from "@/src/utils/scannerZoomStorage";
 
 const DEFAULT_BARCODE_TYPES = ["ean13", "ean8", "upc_a", "upc_e"];
 
@@ -78,12 +82,6 @@ function normalizeBarcodeTypes(value) {
   }
 
   return DEFAULT_BARCODE_TYPES;
-}
-
-function normalizeBarcode(code) {
-  return String(code || "")
-    .replace(/\D/g, "")
-    .trim();
 }
 
 function navigateToAvailableRoute(navigation, routeName, params) {
@@ -119,7 +117,7 @@ export default function NewProductScannerScreen2() {
   const scannedRef = useRef(false);
   const handlingScanRef = useRef(false);
 
-  const saveBarcodeScan = useMutation(api.barcodeScans.saveBarcodeScan);
+  const { lookupWithCache } = useProductLookupWithCache();
 
   const {
     autoOpenEngine = false,
@@ -127,6 +125,8 @@ export default function NewProductScannerScreen2() {
     barcodeTypes: routeBarcodeTypes = null,
 
     captureMode = null,
+
+    saveToHistory: routeSaveToHistory = null,
 
     listId = null,
     itemId = null,
@@ -137,25 +137,25 @@ export default function NewProductScannerScreen2() {
 
     showControls = true,
 
-    initialZoomIndex = 1,
+    initialZoomIndex = null,
 
     initialTorchEnabled = false,
 
     showStatusBadges = true,
   } = route.params || {};
 
-  const safeInitialZoomIndex =
+  const routeInitialZoom =
     Number.isInteger(initialZoomIndex) &&
     initialZoomIndex >= 0 &&
-    initialZoomIndex < ZOOM_VALUES.length
-      ? initialZoomIndex
-      : 1;
+    initialZoomIndex < SCANNER_ZOOM_VALUES.length
+      ? SCANNER_ZOOM_VALUES[initialZoomIndex]
+      : null;
 
   const safeInitialTorchEnabled = Boolean(initialTorchEnabled);
 
   const [locked, setLocked] = useState(false);
 
-  const [zoomIndex, setZoomIndex] = useState(safeInitialZoomIndex);
+  const [zoom, setZoom] = useState(routeInitialZoom ?? DEFAULT_SCANNER_ZOOM);
 
   const [torchEnabled, setTorchEnabled] = useState(safeInitialTorchEnabled);
 
@@ -189,14 +189,23 @@ export default function NewProductScannerScreen2() {
       handlingScanRef.current = false;
 
       setLocked(false);
-
-      setZoomIndex(safeInitialZoomIndex);
-
       setTorchEnabled(safeInitialTorchEnabled);
-
       setScannerSession((previous) => previous + 1);
 
+      let active = true;
+
+      async function restoreZoom() {
+        const storedZoom = routeInitialZoom ?? (await loadScannerZoom());
+
+        if (active) {
+          setZoom(storedZoom);
+        }
+      }
+
+      restoreZoom();
+
       return () => {
+        active = false;
         scannedRef.current = false;
 
         handlingScanRef.current = false;
@@ -205,7 +214,7 @@ export default function NewProductScannerScreen2() {
 
         setTorchEnabled(false);
       };
-    }, [safeInitialTorchEnabled, safeInitialZoomIndex]),
+    }, [safeInitialTorchEnabled, routeInitialZoom]),
   );
 
   function resetScannerForNextScan() {
@@ -238,10 +247,10 @@ export default function NewProductScannerScreen2() {
     resetScannerForNextScan();
   }
 
-  function handleChangeZoom() {
-    setZoomIndex((previous) => {
-      return (previous + 1) % ZOOM_VALUES.length;
-    });
+  async function handleChangeZoom() {
+    const nextZoom = getNextScannerZoom(zoom);
+    setZoom(nextZoom);
+    await saveScannerZoom(nextZoom);
   }
 
   function handleToggleTorch() {
@@ -315,10 +324,10 @@ export default function NewProductScannerScreen2() {
           key={`quick-ean13-session-${scannerSession}`}
           onDetected={handleQuickEan13Detected}
           onCancel={handleCancel}
-          initialZoomIndex={zoomIndex}
+          initialZoomIndex={getScannerZoomIndex(zoom)}
           initialTorchEnabled={torchEnabled}
-          zoom={ZOOM_VALUES[zoomIndex]}
-          zoomLabel={ZOOM_LABELS[zoomIndex]}
+          zoom={zoom}
+          zoomLabel={getScannerZoomLabel(zoom)}
           torchEnabled={torchEnabled}
           onChangeZoom={handleChangeZoom}
           onToggleTorch={handleToggleTorch}
@@ -364,9 +373,9 @@ export default function NewProductScannerScreen2() {
       return updatedItem;
     }
 
-    const lookup = await lookupProductByBarcode(barcode);
+    const lookup = await lookupWithCache(barcode);
 
-    const product = lookup?.found ? lookup.product : null;
+    const product = lookup?.product || null;
 
     const scannedItem = {
       id: barcode,
@@ -451,6 +460,12 @@ export default function NewProductScannerScreen2() {
     setLocked(true);
 
     setTorchEnabled(false);
+
+    if (typeof routeSaveToHistory === "boolean") {
+      processDetectedBarcode(barcode, routeSaveToHistory);
+      return;
+    }
+
     safeMenu(
       "Producto detectado",
       `Código: ${barcode}\n\n¿Quieres añadir este producto al historial de escaneos?`,
@@ -526,10 +541,10 @@ export default function NewProductScannerScreen2() {
           key={`web-scanner-session-${scannerSession}`}
           onDetected={handleWebDetected}
           onCancel={handleCancel}
-          initialZoomIndex={zoomIndex}
+          initialZoomIndex={getScannerZoomIndex(zoom)}
           initialTorchEnabled={torchEnabled}
-          zoom={ZOOM_VALUES[zoomIndex]}
-          zoomLabel={ZOOM_LABELS[zoomIndex]}
+          zoom={zoom}
+          zoomLabel={getScannerZoomLabel(zoom)}
           torchEnabled={torchEnabled}
           onChangeZoom={handleChangeZoom}
           onToggleTorch={handleToggleTorch}
@@ -545,7 +560,7 @@ export default function NewProductScannerScreen2() {
       barcodeTypes={barcodeTypes}
       scannerSession={scannerSession}
       locked={locked}
-      zoomIndex={zoomIndex}
+      zoom={zoom}
       torchEnabled={torchEnabled}
       showControls={showControls}
       headerConfig={headerConfig}
@@ -562,7 +577,7 @@ function NativeProductScannerCamera({
   barcodeTypes,
   scannerSession,
   locked,
-  zoomIndex,
+  zoom,
   torchEnabled,
   showControls,
   headerConfig,
@@ -633,7 +648,7 @@ function NativeProductScannerCamera({
             style={styles.camera}
             facing="back"
             autofocus="on"
-            zoom={ZOOM_VALUES[zoomIndex]}
+            zoom={zoom}
             enableTorch={torchEnabled}
             onMountError={handleCameraMountError}
             onBarcodeScanned={locked ? undefined : handleNativeBarcodeScanned}
@@ -647,7 +662,7 @@ function NativeProductScannerCamera({
           onCancel={handleCancel}
           onChangeZoom={handleChangeZoom}
           onToggleTorch={handleToggleTorch}
-          zoomLabel={ZOOM_LABELS[zoomIndex]}
+          zoomLabel={getScannerZoomLabel(zoom)}
           torchEnabled={torchEnabled}
           zoomAvailable
           torchAvailable

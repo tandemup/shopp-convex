@@ -5,9 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { lookupProductByBarcode } from "@/src/services/productLookup";
 
 function normalizeBarcode(value) {
-  return String(value || "")
-    .replace(/\D/g, "")
-    .trim();
+  return String(value || "").replace(/\D/g, "");
 }
 
 function hasUsefulProductData(product) {
@@ -16,57 +14,50 @@ function hasUsefulProductData(product) {
   }
 
   return Boolean(
-    product.name ||
-    product.brand ||
-    product.imageUrl ||
-    product.category ||
-    product.productUrl ||
-    product.url ||
-    product.rawData,
+    String(product.name || "").trim() ||
+    String(product.brand || "").trim() ||
+    String(product.category || "").trim() ||
+    String(product.imageUrl || "").trim() ||
+    String(product.productUrl || "").trim(),
   );
 }
 
 export function useProductLookupWithCache() {
   const convex = useConvex();
+  const saveProductData = useMutation(api.productCache.saveProductData);
+  const markAsNotFound = useMutation(api.productCache.markAsNotFound);
 
-  const saveProductFromLookup = useMutation(
-    api.scanHistory.saveProductFromLookup,
-  );
-
-  const runningRef = useRef(false);
-  const lastBarcodeRef = useRef(null);
+  const runningBarcodeRef = useRef(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const lookupWithCache = useCallback(
-    async (barcode) => {
+    async (barcode, options = {}) => {
+      const { forceRefresh = false } = options;
       const normalizedBarcode = normalizeBarcode(barcode);
 
       if (!normalizedBarcode) {
-        throw new Error("Código de barras vacío");
+        throw new Error("Código de barras vacío.");
       }
 
-      if (runningRef.current && lastBarcodeRef.current === normalizedBarcode) {
+      if (runningBarcodeRef.current === normalizedBarcode) {
         return null;
       }
 
-      runningRef.current = true;
-      lastBarcodeRef.current = normalizedBarcode;
-
+      runningBarcodeRef.current = normalizedBarcode;
       setLoading(true);
       setError(null);
 
       try {
-        console.log("[scanHistory] buscando en Convex:", normalizedBarcode);
+        const cachedProduct = await convex.query(
+          api.productCache.getByBarcode,
+          {
+            barcode: normalizedBarcode,
+          },
+        );
 
-        const cachedProduct = await convex.query(api.scanHistory.getByBarcode, {
-          barcode: normalizedBarcode,
-        });
-
-        if (hasUsefulProductData(cachedProduct)) {
-          console.log("[scanHistory] encontrado en Convex:", cachedProduct);
-
+        if (!forceRefresh && hasUsefulProductData(cachedProduct)) {
           return {
             fromCache: true,
             barcode: normalizedBarcode,
@@ -74,66 +65,73 @@ export function useProductLookupWithCache() {
           };
         }
 
-        console.log("[scanHistory] no existe en Convex, buscando internet");
+        const negativeCacheActive =
+          !forceRefresh &&
+          cachedProduct?.status === "not_found" &&
+          Number(cachedProduct?.nextExternalLookupAt || 0) > Date.now();
 
-        const lookupResult = await lookupProductByBarcode(normalizedBarcode);
-
-        console.log("[scanHistory] resultado internet:", lookupResult);
-
-        if (!lookupResult?.found || !lookupResult?.product) {
+        if (negativeCacheActive) {
           return {
-            fromCache: false,
+            fromCache: true,
             barcode: normalizedBarcode,
-            product: {
-              barcode: normalizedBarcode,
-              name: "",
-              brand: "",
-              imageUrl: "",
-              category: "",
-              productUrl: "",
-              source: "openfoodfacts",
-              notFound: true,
-              rawData: lookupResult || {},
-            },
+            product: cachedProduct,
+            notFound: true,
+            retryAt: cachedProduct.nextExternalLookupAt,
           };
         }
 
-        const productToSave = {
-          ...lookupResult.product,
-          productUrl: lookupResult.product.url || "",
-          source: lookupResult.product.lookupSource || "openfoodfacts",
-          rawData: lookupResult,
-        };
+        const lookupResult = await lookupProductByBarcode(normalizedBarcode);
 
-        console.log("[scanHistory] guardando en Convex:", productToSave);
+        if (!lookupResult?.found || !lookupResult?.product) {
+          const notFoundProduct = await markAsNotFound({
+            barcode: normalizedBarcode,
+          });
 
-        const saveResult = await saveProductFromLookup({
+          return {
+            fromCache: false,
+            barcode: normalizedBarcode,
+            product: notFoundProduct,
+            notFound: true,
+            reason: lookupResult?.reason || "not_found",
+          };
+        }
+
+        const externalProduct = lookupResult.product;
+
+        const savedProduct = await saveProductData({
           barcode: normalizedBarcode,
-          product: productToSave,
-          source: productToSave.source,
+          name: String(externalProduct.name || "").trim() || undefined,
+          brand: String(externalProduct.brand || "").trim() || undefined,
+          category: String(externalProduct.category || "").trim() || undefined,
+          imageUrl: String(externalProduct.imageUrl || "").trim() || undefined,
+          productUrl:
+            String(
+              externalProduct.productUrl || externalProduct.url || "",
+            ).trim() || undefined,
+          source: "internet",
+          status: "complete",
         });
-
-        console.log("[scanHistory] guardado OK:", saveResult);
 
         return {
           fromCache: false,
           barcode: normalizedBarcode,
-          product: productToSave,
+          product: savedProduct,
         };
       } catch (err) {
-        console.error("[scanHistory] error:", err);
-
         const message =
           err?.message || "No se pudo buscar o guardar el producto.";
 
         setError(message);
         throw err;
       } finally {
+        if (runningBarcodeRef.current === normalizedBarcode) {
+          runningBarcodeRef.current = null;
+        }
+
         setLoading(false);
-        runningRef.current = false;
       }
     },
-    [convex, saveProductFromLookup],
+    [convex, markAsNotFound, saveProductData],
   );
 
   return {

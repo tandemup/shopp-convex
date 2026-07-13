@@ -74,7 +74,7 @@ export default function ScannedHistoryScreen({ navigation, route }) {
     try {
       const all = await getScannedHistory();
 
-      const onlyScanned = all.filter((item) => item.source === "scanner");
+      const onlyScanned = all.filter((item) => Boolean(item?.barcode));
 
       onlyScanned.sort((a, b) => {
         const dateA = new Date(a.updatedAt || a.scannedAt || 0).valueOf();
@@ -289,7 +289,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: "#111827",
-    outlineStyle: "none",
   },
 
   listContent: {

@@ -1,8 +1,20 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+const NEGATIVE_CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
 function normalizeBarcode(value) {
-  return String(value || "").trim();
+  return String(value || "").replace(/\D/g, "");
+}
+
+function validateBarcode(barcode) {
+  if (!barcode) {
+    throw new Error("El código de barras no puede estar vacío.");
+  }
+
+  if (!/^\d{8,14}$/.test(barcode)) {
+    throw new Error("El código de barras debe contener entre 8 y 14 dígitos.");
+  }
 }
 
 function normalizeOptionalString(value) {
@@ -10,12 +22,16 @@ function normalizeOptionalString(value) {
   return normalized || undefined;
 }
 
-/**
- * Busca el producto y registra un acceso.
- *
- * Si no existe, crea inmediatamente un registro mínimo.
- * La operación se ejecuta de forma atómica en Convex.
- */
+function hasUsefulProductData(data) {
+  return Boolean(
+    normalizeOptionalString(data.name) ||
+    normalizeOptionalString(data.brand) ||
+    normalizeOptionalString(data.category) ||
+    normalizeOptionalString(data.imageUrl) ||
+    normalizeOptionalString(data.productUrl),
+  );
+}
+
 export const registerAccess = mutation({
   args: {
     barcode: v.string(),
@@ -23,10 +39,7 @@ export const registerAccess = mutation({
 
   handler: async (ctx, args) => {
     const barcode = normalizeBarcode(args.barcode);
-
-    if (!barcode) {
-      throw new Error("El código de barras no puede estar vacío.");
-    }
+    validateBarcode(barcode);
 
     const now = Date.now();
 
@@ -36,10 +49,10 @@ export const registerAccess = mutation({
       .unique();
 
     if (existingProduct) {
-      const nextAccessCount = (existingProduct.accessCount || 0) + 1;
+      const accessCount = (existingProduct.accessCount || 0) + 1;
 
       await ctx.db.patch(existingProduct._id, {
-        accessCount: nextAccessCount,
+        accessCount,
         lastAccessedAt: now,
         updatedAt: now,
       });
@@ -48,7 +61,7 @@ export const registerAccess = mutation({
         created: false,
         product: {
           ...existingProduct,
-          accessCount: nextAccessCount,
+          accessCount,
           lastAccessedAt: now,
           updatedAt: now,
         },
@@ -60,23 +73,19 @@ export const registerAccess = mutation({
       accessCount: 1,
       status: "pending",
       source: "scanner",
+      lookupFailureCount: 0,
       createdAt: now,
       updatedAt: now,
       lastAccessedAt: now,
     });
 
-    const product = await ctx.db.get(productId);
-
     return {
       created: true,
-      product,
+      product: await ctx.db.get(productId),
     };
   },
 });
 
-/**
- * Obtiene el producto sin aumentar el contador.
- */
 export const getByBarcode = query({
   args: {
     barcode: v.string(),
@@ -96,21 +105,14 @@ export const getByBarcode = query({
   },
 });
 
-/**
- * Guarda o actualiza la información obtenida manualmente
- * o mediante una consulta externa.
- */
 export const saveProductData = mutation({
   args: {
     barcode: v.string(),
-
     name: v.optional(v.string()),
     brand: v.optional(v.string()),
     category: v.optional(v.string()),
-
     imageUrl: v.optional(v.string()),
     productUrl: v.optional(v.string()),
-
     source: v.optional(
       v.union(
         v.literal("convex"),
@@ -119,7 +121,6 @@ export const saveProductData = mutation({
         v.literal("scanner"),
       ),
     ),
-
     status: v.optional(
       v.union(
         v.literal("pending"),
@@ -131,34 +132,41 @@ export const saveProductData = mutation({
 
   handler: async (ctx, args) => {
     const barcode = normalizeBarcode(args.barcode);
-
-    if (!barcode) {
-      throw new Error("El código de barras no puede estar vacío.");
-    }
+    validateBarcode(barcode);
 
     const now = Date.now();
+    const data = {
+      name: normalizeOptionalString(args.name),
+      brand: normalizeOptionalString(args.brand),
+      category: normalizeOptionalString(args.category),
+      imageUrl: normalizeOptionalString(args.imageUrl),
+      productUrl: normalizeOptionalString(args.productUrl),
+    };
+
+    const status =
+      args.status || (hasUsefulProductData(data) ? "complete" : "pending");
+
+    const patch = {
+      ...data,
+      source: args.source || "manual",
+      status,
+      updatedAt: now,
+      ...(status === "complete"
+        ? {
+            lastExternalLookupAt: args.source === "internet" ? now : undefined,
+            nextExternalLookupAt: undefined,
+            lookupFailureCount: 0,
+          }
+        : {}),
+    };
 
     const existingProduct = await ctx.db
       .query("productCache")
       .withIndex("by_barcode", (q) => q.eq("barcode", barcode))
       .unique();
 
-    const patch = {
-      name: normalizeOptionalString(args.name),
-      brand: normalizeOptionalString(args.brand),
-      category: normalizeOptionalString(args.category),
-      imageUrl: normalizeOptionalString(args.imageUrl),
-      productUrl: normalizeOptionalString(args.productUrl),
-      source: args.source || "manual",
-      status:
-        args.status ||
-        (normalizeOptionalString(args.name) ? "complete" : "pending"),
-      updatedAt: now,
-    };
-
     if (existingProduct) {
       await ctx.db.patch(existingProduct._id, patch);
-
       return await ctx.db.get(existingProduct._id);
     }
 
@@ -166,6 +174,7 @@ export const saveProductData = mutation({
       barcode,
       ...patch,
       accessCount: 1,
+      lookupFailureCount: 0,
       createdAt: now,
       lastAccessedAt: now,
     });
@@ -174,10 +183,6 @@ export const saveProductData = mutation({
   },
 });
 
-/**
- * Marca que una consulta externa no encontró datos.
- * El registro se conserva para conocer el número de lecturas.
- */
 export const markAsNotFound = mutation({
   args: {
     barcode: v.string(),
@@ -185,21 +190,42 @@ export const markAsNotFound = mutation({
 
   handler: async (ctx, args) => {
     const barcode = normalizeBarcode(args.barcode);
+    validateBarcode(barcode);
 
-    const product = await ctx.db
+    const now = Date.now();
+
+    const existingProduct = await ctx.db
       .query("productCache")
       .withIndex("by_barcode", (q) => q.eq("barcode", barcode))
       .unique();
 
-    if (!product) {
-      return null;
+    if (existingProduct) {
+      await ctx.db.patch(existingProduct._id, {
+        status: "not_found",
+        source: "internet",
+        lastExternalLookupAt: now,
+        nextExternalLookupAt: now + NEGATIVE_CACHE_DURATION_MS,
+        lookupFailureCount: (existingProduct.lookupFailureCount || 0) + 1,
+        updatedAt: now,
+        lastAccessedAt: now,
+      });
+
+      return await ctx.db.get(existingProduct._id);
     }
 
-    await ctx.db.patch(product._id, {
+    const productId = await ctx.db.insert("productCache", {
+      barcode,
+      accessCount: 1,
       status: "not_found",
-      updatedAt: Date.now(),
+      source: "internet",
+      lastExternalLookupAt: now,
+      nextExternalLookupAt: now + NEGATIVE_CACHE_DURATION_MS,
+      lookupFailureCount: 1,
+      createdAt: now,
+      updatedAt: now,
+      lastAccessedAt: now,
     });
 
-    return product._id;
+    return await ctx.db.get(productId);
   },
 });

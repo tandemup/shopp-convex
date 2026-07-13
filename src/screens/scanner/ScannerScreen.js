@@ -9,13 +9,15 @@ import {
 } from "@/src/services/scannerHistory";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import { ROUTES } from "@/src/navigation/ROUTES";
-import { lookupProductByBarcode } from "@/src/services/productLookup";
+import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
+import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
 
 export default function ScannerScreen() {
   const route = useRoute();
   const navigation = useNavigation();
 
   const isHandlingScanRef = useRef(false);
+  const { lookupWithCache } = useProductLookupWithCache();
 
   const onScan = route.params?.onScan;
 
@@ -31,12 +33,6 @@ export default function ScannerScreen() {
    * los formatos guardados en BarcodeSettingsScreen.
    */
   const barcodeTypes = route.params?.barcodeTypes;
-
-  function normalizeBarcode(code) {
-    return String(code || "")
-      .replace(/\D/g, "")
-      .trim();
-  }
 
   async function saveDetectedBarcode(code) {
     const barcode = normalizeBarcode(code);
@@ -63,8 +59,8 @@ export default function ScannerScreen() {
       return updatedItem;
     }
 
-    const lookup = await lookupProductByBarcode(barcode);
-    const product = lookup.found ? lookup.product : null;
+    const lookup = await lookupWithCache(barcode);
+    const product = lookup?.product || null;
 
     const scannedItem = {
       id: barcode,

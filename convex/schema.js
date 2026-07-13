@@ -520,9 +520,16 @@ export default defineSchema({
     ),
 
     accessCount: v.number(),
+    lookupFailureCount: v.optional(v.number()),
+
+    lastExternalLookupAt: v.optional(v.number()),
+    nextExternalLookupAt: v.optional(v.number()),
 
     createdAt: v.number(),
     updatedAt: v.number(),
     lastAccessedAt: v.number(),
-  }).index("by_barcode", ["barcode"]),
+  })
+    .index("by_barcode", ["barcode"])
+    .index("by_status", ["status"])
+    .index("by_lastAccessedAt", ["lastAccessedAt"]),
 });

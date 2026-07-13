@@ -7,7 +7,6 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
-  Image,
   Linking,
   Pressable,
   ScrollView,
@@ -15,10 +14,12 @@ import {
   Text,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 
 import { ROUTES } from "@/src/navigation/ROUTES";
 
 import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
+import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
 import {
   getProductBrand,
   getProductCategory,
@@ -26,10 +27,6 @@ import {
   getProductImageUrl,
   getProductUrl,
 } from "@/src/services/productLookup";
-
-function normalizeBarcode(value) {
-  return String(value || "").trim();
-}
 
 export default function ProductInfoScreen({ route, navigation }) {
   const params = route?.params || {};
@@ -80,7 +77,9 @@ export default function ProductInfoScreen({ route, navigation }) {
       setLocalError(null);
 
       try {
-        const result = await lookupWithCache(barcode);
+        const result = await lookupWithCache(barcode, {
+          forceRefresh: force,
+        });
 
         if (!result) {
           return;
@@ -153,7 +152,7 @@ export default function ProductInfoScreen({ route, navigation }) {
               ]}
             >
               <Text style={styles.sourceBadgeText}>
-                {fromCache ? "Convex scanHistory" : "Internet"}
+                {fromCache ? "Caché Convex" : "Internet"}
               </Text>
             </View>
           </View>
@@ -178,7 +177,8 @@ export default function ProductInfoScreen({ route, navigation }) {
             <Image
               source={{ uri: imageUrl }}
               style={styles.productImage}
-              resizeMode="contain"
+              contentFit="contain"
+              cachePolicy="memory-disk"
             />
           ) : (
             <View style={styles.imagePlaceholder}>
@@ -209,7 +209,7 @@ export default function ProductInfoScreen({ route, navigation }) {
             </View>
           ) : null}
 
-          {product?.notFound ? (
+          {product?.notFound === true || product?.status === "not_found" ? (
             <View style={styles.warningBox}>
               <Text style={styles.warningText}>
                 No se encontró información detallada para este código.

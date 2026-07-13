@@ -8,6 +8,7 @@ import React, {
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -22,10 +23,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
 
-import {
-  openGoogleProductSearch,
-  openGoogleShoppingSearch,
-} from "@/src/services/googleProductSearch";
+import { openGoogleShoppingSearch } from "@/src/services/googleProductSearch";
 
 import {
   getProductBrand,
@@ -39,10 +37,7 @@ import {
   removeScannedItem,
   updateScannedEntry,
 } from "@/src/services/scannerHistory";
-
-function normalizeBarcode(value) {
-  return String(value || "").trim();
-}
+import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
 
 function normalizeString(value) {
   return String(value || "").trim();
@@ -127,7 +122,7 @@ function ProductImage({ uri, productName }) {
       />
 
       <View style={styles.cacheBadge}>
-        <Text style={styles.cacheBadgeText}>Imagen en caché</Text>
+        <Text style={styles.cacheBadgeText}>Caché de imagen activa</Text>
       </View>
     </View>
   );
@@ -144,13 +139,13 @@ function StatusCard({
   let title = "Producto cargado";
   let description = "Los datos se han recuperado correctamente.";
 
-  if (loading) {
-    title = "Consultando Convex";
-    description = "Buscando el código de barras en la base de datos.";
-  } else if (consultingInternet) {
+  if (consultingInternet) {
     title = "Buscando información";
     description =
       "El registro existe, pero estamos completando sus datos desde internet.";
+  } else if (loading) {
+    title = "Consultando Convex";
+    description = "Buscando el código de barras en la base de datos.";
   } else if (created) {
     title = "Nuevo código registrado";
     description =
@@ -160,6 +155,8 @@ function StatusCard({
     description =
       "El código está registrado, pero todavía no contiene datos del producto.";
   }
+
+  const visibleAccessCount = accessCount || 1;
 
   return (
     <View style={styles.statusCard}>
@@ -187,7 +184,8 @@ function StatusCard({
 
           <View style={styles.metaBadge}>
             <Text style={styles.metaBadgeText}>
-              {accessCount || 1} {accessCount === 1 ? "consulta" : "consultas"}
+              {visibleAccessCount}{" "}
+              {visibleAccessCount === 1 ? "consulta" : "consultas"}
             </Text>
           </View>
         </View>
@@ -241,7 +239,6 @@ export default function EditScannedItemScreen({ route, navigation }) {
 
   const registerAccess = useMutation(api.productCache.registerAccess);
   const saveProductData = useMutation(api.productCache.saveProductData);
-  const markAsNotFound = useMutation(api.productCache.markAsNotFound);
 
   const {
     loading: internetLookupLoading,
@@ -333,12 +330,12 @@ export default function EditScannedItemScreen({ route, navigation }) {
       setConsultingInternet(true);
 
       try {
-        const result = await lookupWithCache(barcode);
-        const externalProduct = result?.product ?? result ?? null;
+        const result = await lookupWithCache(barcode, {
+          forceRefresh: !silent,
+        });
+        const cachedProduct = result?.product ?? null;
 
-        if (!externalProduct || !hasUsefulProductData(externalProduct)) {
-          await markAsNotFound({ barcode });
-
+        if (result?.notFound || !hasUsefulProductData(cachedProduct)) {
           setProductStatus("not_found");
 
           if (!silent) {
@@ -350,30 +347,10 @@ export default function EditScannedItemScreen({ route, navigation }) {
           return null;
         }
 
-        const nextProduct = {
-          barcode,
-          name: getProductDisplayName(externalProduct, barcode),
-          brand: getProductBrand(externalProduct),
-          category: getProductCategory(externalProduct),
-          imageUrl: getProductImageUrl(externalProduct),
-          productUrl: getProductUrl(externalProduct, barcode),
-        };
-
-        const savedProduct = await saveProductData({
-          barcode,
-          name: normalizeString(nextProduct.name) || undefined,
-          brand: normalizeString(nextProduct.brand) || undefined,
-          category: normalizeString(nextProduct.category) || undefined,
-          imageUrl: normalizeString(nextProduct.imageUrl) || undefined,
-          productUrl: normalizeString(nextProduct.productUrl) || undefined,
-          source: "internet",
-          status: "complete",
-        });
-
         setRecordCreated(false);
-        applyConvexProduct(savedProduct);
+        applyConvexProduct(cachedProduct);
 
-        return savedProduct;
+        return cachedProduct;
       } catch (error) {
         console.error("EditScannedItemScreen external lookup error:", error);
 
@@ -389,13 +366,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
         setConsultingInternet(false);
       }
     },
-    [
-      barcode,
-      lookupWithCache,
-      markAsNotFound,
-      saveProductData,
-      applyConvexProduct,
-    ],
+    [barcode, lookupWithCache, applyConvexProduct],
   );
 
   useEffect(() => {
@@ -505,7 +476,8 @@ export default function EditScannedItemScreen({ route, navigation }) {
         imageUrl: normalizeString(imageUrl),
         url: normalizeString(productUrl),
         productUrl: normalizeString(productUrl),
-        source: "manual",
+        source: historyItem?.source || "scanner",
+        dataSource: "manual",
       };
 
       await updateScannedEntry(barcode, historyPatch);
@@ -523,6 +495,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
     }
   }, [
     barcode,
+    historyItem,
     name,
     brand,
     category,
@@ -561,7 +534,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
     await Linking.openURL(url);
   };
 
-  const handleGoogleSearch = useCallback(async () => {
+  const handleGoogleAIModeSearch = useCallback(async () => {
     if (!barcode) {
       setLocalError("No hay código de barras para buscar.");
       return;
@@ -570,22 +543,6 @@ export default function EditScannedItemScreen({ route, navigation }) {
     try {
       setLocalError(null);
       await openGoogleAIMode(barcode);
-    } catch (error) {
-      setLocalError(
-        error?.message || "No se pudo abrir la búsqueda de Google.",
-      );
-    }
-  }, [barcode]);
-
-  const handleGoogleSearch1 = useCallback(async () => {
-    if (!barcode) {
-      setLocalError("No hay código de barras para buscar.");
-      return;
-    }
-
-    try {
-      setLocalError(null);
-      await openGoogleProductSearch(barcode);
     } catch (error) {
       setLocalError(
         error?.message || "No se pudo abrir la búsqueda de Google.",
@@ -815,24 +772,26 @@ export default function EditScannedItemScreen({ route, navigation }) {
 
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Buscar producto en Google"
+            accessibilityLabel="Buscar producto en Google Modo IA"
             style={({ pressed }) => [
               styles.googleButton,
               pressed && styles.googleButtonPressed,
               (busy || !barcode) && styles.disabledButton,
             ]}
             disabled={busy || !barcode}
-            onPress={handleGoogleSearch}
+            onPress={handleGoogleAIModeSearch}
           >
             <View style={styles.googleLogo}>
               <Text style={styles.googleLogoText}>G</Text>
             </View>
 
             <View style={styles.externalButtonContent}>
-              <Text style={styles.googleButtonText}>Buscar en Google</Text>
+              <Text style={styles.googleButtonText}>
+                Buscar en Google Modo IA
+              </Text>
 
               <Text style={styles.googleButtonDescription}>
-                Nombre, marca, fabricante e información general
+                Respuesta generada por Google a partir del código
               </Text>
             </View>
 

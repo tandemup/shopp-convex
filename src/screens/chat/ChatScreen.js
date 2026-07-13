@@ -391,6 +391,7 @@ function YouTubePlayer({ url, onOpenUrl, mode = DEFAULT_YOUTUBE_RENDER_MODE }) {
     </Pressable>
   );
 }
+
 function MessageCard({
   item,
   onOpenUrl,
@@ -437,6 +438,8 @@ function MessageCard({
         </View>
       </View>
 
+      <Text style={styles.messageText}>{item?.text || ""}</Text>
+
       {firstUrl ? (
         <View style={styles.youtubePreviewBlock}>
           <YouTubePlayer
@@ -447,6 +450,7 @@ function MessageCard({
 
           <View style={styles.youtubeOnlyBadge}>
             <Ionicons name="logo-youtube" size={15} color="#b91c1c" />
+
             <Text style={styles.youtubeOnlyBadgeText}>
               {DEFAULT_YOUTUBE_RENDER_MODE === YOUTUBE_RENDER_MODE.EMBED
                 ? "YouTube embebido"
@@ -460,7 +464,6 @@ function MessageCard({
     </View>
   );
 }
-
 export default function ChatScreen() {
   const listRef = useRef(null);
   const didInitialScrollRef = useRef(false);
@@ -1412,7 +1415,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
   },
-
+  messageText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#1f2937",
+    fontWeight: "500",
+  },
   youtubePreviewBlock: {
     marginTop: 12,
     gap: 10,

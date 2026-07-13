@@ -28,9 +28,14 @@ import {
 import { ROUTES } from "@/src/navigation/ROUTES";
 import { buildHeaderConfig } from "@/src/utils/layout/headerStyles";
 import { getBarcodeSettings } from "@/src/storage/barcodeSettingsStorage";
-
-const ZOOM_VALUES = [0, 0.15, 0.3, 0.45];
-const ZOOM_LABELS = ["1x", "1.2x", "1.5x", "2x"];
+import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
+import {
+  DEFAULT_SCANNER_ZOOM,
+  getNextScannerZoom,
+  getScannerZoomLabel,
+  loadScannerZoom,
+  saveScannerZoom,
+} from "@/src/utils/scannerZoomStorage";
 
 const DEFAULT_BARCODE_TYPES = ["ean13", "ean8", "upc_a", "upc_e"];
 
@@ -76,7 +81,7 @@ export default function ProductBarcodeScannerScreen() {
 
   const [permission, requestPermission] = useCameraPermissions();
   const [locked, setLocked] = useState(false);
-  const [zoomIndex, setZoomIndex] = useState(1);
+  const [zoom, setZoom] = useState(DEFAULT_SCANNER_ZOOM);
   const [torchEnabled, setTorchEnabled] = useState(false);
 
   const [barcodeTypes, setBarcodeTypes] = useState(DEFAULT_BARCODE_TYPES);
@@ -108,21 +113,26 @@ export default function ProductBarcodeScannerScreen() {
       setLocked(false);
       setTorchEnabled(false);
 
-      async function loadBarcodeSettings() {
+      async function loadScannerPreferences() {
         try {
-          const settings = await getBarcodeSettings();
+          const [settings, storedZoom] = await Promise.all([
+            getBarcodeSettings(),
+            loadScannerZoom(),
+          ]);
 
           if (!isActive) return;
 
           setBarcodeTypes(normalizeBarcodeTypes(settings?.formats));
+          setZoom(storedZoom);
         } catch (error) {
           if (!isActive) return;
 
           setBarcodeTypes(DEFAULT_BARCODE_TYPES);
+          setZoom(DEFAULT_SCANNER_ZOOM);
         }
       }
 
-      loadBarcodeSettings();
+      loadScannerPreferences();
 
       return () => {
         isActive = false;
@@ -140,8 +150,10 @@ export default function ProductBarcodeScannerScreen() {
     navigation.goBack();
   };
 
-  const handleChangeZoom = () => {
-    setZoomIndex((prev) => (prev + 1) % ZOOM_VALUES.length);
+  const handleChangeZoom = async () => {
+    const nextZoom = getNextScannerZoom(zoom);
+    setZoom(nextZoom);
+    await saveScannerZoom(nextZoom);
   };
 
   const handleToggleTorch = () => {
@@ -151,7 +163,7 @@ export default function ProductBarcodeScannerScreen() {
   const handleBarcodeScanned = ({ data }) => {
     if (locked || scannedRef.current) return;
 
-    const code = String(data || "").trim();
+    const code = normalizeBarcode(data);
 
     if (!code) return;
 
@@ -243,7 +255,7 @@ export default function ProductBarcodeScannerScreen() {
         <CameraView
           style={styles.camera}
           facing="back"
-          zoom={ZOOM_VALUES[zoomIndex]}
+          zoom={zoom}
           enableTorch={torchEnabled}
           onBarcodeScanned={locked ? undefined : handleBarcodeScanned}
           barcodeScannerSettings={{
@@ -282,7 +294,7 @@ export default function ProductBarcodeScannerScreen() {
                 <Ionicons name="scan-outline" size={18} color="#fff" />
 
                 <Text style={styles.actionText}>
-                  Zoom {ZOOM_LABELS[zoomIndex]}
+                  Zoom {getScannerZoomLabel(zoom)}
                 </Text>
               </Pressable>
 
