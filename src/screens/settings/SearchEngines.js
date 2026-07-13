@@ -12,7 +12,11 @@ import {
   DEFAULT_SEARCH_SETTINGS,
 } from "@/src/storage/settingsStorage";
 
-import { SEARCH_ENGINES, BOOK_ENGINES } from "@/src/constants/searchEngines";
+import {
+  SEARCH_ENGINES,
+  BOOK_ENGINES,
+  PRODUCT_SEARCH_ENGINE_IDS,
+} from "@/src/constants/searchEngines";
 import { buildHeaderConfig } from "@/src/utils/layout/headerStyles";
 
 const CATEGORY_CONFIG = {
@@ -161,6 +165,10 @@ export default function SearchEngines() {
           </Text>
 
           <Text style={styles.engineId}>{engine.id}</Text>
+
+          {engine.description ? (
+            <Text style={styles.engineDescription}>{engine.description}</Text>
+          ) : null}
         </View>
 
         <View
@@ -187,12 +195,16 @@ export default function SearchEngines() {
           <>
             <Text style={styles.sectionTitle}>Productos</Text>
 
-            {Object.values(SEARCH_ENGINES).map((engine) =>
-              renderEngineRow({
+            {PRODUCT_SEARCH_ENGINE_IDS.map((engineId) => {
+              const engine = SEARCH_ENGINES[engineId];
+
+              if (!engine) return null;
+
+              return renderEngineRow({
                 category: "product",
                 engine,
-              }),
-            )}
+              });
+            })}
           </>
         ) : null}
 
@@ -288,6 +300,13 @@ const styles = StyleSheet.create({
 
   engineId: {
     fontSize: 13,
+    color: "#6B7280",
+  },
+
+  engineDescription: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
     color: "#6B7280",
   },
 

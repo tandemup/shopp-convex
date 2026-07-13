@@ -15,9 +15,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Image } from "expo-image";
+import { Ionicons } from "@expo/vector-icons";
 import { useMutation } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
@@ -225,6 +227,8 @@ function FormField({
 
 export default function EditScannedItemScreen({ route, navigation }) {
   const params = route?.params || {};
+  const { width } = useWindowDimensions();
+  const isWideLayout = width >= 920;
 
   const historyItem = params.item ?? null;
   const initialProduct = params.product ?? historyItem ?? null;
@@ -573,271 +577,358 @@ export default function EditScannedItemScreen({ route, navigation }) {
     >
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          isWideLayout && styles.contentWide,
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
           <View style={styles.heroTopRow}>
-            <View style={styles.heroTextContainer}>
-              <Text style={styles.eyebrow}>PRODUCTO ESCANEADO</Text>
+            <View style={styles.heroIdentity}>
+              <View style={styles.heroIcon}>
+                <Ionicons name="barcode-outline" size={24} color="#FFFFFF" />
+              </View>
 
-              <Text style={styles.title} numberOfLines={3}>
-                {resolvedName}
+              <View style={styles.heroTextContainer}>
+                <Text style={styles.eyebrow}>PRODUCTO ESCANEADO</Text>
+
+                <Text style={styles.title} numberOfLines={2}>
+                  {resolvedName}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.heroStatusBadge}>
+              <View
+                style={[
+                  styles.heroStatusDot,
+                  productStatus === "not_found" && styles.heroStatusDotWarning,
+                ]}
+              />
+
+              <Text style={styles.heroStatusText}>
+                {productStatus === "not_found"
+                  ? "Sin identificar"
+                  : recordCreated
+                    ? "Nuevo registro"
+                    : "Producto localizado"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.barcodeRow}>
+            <View>
+              <Text style={styles.barcodeLabel}>Código de barras</Text>
+              <Text selectable style={styles.barcode}>
+                {barcode || "Sin código"}
               </Text>
             </View>
 
-            <View style={styles.scannerBadge}>
-              <Text style={styles.scannerBadgeIcon}>▦</Text>
+            <View style={styles.barcodeTypeBadge}>
+              <Text style={styles.barcodeTypeText}>
+                {barcode?.length === 13 ? "EAN-13" : "BARCODE"}
+              </Text>
             </View>
           </View>
-
-          <View style={styles.barcodeContainer}>
-            <Text style={styles.barcodeLabel}>Código de barras</Text>
-
-            <Text selectable style={styles.barcode}>
-              {barcode || "Sin código"}
-            </Text>
-          </View>
         </View>
-
-        <StatusCard
-          source={dataSource}
-          created={recordCreated}
-          accessCount={accessCount}
-          status={productStatus}
-          loading={initializing}
-          consultingInternet={consultingInternet || internetLookupLoading}
-        />
 
         {visibleError ? (
           <View style={styles.errorBox}>
             <View style={styles.errorIcon}>
-              <Text style={styles.errorIconText}>!</Text>
+              <Ionicons name="alert-circle-outline" size={20} color="#B42318" />
             </View>
 
             <Text style={styles.errorText}>{visibleError}</Text>
           </View>
         ) : null}
 
-        <View style={styles.imageCard}>
-          <ProductImage uri={imageUrl} productName={resolvedName} />
-        </View>
+        <View style={[styles.workspace, isWideLayout && styles.workspaceWide]}>
+          <View
+            style={[styles.leftColumn, isWideLayout && styles.leftColumnWide]}
+          >
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View>
+                  <Text style={styles.cardEyebrow}>VISTA PREVIA</Text>
+                  <Text style={styles.cardTitle}>Imagen del producto</Text>
+                </View>
 
-        <View style={styles.formCard}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionHeaderContent}>
-              <Text style={styles.sectionTitle}>Información del producto</Text>
+                <View style={styles.softBadge}>
+                  <Ionicons name="image-outline" size={15} color="#475467" />
+                  <Text style={styles.softBadgeText}>Caché activa</Text>
+                </View>
+              </View>
 
-              <Text style={styles.sectionDescription}>
-                Los cambios se guardarán en Convex.
-              </Text>
+              <ProductImage uri={imageUrl} productName={resolvedName} />
             </View>
 
-            <View style={styles.editBadge}>
-              <Text style={styles.editBadgeText}>Editable</Text>
+            <StatusCard
+              source={dataSource}
+              created={recordCreated}
+              accessCount={accessCount}
+              status={productStatus}
+              loading={initializing}
+              consultingInternet={consultingInternet || internetLookupLoading}
+            />
+
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View>
+                  <Text style={styles.cardEyebrow}>BÚSQUEDA EXTERNA</Text>
+                  <Text style={styles.cardTitle}>Buscar más información</Text>
+                  <Text style={styles.cardDescription}>
+                    Abre el código de barras en un buscador externo.
+                  </Text>
+                </View>
+
+                <Ionicons name="open-outline" size={20} color="#667085" />
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Buscar producto en Google Modo IA"
+                style={({ pressed }) => [
+                  styles.externalAction,
+                  pressed && styles.externalActionPressed,
+                  (busy || !barcode) && styles.disabledButton,
+                ]}
+                disabled={busy || !barcode}
+                onPress={handleGoogleAIModeSearch}
+              >
+                <View style={styles.googleIcon}>
+                  <Text style={styles.googleIconText}>G</Text>
+                </View>
+
+                <View style={styles.externalActionContent}>
+                  <Text style={styles.externalActionTitle}>Google Modo IA</Text>
+                  <Text style={styles.externalActionDescription}>
+                    Respuesta generada a partir del código
+                  </Text>
+                </View>
+
+                <Ionicons name="chevron-forward" size={20} color="#667085" />
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Buscar producto en Google Shopping"
+                style={({ pressed }) => [
+                  styles.externalAction,
+                  styles.externalActionPrimary,
+                  pressed && styles.externalActionPrimaryPressed,
+                  (busy || !barcode) && styles.disabledButton,
+                ]}
+                disabled={busy || !barcode}
+                onPress={handleGoogleShoppingSearch}
+              >
+                <View style={styles.shoppingIcon}>
+                  <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
+                </View>
+
+                <View style={styles.externalActionContent}>
+                  <Text
+                    style={[
+                      styles.externalActionTitle,
+                      styles.externalActionTitleLight,
+                    ]}
+                  >
+                    Google Shopping
+                  </Text>
+                  <Text
+                    style={[
+                      styles.externalActionDescription,
+                      styles.externalActionDescriptionLight,
+                    ]}
+                  >
+                    Precios, tiendas y ofertas
+                  </Text>
+                </View>
+
+                <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+              </Pressable>
             </View>
           </View>
 
-          <FormField
-            label="Nombre"
-            value={name}
-            onChangeText={setName}
-            placeholder="Nombre del producto"
-          />
-
-          <FormField
-            label="Marca"
-            value={brand}
-            onChangeText={setBrand}
-            placeholder="Marca o fabricante"
-            autoCapitalize="words"
-          />
-
-          <FormField
-            label="Categoría"
-            value={category}
-            onChangeText={setCategory}
-            placeholder="Categoría del producto"
-          />
-
-          <FormField
-            label="URL de la imagen"
-            value={imageUrl}
-            onChangeText={setImageUrl}
-            placeholder="https://..."
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-          />
-
-          <FormField
-            label="URL del producto"
-            value={productUrl}
-            onChangeText={setProductUrl}
-            placeholder="https://..."
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-          />
-        </View>
-
-        <View style={styles.actionsCard}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.primaryButton,
-              pressed && styles.pressedButton,
-              busy && styles.disabledButton,
-            ]}
-            onPress={handleSave}
-            disabled={busy}
+          <View
+            style={[styles.rightColumn, isWideLayout && styles.rightColumnWide]}
           >
-            {saving ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Text style={styles.primaryButtonIcon}>✓</Text>
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardHeaderText}>
+                  <Text style={styles.cardEyebrow}>DATOS PRINCIPALES</Text>
+                  <Text style={styles.cardTitle}>Información del producto</Text>
+                  <Text style={styles.cardDescription}>
+                    Edita los campos y guarda la ficha consolidada en Convex.
+                  </Text>
+                </View>
 
-                <Text style={styles.primaryButtonText}>Guardar producto</Text>
-              </>
-            )}
-          </Pressable>
+                <View style={styles.editBadge}>
+                  <Ionicons name="create-outline" size={14} color="#027A48" />
+                  <Text style={styles.editBadgeText}>Editable</Text>
+                </View>
+              </View>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.secondaryButton,
-              pressed && styles.pressedButton,
-              busy && styles.disabledButton,
-            ]}
-            onPress={() => searchExternalProduct({ silent: false })}
-            disabled={busy}
-          >
-            {consultingInternet || internetLookupLoading ? (
-              <ActivityIndicator color="#2563EB" />
-            ) : (
-              <>
-                <Text style={styles.secondaryButtonIcon}>↻</Text>
+              <FormField
+                label="Nombre"
+                value={name}
+                onChangeText={setName}
+                placeholder="Nombre del producto"
+              />
 
-                <Text style={styles.secondaryButtonText}>
-                  Actualizar desde internet
-                </Text>
-              </>
-            )}
-          </Pressable>
+              <View style={styles.formGrid}>
+                <View style={styles.formGridItem}>
+                  <FormField
+                    label="Marca"
+                    value={brand}
+                    onChangeText={setBrand}
+                    placeholder="Marca o fabricante"
+                    autoCapitalize="words"
+                  />
+                </View>
 
-          <View style={styles.separator} />
+                <View style={styles.formGridItem}>
+                  <FormField
+                    label="Categoría"
+                    value={category}
+                    onChangeText={setCategory}
+                    placeholder="Categoría del producto"
+                  />
+                </View>
+              </View>
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.deleteButton,
-              pressed && styles.pressedButton,
-              busy && styles.disabledButton,
-            ]}
-            onPress={handleDeleteFromHistory}
-            disabled={busy}
-          >
-            <Text style={styles.deleteButtonText}>
-              {deleting ? "Eliminando..." : "Eliminar del historial local"}
-            </Text>
-          </Pressable>
+              <FormField
+                label="URL de la imagen"
+                value={imageUrl}
+                onChangeText={setImageUrl}
+                placeholder="https://..."
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
 
-          <Pressable
-            style={({ pressed }) => [
-              styles.cancelButton,
-              pressed && styles.pressedButton,
-            ]}
-            onPress={() => navigation.goBack()}
-            disabled={saving || deleting}
-          >
-            <Text style={styles.cancelButtonText}>Cancelar</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.googleSearchCard}>
-          <View style={styles.googleSearchHeader}>
-            <View style={styles.googleSearchHeaderIcon}>
-              <Text style={styles.googleSearchHeaderIconText}>⌕</Text>
+              <FormField
+                label="URL del producto"
+                value={productUrl}
+                onChangeText={setProductUrl}
+                placeholder="https://..."
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
             </View>
 
-            <View style={styles.googleSearchHeaderContent}>
-              <Text style={styles.googleSearchTitle}>
-                Buscar más información
-              </Text>
+            <View style={styles.card}>
+              <View style={styles.cardHeader}>
+                <View>
+                  <Text style={styles.cardEyebrow}>ACCIONES</Text>
+                  <Text style={styles.cardTitle}>Gestionar producto</Text>
+                </View>
+              </View>
 
-              <Text style={styles.googleSearchDescription}>
-                Consulta Google usando el código de barras del producto.
-              </Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && styles.primaryButtonPressed,
+                  busy && styles.disabledButton,
+                ]}
+                onPress={handleSave}
+                disabled={busy}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={20}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.primaryButtonText}>
+                      Guardar producto
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && styles.secondaryButtonPressed,
+                  busy && styles.disabledButton,
+                ]}
+                onPress={() => searchExternalProduct({ silent: false })}
+                disabled={busy}
+              >
+                {consultingInternet || internetLookupLoading ? (
+                  <ActivityIndicator color="#2563EB" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="refresh-outline"
+                      size={20}
+                      color="#2563EB"
+                    />
+                    <View style={styles.buttonTextBlock}>
+                      <Text style={styles.secondaryButtonText}>
+                        Actualizar desde internet
+                      </Text>
+                      <Text style={styles.secondaryButtonHint}>
+                        Sustituye los campos con datos externos
+                      </Text>
+                    </View>
+                  </>
+                )}
+              </Pressable>
+
+              <View style={styles.dangerZone}>
+                <View style={styles.dangerZoneHeader}>
+                  <Ionicons name="warning-outline" size={18} color="#B42318" />
+                  <View style={styles.dangerZoneText}>
+                    <Text style={styles.dangerZoneTitle}>Historial local</Text>
+                    <Text style={styles.dangerZoneDescription}>
+                      El registro global de Convex no se eliminará.
+                    </Text>
+                  </View>
+                </View>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.deleteButton,
+                    pressed && styles.deleteButtonPressed,
+                    busy && styles.disabledButton,
+                  ]}
+                  onPress={handleDeleteFromHistory}
+                  disabled={busy}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#B42318" />
+                  <Text style={styles.deleteButtonText}>
+                    {deleting
+                      ? "Eliminando..."
+                      : "Eliminar del historial local"}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  pressed && styles.cancelButtonPressed,
+                ]}
+                onPress={() => navigation.goBack()}
+                disabled={saving || deleting}
+              >
+                <Ionicons name="close-outline" size={18} color="#475467" />
+                <Text style={styles.cancelButtonText}>Cerrar sin guardar</Text>
+              </Pressable>
             </View>
-          </View>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Buscar producto en Google Modo IA"
-            style={({ pressed }) => [
-              styles.googleButton,
-              pressed && styles.googleButtonPressed,
-              (busy || !barcode) && styles.disabledButton,
-            ]}
-            disabled={busy || !barcode}
-            onPress={handleGoogleAIModeSearch}
-          >
-            <View style={styles.googleLogo}>
-              <Text style={styles.googleLogoText}>G</Text>
-            </View>
-
-            <View style={styles.externalButtonContent}>
-              <Text style={styles.googleButtonText}>
-                Buscar en Google Modo IA
-              </Text>
-
-              <Text style={styles.googleButtonDescription}>
-                Respuesta generada por Google a partir del código
-              </Text>
-            </View>
-
-            <Text style={styles.externalButtonArrow}>›</Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Buscar producto en Google Shopping"
-            style={({ pressed }) => [
-              styles.shoppingButton,
-              pressed && styles.shoppingButtonPressed,
-              (busy || !barcode) && styles.disabledButton,
-            ]}
-            disabled={busy || !barcode}
-            onPress={handleGoogleShoppingSearch}
-          >
-            <View style={styles.shoppingIcon}>
-              <Text style={styles.shoppingIconText}>▱</Text>
-            </View>
-
-            <View style={styles.externalButtonContent}>
-              <Text style={styles.shoppingButtonText}>
-                Buscar en Google Shopping
-              </Text>
-
-              <Text style={styles.shoppingButtonDescription}>
-                Precios, tiendas y ofertas disponibles
-              </Text>
-            </View>
-
-            <Text style={styles.shoppingButtonArrow}>›</Text>
-          </Pressable>
-
-          <View style={styles.externalSearchNotice}>
-            <Text style={styles.externalSearchNoticeIcon}>↗</Text>
-
-            <Text style={styles.externalSearchNoticeText}>
-              La búsqueda se abrirá en el navegador.
-            </Text>
           </View>
         </View>
 
         <Text style={styles.footerNote}>
-          Eliminarlo del historial no borra el registro de Convex ni su contador
-          de accesos.
+          La ficha global se conserva en Convex. El historial local pertenece a
+          este dispositivo.
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -847,7 +938,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F3F6FA",
+    backgroundColor: "#F2F4F7",
   },
 
   scroll: {
@@ -856,11 +947,18 @@ const styles = StyleSheet.create({
 
   content: {
     width: "100%",
-    maxWidth: 760,
+    maxWidth: 780,
     alignSelf: "center",
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 48,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 44,
+  },
+
+  contentWide: {
+    maxWidth: 1180,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 56,
   },
 
   hero: {
@@ -868,6 +966,18 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 20,
     marginBottom: 14,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 18px 50px rgba(16, 24, 40, 0.16)",
+      },
+      default: {
+        shadowColor: "#101828",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.16,
+        shadowRadius: 22,
+        elevation: 5,
+      },
+    }),
   },
 
   heroTopRow: {
@@ -877,26 +987,15 @@ const styles = StyleSheet.create({
     gap: 16,
   },
 
-  heroTextContainer: {
+  heroIdentity: {
     flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
   },
 
-  eyebrow: {
-    color: "#A8B4C7",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    marginBottom: 8,
-  },
-
-  title: {
-    color: "#FFFFFF",
-    fontSize: 25,
-    lineHeight: 31,
-    fontWeight: "900",
-  },
-
-  scannerBadge: {
+  heroIcon: {
     width: 48,
     height: 48,
     borderRadius: 16,
@@ -905,42 +1004,267 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  scannerBadgeIcon: {
+  heroTextContainer: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  eyebrow: {
+    color: "#98A2B3",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    marginBottom: 5,
+  },
+
+  title: {
     color: "#FFFFFF",
-    fontSize: 25,
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: "900",
   },
 
-  barcodeContainer: {
+  heroStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+
+  heroStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#32D583",
+  },
+
+  heroStatusDotWarning: {
+    backgroundColor: "#FDB022",
+  },
+
+  heroStatusText: {
+    color: "#EAECF0",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  barcodeRow: {
     marginTop: 18,
-    backgroundColor: "#1D2939",
-    borderRadius: 15,
     paddingHorizontal: 14,
     paddingVertical: 12,
+    borderRadius: 15,
+    backgroundColor: "#1D2939",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
 
   barcodeLabel: {
     color: "#98A2B3",
     fontSize: 11,
     fontWeight: "800",
-    marginBottom: 4,
+    marginBottom: 3,
   },
 
   barcode: {
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "900",
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
+  },
+
+  barcodeTypeBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#344054",
+  },
+
+  barcodeTypeText: {
+    color: "#D0D5DD",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
+  },
+
+  workspace: {
+    gap: 14,
+  },
+
+  workspaceWide: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 18,
+  },
+
+  leftColumn: {
+    gap: 14,
+  },
+
+  leftColumnWide: {
+    width: 420,
+    flexShrink: 0,
+  },
+
+  rightColumn: {
+    gap: 14,
+  },
+
+  rightColumnWide: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#E4E7EC",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 10px 28px rgba(16, 24, 40, 0.06)",
+      },
+      default: {
+        shadowColor: "#101828",
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.06,
+        shadowRadius: 12,
+        elevation: 2,
+      },
+    }),
+  },
+
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 14,
+  },
+
+  cardHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  cardEyebrow: {
+    color: "#98A2B3",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+    marginBottom: 4,
+  },
+
+  cardTitle: {
+    color: "#101828",
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: "900",
+  },
+
+  cardDescription: {
+    color: "#667085",
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+
+  softBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#F2F4F7",
+  },
+
+  softBadgeText: {
+    color: "#475467",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+
+  imageContainer: {
+    position: "relative",
+    minHeight: 240,
+    borderRadius: 18,
+    overflow: "hidden",
+    backgroundColor: "#F8FAFC",
+  },
+
+  productImage: {
+    width: "100%",
+    height: 260,
+    backgroundColor: "#F8FAFC",
+  },
+
+  cacheBadge: {
+    display: "none",
+  },
+
+  cacheBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  imagePlaceholder: {
+    minHeight: 240,
+    borderRadius: 18,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "#EAECF0",
+    borderStyle: "dashed",
+  },
+
+  imagePlaceholderIcon: {
+    fontSize: 36,
+    marginBottom: 10,
+  },
+
+  imagePlaceholderTitle: {
+    color: "#344054",
+    fontSize: 15,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  imagePlaceholderDescription: {
+    color: "#667085",
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+    marginTop: 5,
   },
 
   statusCard: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 16,
-    marginBottom: 14,
     borderWidth: 1,
     borderColor: "#E4E7EC",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 8px 24px rgba(16, 24, 40, 0.05)",
+      },
+      default: {
+        shadowColor: "#101828",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 1,
+      },
+    }),
   },
 
   statusIcon: {
@@ -1008,18 +1332,13 @@ const styles = StyleSheet.create({
   },
 
   errorIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 11,
     backgroundColor: "#FEE4E2",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 10,
-  },
-
-  errorIconText: {
-    color: "#D92D20",
-    fontWeight: "900",
   },
 
   errorText: {
@@ -1030,111 +1349,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  imageCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#E4E7EC",
-  },
-
-  imageContainer: {
-    position: "relative",
-    minHeight: 230,
-    borderRadius: 18,
-    overflow: "hidden",
-    backgroundColor: "#F8FAFC",
-  },
-
-  productImage: {
-    width: "100%",
-    height: 250,
-    backgroundColor: "#F8FAFC",
-  },
-
-  cacheBadge: {
-    position: "absolute",
-    right: 10,
-    bottom: 10,
-    backgroundColor: "rgba(16, 24, 40, 0.82)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-
-  cacheBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "900",
-  },
-
-  imagePlaceholder: {
-    minHeight: 210,
-    borderRadius: 18,
-    backgroundColor: "#F8FAFC",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-
-  imagePlaceholderIcon: {
-    fontSize: 38,
-    marginBottom: 10,
-  },
-
-  imagePlaceholderTitle: {
-    color: "#344054",
-    fontSize: 15,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-
-  imagePlaceholderDescription: {
-    color: "#667085",
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: "center",
-    marginTop: 5,
-  },
-
-  formCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#E4E7EC",
-  },
-
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-    gap: 12,
-  },
-
-  sectionHeaderContent: {
-    flex: 1,
-  },
-
-  sectionTitle: {
-    color: "#101828",
-    fontSize: 18,
-    fontWeight: "900",
-  },
-
-  sectionDescription: {
-    color: "#667085",
-    fontSize: 13,
-    marginTop: 3,
-  },
-
   editBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
     backgroundColor: "#ECFDF3",
     borderRadius: 999,
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 6,
   },
 
@@ -1144,8 +1365,18 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
+  formGrid: {
+    flexDirection: "row",
+    gap: 12,
+  },
+
+  formGridItem: {
+    flex: 1,
+    minWidth: 0,
+  },
+
   field: {
-    marginTop: 15,
+    marginTop: 14,
   },
 
   label: {
@@ -1156,7 +1387,7 @@ const styles = StyleSheet.create({
   },
 
   input: {
-    minHeight: 48,
+    minHeight: 50,
     backgroundColor: "#F9FAFB",
     borderWidth: 1,
     borderColor: "#D0D5DD",
@@ -1165,6 +1396,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     color: "#101828",
     fontSize: 15,
+    outlineStyle: Platform.OS === "web" ? "none" : undefined,
   },
 
   multilineInput: {
@@ -1172,17 +1404,8 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
 
-  actionsCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E4E7EC",
-    gap: 10,
-  },
-
   primaryButton: {
-    minHeight: 52,
+    minHeight: 54,
     backgroundColor: "#101828",
     borderRadius: 16,
     flexDirection: "row",
@@ -1192,10 +1415,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
 
-  primaryButtonIcon: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
+  primaryButtonPressed: {
+    backgroundColor: "#1D2939",
+    transform: [{ scale: 0.995 }],
   },
 
   primaryButtonText: {
@@ -1205,7 +1427,8 @@ const styles = StyleSheet.create({
   },
 
   secondaryButton: {
-    minHeight: 50,
+    minHeight: 58,
+    marginTop: 10,
     backgroundColor: "#EFF6FF",
     borderWidth: 1,
     borderColor: "#BFDBFE",
@@ -1213,14 +1436,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 16,
   },
 
-  secondaryButtonIcon: {
-    color: "#2563EB",
-    fontSize: 19,
-    fontWeight: "900",
+  secondaryButtonPressed: {
+    backgroundColor: "#DBEAFE",
+    transform: [{ scale: 0.995 }],
+  },
+
+  buttonTextBlock: {
+    alignItems: "center",
   },
 
   secondaryButtonText: {
@@ -1229,261 +1455,169 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  separator: {
-    height: 1,
-    backgroundColor: "#EAECF0",
-    marginVertical: 3,
+  secondaryButtonHint: {
+    color: "#5B76A8",
+    fontSize: 10,
+    marginTop: 2,
+  },
+
+  dangerZone: {
+    marginTop: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#FECDCA",
+    borderRadius: 16,
+    backgroundColor: "#FFF9F8",
+  },
+
+  dangerZoneHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 9,
+  },
+
+  dangerZoneText: {
+    flex: 1,
+  },
+
+  dangerZoneTitle: {
+    color: "#B42318",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  dangerZoneDescription: {
+    color: "#B5473C",
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
   },
 
   deleteButton: {
-    minHeight: 47,
-    borderRadius: 15,
-    backgroundColor: "#FFF5F5",
+    minHeight: 44,
+    marginTop: 12,
+    borderRadius: 13,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#FDA29B",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 16,
+    gap: 7,
+    paddingHorizontal: 14,
+  },
+
+  deleteButtonPressed: {
+    backgroundColor: "#FEF3F2",
   },
 
   deleteButtonText: {
     color: "#B42318",
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "900",
   },
 
   cancelButton: {
-    minHeight: 44,
+    minHeight: 46,
+    marginTop: 8,
+    borderRadius: 14,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 6,
+  },
+
+  cancelButtonPressed: {
+    backgroundColor: "#F2F4F7",
   },
 
   cancelButtonText: {
-    color: "#667085",
+    color: "#475467",
     fontSize: 14,
     fontWeight: "800",
   },
 
-  googleSearchCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 16,
-    marginTop: 14,
+  externalAction: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E4E7EC",
-    gap: 11,
-
-    ...Platform.select({
-      web: {
-        boxShadow: "0 8px 28px rgba(16, 24, 40, 0.06)",
-      },
-
-      default: {
-        shadowColor: "#101828",
-        shadowOffset: {
-          width: 0,
-          height: 5,
-        },
-        shadowOpacity: 0.06,
-        shadowRadius: 12,
-        elevation: 2,
-      },
-    }),
-  },
-
-  googleSearchHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 3,
-  },
-
-  googleSearchHeaderIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: "#F2F4F7",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-
-  googleSearchHeaderIconText: {
-    color: "#344054",
-    fontSize: 23,
-    fontWeight: "900",
-  },
-
-  googleSearchHeaderContent: {
-    flex: 1,
-  },
-
-  googleSearchTitle: {
-    color: "#101828",
-    fontSize: 17,
-    fontWeight: "900",
-  },
-
-  googleSearchDescription: {
-    color: "#667085",
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 3,
-  },
-
-  googleButton: {
-    minHeight: 66,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1.5,
     borderColor: "#D0D5DD",
-    borderRadius: 18,
-    paddingHorizontal: 14,
+    borderRadius: 16,
+    paddingHorizontal: 13,
     paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
   },
 
-  googleButtonPressed: {
+  externalActionPressed: {
     backgroundColor: "#F8FAFC",
-    borderColor: "#4285F4",
-    transform: [{ scale: 0.992 }],
+    borderColor: "#98A2B3",
   },
 
-  googleLogo: {
-    width: 42,
-    height: 42,
+  externalActionPrimary: {
+    marginTop: 10,
+    backgroundColor: "#2563EB",
+    borderColor: "#1D4ED8",
+  },
+
+  externalActionPrimaryPressed: {
+    backgroundColor: "#1D4ED8",
+  },
+
+  googleIcon: {
+    width: 40,
+    height: 40,
     borderRadius: 13,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E4E7EC",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 11,
   },
 
-  googleLogoText: {
+  googleIconText: {
     color: "#4285F4",
-    fontSize: 23,
+    fontSize: 22,
     fontWeight: "900",
-  },
-
-  externalButtonContent: {
-    flex: 1,
-    paddingRight: 8,
-  },
-
-  googleButtonText: {
-    color: "#101828",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-
-  googleButtonDescription: {
-    color: "#667085",
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 3,
-  },
-
-  externalButtonArrow: {
-    color: "#667085",
-    fontSize: 29,
-    lineHeight: 30,
-    fontWeight: "400",
-  },
-
-  shoppingButton: {
-    minHeight: 68,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2563EB",
-    borderWidth: 1,
-    borderColor: "#1D4ED8",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-
-    ...Platform.select({
-      web: {
-        boxShadow: "0 6px 16px rgba(37, 99, 235, 0.18)",
-      },
-
-      default: {
-        shadowColor: "#2563EB",
-        shadowOffset: {
-          width: 0,
-          height: 5,
-        },
-        shadowOpacity: 0.18,
-        shadowRadius: 9,
-        elevation: 3,
-      },
-    }),
-  },
-
-  shoppingButtonPressed: {
-    backgroundColor: "#1D4ED8",
-    transform: [{ scale: 0.992 }],
   },
 
   shoppingIcon: {
-    width: 42,
-    height: 42,
+    width: 40,
+    height: 40,
     borderRadius: 13,
-    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    backgroundColor: "rgba(255,255,255,0.16)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.26)",
+    borderColor: "rgba(255,255,255,0.24)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginRight: 11,
   },
 
-  shoppingIconText: {
-    color: "#FFFFFF",
-    fontSize: 25,
-    fontWeight: "900",
-    transform: [{ rotate: "180deg" }],
+  externalActionContent: {
+    flex: 1,
+    minWidth: 0,
   },
 
-  shoppingButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
+  externalActionTitle: {
+    color: "#101828",
+    fontSize: 14,
     fontWeight: "900",
   },
 
-  shoppingButtonDescription: {
-    color: "#DBEAFE",
+  externalActionTitleLight: {
+    color: "#FFFFFF",
+  },
+
+  externalActionDescription: {
+    color: "#667085",
     fontSize: 11,
     lineHeight: 16,
-    marginTop: 3,
+    marginTop: 2,
   },
 
-  shoppingButtonArrow: {
-    color: "#FFFFFF",
-    fontSize: 29,
-    lineHeight: 30,
-    fontWeight: "400",
-  },
-
-  externalSearchNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 2,
-  },
-
-  externalSearchNoticeIcon: {
-    color: "#98A2B3",
-    fontSize: 13,
-    fontWeight: "900",
-    marginRight: 5,
-  },
-
-  externalSearchNoticeText: {
-    color: "#98A2B3",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
-  pressedButton: {
-    opacity: 0.78,
+  externalActionDescriptionLight: {
+    color: "#DBEAFE",
   },
 
   disabledButton: {
@@ -1496,6 +1630,6 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     textAlign: "center",
     paddingHorizontal: 20,
-    marginTop: 12,
+    marginTop: 14,
   },
 });

@@ -1072,9 +1072,15 @@ export default function ItemDetailScreen() {
     try {
       const settings = await getSearchSettings();
 
-      const engineKey = settings?.generalEngine || "google";
+      const engineKey =
+        settings?.selectedProductEngine ||
+        settings?.generalEngine ||
+        "google_ai";
 
-      const engine = SEARCH_ENGINES[engineKey] || SEARCH_ENGINES.google;
+      const engine =
+        SEARCH_ENGINES[engineKey] ||
+        SEARCH_ENGINES.google_ai ||
+        SEARCH_ENGINES.google;
 
       if (!engine || typeof engine.buildUrl !== "function") {
         throw new Error(`Motor de búsqueda no válido: ${engineKey}`);
