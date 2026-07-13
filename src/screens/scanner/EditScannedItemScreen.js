@@ -21,6 +21,7 @@ import { useMutation } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
 import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
+
 import {
   openGoogleProductSearch,
   openGoogleShoppingSearch,
@@ -70,12 +71,16 @@ function getSourceLabel(source, created) {
   switch (source) {
     case "convex":
       return "Convex";
+
     case "internet":
       return "Internet";
+
     case "manual":
       return "Edición manual";
+
     case "scanner":
       return "Escáner";
+
     default:
       return "Convex";
   }
@@ -170,6 +175,7 @@ function StatusCard({
 
       <View style={styles.statusContent}>
         <Text style={styles.statusTitle}>{title}</Text>
+
         <Text style={styles.statusDescription}>{description}</Text>
 
         <View style={styles.statusMetaRow}>
@@ -313,10 +319,6 @@ export default function EditScannedItemScreen({ route, navigation }) {
     [fillFormFromProduct],
   );
 
-  /**
-   * Consulta externa para completar un registro que ya existe
-   * en Convex pero todavía no dispone de información.
-   */
   const searchExternalProduct = useCallback(
     async ({ silent = false } = {}) => {
       if (!barcode) {
@@ -396,13 +398,6 @@ export default function EditScannedItemScreen({ route, navigation }) {
     ],
   );
 
-  /**
-   * Registro inicial:
-   * - busca en Convex;
-   * - incrementa accessCount;
-   * - crea el registro si no existe;
-   * - consulta internet únicamente si faltan datos.
-   */
   useEffect(() => {
     let active = true;
 
@@ -547,11 +542,6 @@ export default function EditScannedItemScreen({ route, navigation }) {
     setLocalError(null);
 
     try {
-      /*
-       * Se elimina únicamente del historial local.
-       * El registro de productCache se conserva porque contiene
-       * estadísticas de acceso y puede reutilizarse.
-       */
       await removeScannedItem(barcode);
       navigation.goBack();
     } catch (error) {
@@ -562,6 +552,38 @@ export default function EditScannedItemScreen({ route, navigation }) {
       setDeleting(false);
     }
   }, [barcode, navigation]);
+
+  const handleGoogleSearch = useCallback(async () => {
+    if (!barcode) {
+      setLocalError("No hay código de barras para buscar.");
+      return;
+    }
+
+    try {
+      setLocalError(null);
+      await openGoogleProductSearch(barcode);
+    } catch (error) {
+      setLocalError(
+        error?.message || "No se pudo abrir la búsqueda de Google.",
+      );
+    }
+  }, [barcode]);
+
+  const handleGoogleShoppingSearch = useCallback(async () => {
+    if (!barcode) {
+      setLocalError("No hay código de barras para buscar.");
+      return;
+    }
+
+    try {
+      setLocalError(null);
+      await openGoogleShoppingSearch(barcode);
+    } catch (error) {
+      setLocalError(
+        error?.message || "No se pudo abrir la búsqueda de Google Shopping.",
+      );
+    }
+  }, [barcode]);
 
   return (
     <KeyboardAvoidingView
@@ -591,11 +613,13 @@ export default function EditScannedItemScreen({ route, navigation }) {
 
           <View style={styles.barcodeContainer}>
             <Text style={styles.barcodeLabel}>Código de barras</Text>
+
             <Text selectable style={styles.barcode}>
               {barcode || "Sin código"}
             </Text>
           </View>
         </View>
+
         <StatusCard
           source={dataSource}
           created={recordCreated}
@@ -604,6 +628,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
           loading={initializing}
           consultingInternet={consultingInternet || internetLookupLoading}
         />
+
         {visibleError ? (
           <View style={styles.errorBox}>
             <View style={styles.errorIcon}>
@@ -613,12 +638,14 @@ export default function EditScannedItemScreen({ route, navigation }) {
             <Text style={styles.errorText}>{visibleError}</Text>
           </View>
         ) : null}
+
         <View style={styles.imageCard}>
           <ProductImage uri={imageUrl} productName={resolvedName} />
         </View>
+
         <View style={styles.formCard}>
           <View style={styles.sectionHeader}>
-            <View>
+            <View style={styles.sectionHeaderContent}>
               <Text style={styles.sectionTitle}>Información del producto</Text>
 
               <Text style={styles.sectionDescription}>
@@ -673,6 +700,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
             keyboardType="url"
           />
         </View>
+
         <View style={styles.actionsCard}>
           <Pressable
             style={({ pressed }) => [
@@ -688,6 +716,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
             ) : (
               <>
                 <Text style={styles.primaryButtonIcon}>✓</Text>
+
                 <Text style={styles.primaryButtonText}>Guardar producto</Text>
               </>
             )}
@@ -707,6 +736,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
             ) : (
               <>
                 <Text style={styles.secondaryButtonIcon}>↻</Text>
+
                 <Text style={styles.secondaryButtonText}>
                   Actualizar desde internet
                 </Text>
@@ -741,6 +771,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
             <Text style={styles.cancelButtonText}>Cancelar</Text>
           </Pressable>
         </View>
+
         <View style={styles.googleSearchCard}>
           <View style={styles.googleSearchHeader}>
             <View style={styles.googleSearchHeaderIcon}>
@@ -764,19 +795,10 @@ export default function EditScannedItemScreen({ route, navigation }) {
             style={({ pressed }) => [
               styles.googleButton,
               pressed && styles.googleButtonPressed,
-              busy && styles.disabledButton,
+              (busy || !barcode) && styles.disabledButton,
             ]}
             disabled={busy || !barcode}
-            onPress={async () => {
-              try {
-                setLocalError(null);
-                await openGoogleProductSearch(barcode);
-              } catch (error) {
-                setLocalError(
-                  error?.message || "No se pudo abrir la búsqueda de Google.",
-                );
-              }
-            }}
+            onPress={handleGoogleSearch}
           >
             <View style={styles.googleLogo}>
               <Text style={styles.googleLogoText}>G</Text>
@@ -799,20 +821,10 @@ export default function EditScannedItemScreen({ route, navigation }) {
             style={({ pressed }) => [
               styles.shoppingButton,
               pressed && styles.shoppingButtonPressed,
-              busy && styles.disabledButton,
+              (busy || !barcode) && styles.disabledButton,
             ]}
             disabled={busy || !barcode}
-            onPress={async () => {
-              try {
-                setLocalError(null);
-                await openGoogleShoppingSearch(barcode);
-              } catch (error) {
-                setLocalError(
-                  error?.message ||
-                    "No se pudo abrir la búsqueda de Google Shopping.",
-                );
-              }
-            }}
+            onPress={handleGoogleShoppingSearch}
           >
             <View style={styles.shoppingIcon}>
               <Text style={styles.shoppingIconText}>▱</Text>
@@ -1120,6 +1132,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
+  sectionHeaderContent: {
+    flex: 1,
+  },
+
   sectionTitle: {
     color: "#101828",
     fontSize: 18,
@@ -1263,13 +1279,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
-  pressedButton: {
-    opacity: 0.78,
-  },
-
-  disabledButton: {
-    opacity: 0.5,
-  },
   googleSearchCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 24,
@@ -1283,6 +1292,7 @@ const styles = StyleSheet.create({
       web: {
         boxShadow: "0 8px 28px rgba(16, 24, 40, 0.06)",
       },
+
       default: {
         shadowColor: "#101828",
         shadowOffset: {
@@ -1411,6 +1421,7 @@ const styles = StyleSheet.create({
       web: {
         boxShadow: "0 6px 16px rgba(37, 99, 235, 0.18)",
       },
+
       default: {
         shadowColor: "#2563EB",
         shadowOffset: {
@@ -1487,6 +1498,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
   },
+
+  pressedButton: {
+    opacity: 0.78,
+  },
+
+  disabledButton: {
+    opacity: 0.5,
+  },
+
   footerNote: {
     color: "#667085",
     fontSize: 11,
