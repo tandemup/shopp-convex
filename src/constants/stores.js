@@ -1,4 +1,5 @@
-[
+// Catálogo local inicial de tiendas. La fuente de verdad vive en src/constants.
+export const STORES = [
   {
     "id": "971e55d2",
     "name": "Carrefour Express",
@@ -265,4 +266,8 @@
     },
     "favorite": false
   }
-]
+];
+
+export const STORE_SEEDS = STORES;
+
+export default STORES;
