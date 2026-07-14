@@ -1846,3 +1846,251 @@ export const deleteGpsDebugParkingSpot = mutation({
     };
   },
 });
+
+export const seedCabuenesTestParkingSpots = mutation({
+  args: {},
+
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const now = Date.now();
+
+    const existingSpots = await ctx.db
+      .query("parkingSpots")
+      .withIndex("by_testGroup_updatedAt", (q) =>
+        q.eq("testGroup", "cabuenes-test"),
+      )
+      .collect();
+
+    if (existingSpots.length > 0) {
+      return {
+        ok: true,
+        inserted: 0,
+        existing: existingSpots.length,
+        message: "Las plazas de prueba de Cabueñes ya existen.",
+      };
+    }
+
+    const spots = [
+      {
+        alias: "Cabueñes prueba 01",
+        lat: 43.525374,
+        lng: -5.607285,
+        accuracy: 5,
+      },
+      {
+        alias: "Cabueñes prueba 02",
+        lat: 43.525733,
+        lng: -5.606851,
+        accuracy: 6,
+      },
+      {
+        alias: "Cabueñes prueba 03",
+        lat: 43.525958,
+        lng: -5.606294,
+        accuracy: 4,
+      },
+      {
+        alias: "Cabueñes prueba 04",
+        lat: 43.525823,
+        lng: -5.605612,
+        accuracy: 7,
+      },
+      {
+        alias: "Cabueñes prueba 05",
+        lat: 43.525464,
+        lng: -5.605117,
+        accuracy: 5,
+      },
+      {
+        alias: "Cabueñes prueba 06",
+        lat: 43.52497,
+        lng: -5.604745,
+        accuracy: 8,
+      },
+      {
+        alias: "Cabueñes prueba 07",
+        lat: 43.524476,
+        lng: -5.605055,
+        accuracy: 6,
+      },
+      {
+        alias: "Cabueñes prueba 08",
+        lat: 43.524116,
+        lng: -5.605612,
+        accuracy: 5,
+      },
+      {
+        alias: "Cabueñes prueba 09",
+        lat: 43.523892,
+        lng: -5.606232,
+        accuracy: 7,
+      },
+      {
+        alias: "Cabueñes prueba 10",
+        lat: 43.524072,
+        lng: -5.606913,
+        accuracy: 4,
+      },
+      {
+        alias: "Cabueñes prueba 11",
+        lat: 43.524521,
+        lng: -5.607471,
+        accuracy: 6,
+      },
+      {
+        alias: "Cabueñes prueba 12",
+        lat: 43.525015,
+        lng: -5.607719,
+        accuracy: 5,
+      },
+    ];
+
+    const insertedIds = [];
+
+    for (const spot of spots) {
+      const spotId = await ctx.db.insert("parkingSpots", {
+        userId,
+        ownerAlias: "Pruebas Cabueñes",
+        parkingAlias: "cabuenes-test",
+
+        city: "gijon",
+        zone: "general",
+        areaKey: buildAreaKey(spot.lat, spot.lng),
+
+        status: "free",
+
+        location: {
+          lat: spot.lat,
+          lng: spot.lng,
+          source: "test",
+          accuracy: spot.accuracy,
+        },
+
+        alias: spot.alias,
+        destinationName: "Hospital Universitario de Cabueñes",
+        destinationAddress: "Calle Los Prados 395, Gijón",
+
+        revealedBy: userId,
+        revealedAt: now,
+
+        releasedBy: userId,
+        releasedAt: now,
+
+        isTest: true,
+        testGroup: "cabuenes-test",
+
+        createdAt: now,
+        updatedAt: now,
+
+        // Sin expiresAt: se conservan hasta borrarlas manualmente.
+      });
+
+      insertedIds.push(spotId);
+    }
+
+    return {
+      ok: true,
+      inserted: insertedIds.length,
+      spotIds: insertedIds,
+    };
+  },
+});
+
+export const deleteCabuenesTestParkingSpots = mutation({
+  args: {},
+
+  handler: async (ctx) => {
+    await requireAuthUserId(ctx);
+
+    const spots = await ctx.db
+      .query("parkingSpots")
+      .withIndex("by_testGroup_updatedAt", (q) =>
+        q.eq("testGroup", "cabuenes-test"),
+      )
+      .collect();
+
+    for (const spot of spots) {
+      await ctx.db.delete(spot._id);
+    }
+
+    return {
+      ok: true,
+      deleted: spots.length,
+    };
+  },
+});
+
+const CABUENES_TEST_SPOTS = [
+  {
+    alias: "Cabueñes prueba 01",
+    lat: 43.525374,
+    lng: -5.607285,
+    accuracy: 5,
+  },
+  {
+    alias: "Cabueñes prueba 02",
+    lat: 43.525733,
+    lng: -5.606851,
+    accuracy: 6,
+  },
+  {
+    alias: "Cabueñes prueba 03",
+    lat: 43.525958,
+    lng: -5.606294,
+    accuracy: 4,
+  },
+  {
+    alias: "Cabueñes prueba 04",
+    lat: 43.525823,
+    lng: -5.605612,
+    accuracy: 7,
+  },
+  {
+    alias: "Cabueñes prueba 05",
+    lat: 43.525464,
+    lng: -5.605117,
+    accuracy: 5,
+  },
+  {
+    alias: "Cabueñes prueba 06",
+    lat: 43.52497,
+    lng: -5.604745,
+    accuracy: 8,
+  },
+  {
+    alias: "Cabueñes prueba 07",
+    lat: 43.524476,
+    lng: -5.605055,
+    accuracy: 6,
+  },
+  {
+    alias: "Cabueñes prueba 08",
+    lat: 43.524116,
+    lng: -5.605612,
+    accuracy: 5,
+  },
+  {
+    alias: "Cabueñes prueba 09",
+    lat: 43.523892,
+    lng: -5.606232,
+    accuracy: 7,
+  },
+  {
+    alias: "Cabueñes prueba 10",
+    lat: 43.524072,
+    lng: -5.606913,
+    accuracy: 4,
+  },
+  {
+    alias: "Cabueñes prueba 11",
+    lat: 43.524521,
+    lng: -5.607471,
+    accuracy: 6,
+  },
+  {
+    alias: "Cabueñes prueba 12",
+    lat: 43.525015,
+    lng: -5.607719,
+    accuracy: 5,
+  },
+];
