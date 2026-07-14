@@ -13,16 +13,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
 import { useLocation } from "@/src/context/LocationContext";
 import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
+// import { ParkingMarkerSelector } from "@/src/screens/parking/ParkingMarkerSelector";
 import { ROUTES } from "@/src/navigation/ROUTES";
-
-import {
-  CABUENES_TEST_PARKING_SPOTS,
-  PARKING_DESTINATIONS,
-} from "@/src/constants/parkingSpots";
-
 import {
   DEFAULT_PARKING_DESTINATION,
   DEFAULT_PARKING_ALIAS,
@@ -32,6 +26,122 @@ import {
 
 const PARKING_SETTINGS_STORAGE_KEY = "@shopp/parking/settings";
 const DEFAULT_CITY = "gijon";
+const DEFAULT_DESTINATION = "palacio-deportes";
+
+const DESTINATION_OPTIONS = [
+  {
+    id: "palacio-deportes",
+    label: "Palacio de los Deportes",
+    category: "Deporte",
+    address: "Paseo del Doctor Fleming, 929, 33203 Gijón, Asturias",
+    latitude: 43.53502,
+    longitude: -5.63586,
+  },
+  {
+    id: "el-corte-ingles",
+    label: "El Corte Inglés",
+    category: "Centro comercial",
+    address: "C/ Ramón Areces, 2, 33211 Gijón, Asturias",
+    latitude: 43.5361,
+    longitude: -5.6844,
+  },
+  {
+    id: "los-fresnos",
+    label: "C.C. Los Fresnos",
+    category: "Centro comercial",
+    address: "C. Río de Oro, 3, Centro, 33209 Gijón, Asturias",
+    latitude: 43.5321,
+    longitude: -5.6619,
+  },
+  {
+    id: "el-molinon",
+    label: "El Molinón",
+    category: "Estadio",
+    address: "C/ Luis Adaro Falcó, 33203 Gijón, Asturias",
+    latitude: 43.536329,
+    longitude: -5.637417,
+  },
+  {
+    id: "hospital-cabuenes",
+    label: "Hospital de Cabueñes",
+    category: "Hospital",
+    address: "Calle Los Prados, 395, 33203 Gijón, Asturias",
+    latitude: 43.525186,
+    longitude: -5.606614,
+  },
+  {
+    id: "iglesia-san-julian",
+    label: "Iglesia de San Julian",
+    category: "Iglesia",
+    address:
+      "Iglesia de San Julián de Somió, Av. Dionisio Cifuentes, 19, Periurbano - Rural, 33203 Gijón, Asturias",
+    latitude: 43.535538,
+    longitude: -5.62342,
+  },
+];
+
+const CABUENES_TEST_SPOTS = [
+  {
+    id: "cabuenes-test-01",
+    alias: "Cabueñes prueba 01",
+    location: { lat: 43.525374, lng: -5.607285, accuracy: 5, source: "test" },
+  },
+  {
+    id: "cabuenes-test-02",
+    alias: "Cabueñes prueba 02",
+    location: { lat: 43.525733, lng: -5.606851, accuracy: 6, source: "test" },
+  },
+  {
+    id: "cabuenes-test-03",
+    alias: "Cabueñes prueba 03",
+    location: { lat: 43.525958, lng: -5.606294, accuracy: 4, source: "test" },
+  },
+  {
+    id: "cabuenes-test-04",
+    alias: "Cabueñes prueba 04",
+    location: { lat: 43.525823, lng: -5.605612, accuracy: 7, source: "test" },
+  },
+  {
+    id: "cabuenes-test-05",
+    alias: "Cabueñes prueba 05",
+    location: { lat: 43.525464, lng: -5.605117, accuracy: 5, source: "test" },
+  },
+  {
+    id: "cabuenes-test-06",
+    alias: "Cabueñes prueba 06",
+    location: { lat: 43.52497, lng: -5.604745, accuracy: 8, source: "test" },
+  },
+  {
+    id: "cabuenes-test-07",
+    alias: "Cabueñes prueba 07",
+    location: { lat: 43.524476, lng: -5.605055, accuracy: 6, source: "test" },
+  },
+  {
+    id: "cabuenes-test-08",
+    alias: "Cabueñes prueba 08",
+    location: { lat: 43.524116, lng: -5.605612, accuracy: 5, source: "test" },
+  },
+  {
+    id: "cabuenes-test-09",
+    alias: "Cabueñes prueba 09",
+    location: { lat: 43.523892, lng: -5.606232, accuracy: 7, source: "test" },
+  },
+  {
+    id: "cabuenes-test-10",
+    alias: "Cabueñes prueba 10",
+    location: { lat: 43.524072, lng: -5.606913, accuracy: 4, source: "test" },
+  },
+  {
+    id: "cabuenes-test-11",
+    alias: "Cabueñes prueba 11",
+    location: { lat: 43.524521, lng: -5.607471, accuracy: 6, source: "test" },
+  },
+  {
+    id: "cabuenes-test-12",
+    alias: "Cabueñes prueba 12",
+    location: { lat: 43.525015, lng: -5.607719, accuracy: 5, source: "test" },
+  },
+];
 
 function normalizeParkingSpotForMap(spot) {
   const lat = spot?.location?.lat ?? spot?.lat;
@@ -53,9 +163,7 @@ function normalizeParkingSpotForMap(spot) {
 }
 
 function blurActiveElement() {
-  if (Platform.OS !== "web") {
-    return;
-  }
+  if (Platform.OS !== "web") return;
 
   if (
     typeof document !== "undefined" &&
@@ -76,16 +184,13 @@ export default function ParkingSettingsScreen({ navigation, route }) {
   const [selectedDestination, setSelectedDestination] = useState(
     route?.params?.activeDestination || DEFAULT_PARKING_DESTINATION,
   );
-
   const [destinationPickerVisible, setDestinationPickerVisible] =
     useState(false);
-
   const [draftParkingAlias, setDraftParkingAlias] = useState(
     route?.params?.activeParkingAlias ||
       route?.params?.activeUserId ||
       DEFAULT_PARKING_ALIAS,
   );
-
   const [parkingMarkerStyle, setParkingMarkerStyle] =
     useState("traditional-pin");
 
@@ -103,9 +208,9 @@ export default function ParkingSettingsScreen({ navigation, route }) {
 
   const activeDestinationData = useMemo(() => {
     return (
-      PARKING_DESTINATIONS.find((destination) => {
+      DESTINATION_OPTIONS.find((destination) => {
         return destination.id === selectedDestination;
-      }) || PARKING_DESTINATIONS[0]
+      }) || DESTINATION_OPTIONS[0]
     );
   }, [selectedDestination]);
 
@@ -152,7 +257,7 @@ export default function ParkingSettingsScreen({ navigation, route }) {
 
   const exampleParkingSpots = useMemo(() => {
     if (selectedDestination === "hospital-cabuenes") {
-      return CABUENES_TEST_PARKING_SPOTS.map(normalizeParkingSpotForMap).filter(
+      return CABUENES_TEST_SPOTS.map(normalizeParkingSpotForMap).filter(
         Boolean,
       );
     }
@@ -228,7 +333,7 @@ export default function ParkingSettingsScreen({ navigation, route }) {
     });
 
     await touchParkingPresence({
-      city: DEFAULT_CITY,
+      city: "gijon",
       zone: selectedDestination,
       alias: cleanParkingAlias,
       status: "heading",
@@ -365,7 +470,6 @@ export default function ParkingSettingsScreen({ navigation, route }) {
               ]}
             >
               <Ionicons name="chevron-back" size={22} color="#14532d" />
-
               <Text style={styles.backButtonText}>Ajustes</Text>
             </Pressable>
 
@@ -382,7 +486,7 @@ export default function ParkingSettingsScreen({ navigation, route }) {
             contentContainerStyle={styles.pickerScrollContent}
             keyboardShouldPersistTaps="handled"
           >
-            {PARKING_DESTINATIONS.map(renderDestinationButton)}
+            {DESTINATION_OPTIONS.map(renderDestinationButton)}
           </ScrollView>
         </View>
       </View>
@@ -408,7 +512,7 @@ export default function ParkingSettingsScreen({ navigation, route }) {
 
         {activeParkingSpots.map((spot) => {
           return (
-            <View key={spot._id || spot.id} style={styles.freeSpotRow}>
+            <View key={spot._id} style={styles.freeSpotRow}>
               <View style={styles.freeSpotBadge}>
                 <Ionicons name="checkmark-circle" size={16} color="#15803d" />
 
@@ -425,7 +529,7 @@ export default function ParkingSettingsScreen({ navigation, route }) {
               </View>
 
               <Text style={styles.freeSpotMeta}>
-                Avisó: {spot.ownerAlias || spot.revealedBy || "anonymous"}
+                Avisó: {spot.revealedBy || "anonymous"}
               </Text>
             </View>
           );
@@ -458,7 +562,6 @@ export default function ParkingSettingsScreen({ navigation, route }) {
       if (storedSettingsJson) {
         try {
           const storedSettings = JSON.parse(storedSettingsJson);
-
           if (
             VALID_PARKING_MARKER_STYLES.has(storedSettings?.parkingMarkerStyle)
           ) {
@@ -534,7 +637,6 @@ export default function ParkingSettingsScreen({ navigation, route }) {
                   <Text style={styles.changeDestinationButtonText}>
                     Cambiar
                   </Text>
-
                   <Ionicons name="chevron-forward" size={16} color="#15803d" />
                 </Pressable>
               </View>
@@ -577,7 +679,38 @@ export default function ParkingSettingsScreen({ navigation, route }) {
                 <Text style={styles.trafficAdvice}>{trafficInfo.advice}</Text>
               </View>
             </View>
+            {/*
+            <View style={styles.card}>
+              <View style={styles.mapHeader}>
+                <View style={styles.mapTitleBlock}>
+                  <Text style={styles.mapTitle}>
+                    Aparcamientos recientes!!!
+                  </Text>
 
+                  <Text style={styles.mapSubtitle}>
+                    {activeDestinationData.label}
+                  </Text>
+
+                  <Text style={styles.mapAddress} numberOfLines={2}>
+                    {activeDestinationData.address}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.mapContainer}>
+                <StoreMapPreview
+                  key={`parking-settings-map-${selectedDestination}-${mapCenter.lat}-${mapCenter.lng}`}
+                  lat={mapCenter.lat}
+                  lng={mapCenter.lng}
+                  userLat={userCoords?.lat}
+                  userLng={userCoords?.lng}
+                  parkingSpots={activeParkingSpots}
+                />
+              </View>
+
+              {renderActiveSpots()}
+            </View>
+ */}
             <View style={styles.card}>
               <View style={styles.mapHeader}>
                 <View style={styles.mapTitleBlock}>
@@ -592,7 +725,12 @@ export default function ParkingSettingsScreen({ navigation, route }) {
                   </Text>
                 </View>
               </View>
-
+              {/*
+              <ParkingMarkerSelector
+                value={parkingMarkerStyle}
+                onChange={setParkingMarkerStyle}
+              />
+ */}
               <View style={styles.mapContainer}>
                 <StoreMapPreview
                   key={`parking-spots-map-${selectedDestination}-${mapCenter.lat}-${mapCenter.lng}`}
@@ -604,8 +742,8 @@ export default function ParkingSettingsScreen({ navigation, route }) {
                   mapStyle="gray"
                   parkingMarkerStyle={parkingMarkerStyle}
                   parkingMarkerColor="#ef4444"
-                  parkingMarkerBaseSize={32}
-                  markerSizeByZoom
+                  parkingMarkerBaseSize={11}
+                  markerSizeByZoom={false}
                 />
               </View>
 
@@ -645,7 +783,6 @@ export default function ParkingSettingsScreen({ navigation, route }) {
           </View>
         </View>
       </View>
-
       {renderDestinationPickerScreen()}
     </SafeAreaView>
   );
@@ -986,6 +1123,51 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     fontSize: 12,
     fontWeight: "700",
+  },
+
+  markerSelector: {
+    gap: 8,
+  },
+
+  markerSelectorTitle: {
+    color: "#14532d",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  markerSelectorOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+
+  markerSelectorButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#ffffff",
+  },
+
+  markerSelectorButtonSelected: {
+    borderColor: "#15803d",
+    backgroundColor: "#dcfce7",
+  },
+
+  markerSelectorButtonPressed: {
+    opacity: 0.75,
+  },
+
+  markerSelectorButtonText: {
+    color: "#374151",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  markerSelectorButtonTextSelected: {
+    color: "#14532d",
+    fontWeight: "900",
   },
 
   roomHint: {

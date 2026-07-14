@@ -58,10 +58,8 @@ function createRoundIcon({ color, label, size = 34 }) {
 
 function createParkingIcon({ style, color, size }) {
   if (style === "circle-stick") {
-    // Este modelo se muestra a 1/3 de la escala general de los marcadores.
-    const reducedSize = size / 3;
-    const width = reducedSize;
-    const height = reducedSize * 1.5;
+    const width = size;
+    const height = Math.round(size * 1.5);
     return L.divIcon({
       className: "",
       html: `<svg width="${width}" height="${height}" viewBox="0 0 30 46" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible;filter:drop-shadow(0 3px 3px rgba(15,23,42,.25))"><line x1="15" y1="18" x2="15" y2="44" stroke="#9ca3af" stroke-width="3" stroke-linecap="round"/><circle cx="15" cy="14" r="13" fill="${color}" stroke="#fff" stroke-width="2"/><circle cx="19" cy="9" r="3" fill="rgba(255,255,255,.55)"/></svg>`,
@@ -202,11 +200,11 @@ export default function StoreMapPreview({
     [parkingMarkerStyle, parkingMarkerColor, parkingSize],
   );
   const destinationIcon = useMemo(
-    () => createRoundIcon({ color: "#16a34a", label: "D", size: 25 }),
+    () => createRoundIcon({ color: "#16a34a", label: "D", size: 34 }),
     [],
   );
   const userIcon = useMemo(
-    () => createRoundIcon({ color: "#2563eb", label: "U", size: 25 }),
+    () => createRoundIcon({ color: "#2563eb", label: "U", size: 34 }),
     [],
   );
   const selectedIcon = useMemo(

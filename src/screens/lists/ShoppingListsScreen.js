@@ -763,6 +763,7 @@ const styles = StyleSheet.create({
 
   listContent: {
     flexGrow: 1,
+    width: "100%",
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 120,
