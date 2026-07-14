@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { StyleSheet, View } from "react-native";
 import {
   MapContainer,
   Marker,
@@ -9,25 +9,20 @@ import {
   useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
-
 import "leaflet/dist/leaflet.css";
+import { DEFAULT_MAP_TILE_STYLE, getMapTileConfig } from "./mapTiles";
 
 const DEFAULT_LAT = 43.5322;
 const DEFAULT_LNG = -5.6611;
-
 const DEFAULT_ZOOM = 15;
 const DEFAULT_MIN_ZOOM = 13;
 const DEFAULT_MAX_ZOOM = 21;
 const DEFAULT_FIT_MAX_ZOOM = 18;
 
-function isValidNumber(value) {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
 function isValidCoords(lat, lng) {
   return (
-    isValidNumber(lat) &&
-    isValidNumber(lng) &&
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
     lat >= -90 &&
     lat <= 90 &&
     lng >= -180 &&
@@ -36,283 +31,112 @@ function isValidCoords(lat, lng) {
 }
 
 function normalizePoint(point) {
-  if (!point) return null;
+  const lat = Number(point?.location?.lat ?? point?.lat ?? point?.latitude);
+  const lng = Number(point?.location?.lng ?? point?.lng ?? point?.longitude);
+  if (!isValidCoords(lat, lng)) return null;
+  return { ...point, lat, lng };
+}
 
-  const lat = Number(point.lat ?? point.latitude);
-  const lng = Number(point.lng ?? point.longitude);
+function markerSizeForZoom(zoom, baseSize, enabled) {
+  if (!enabled) return baseSize;
+  if (zoom <= 13) return Math.max(18, Math.round(baseSize * 0.68));
+  if (zoom <= 15) return Math.max(22, Math.round(baseSize * 0.82));
+  if (zoom <= 17) return baseSize;
+  if (zoom <= 19) return Math.round(baseSize * 1.15);
+  return Math.round(baseSize * 1.28);
+}
 
-  if (!isValidCoords(lat, lng)) {
-    return null;
+function createRoundIcon({ color, label, size = 34 }) {
+  return L.divIcon({
+    className: "",
+    html: `<div style="width:${size}px;height:${size}px;border-radius:999px;background:${color};border:3px solid #fff;box-shadow:0 4px 12px rgba(15,23,42,.32);display:flex;align-items:center;justify-content:center;color:#fff;font:900 ${Math.max(11, Math.round(size * 0.38))}px system-ui">${label}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+  });
+}
+
+function createParkingIcon({ style, color, size }) {
+  if (style === "circle-stick") {
+    // Este modelo se muestra a 1/3 de la escala general de los marcadores.
+    const reducedSize = size / 3;
+    const width = reducedSize;
+    const height = reducedSize * 1.5;
+    return L.divIcon({
+      className: "",
+      html: `<svg width="${width}" height="${height}" viewBox="0 0 30 46" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible;filter:drop-shadow(0 3px 3px rgba(15,23,42,.25))"><line x1="15" y1="18" x2="15" y2="44" stroke="#9ca3af" stroke-width="3" stroke-linecap="round"/><circle cx="15" cy="14" r="13" fill="${color}" stroke="#fff" stroke-width="2"/><circle cx="19" cy="9" r="3" fill="rgba(255,255,255,.55)"/></svg>`,
+      iconSize: [width, height],
+      iconAnchor: [width / 2, height],
+      popupAnchor: [0, -height + 4],
+    });
   }
 
-  return {
-    ...point,
-    lat,
-    lng,
-  };
-}
+  if (style === "circle") {
+    return createRoundIcon({ color, label: "P", size });
+  }
 
-function createPinIcon({ color, label }) {
-  return L.divIcon({
-    className: "shopp-parking-marker",
-    html: `
-      <div style="
-        width: 34px;
-        height: 34px;
-        border-radius: 17px;
-        background: ${color};
-        border: 3px solid #ffffff;
-        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.28);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #ffffff;
-        font-size: 13px;
-        font-weight: 900;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      ">
-        ${label}
-      </div>
-    `,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-    popupAnchor: [0, -18],
-  });
-}
-
-const destinationIcon = createPinIcon({
-  color: "#16a34a",
-  label: "D",
-});
-
-const userIcon = createPinIcon({
-  color: "#2563eb",
-  label: "U",
-});
-
-function createPrecisionPinIcon({
-  color = "#f97316",
-  centerColor = "#ffffff",
-  size = 42,
-}) {
   const width = size;
-  const height = Math.round(size * 1.35);
-
+  const height = Math.round(size * 1.38);
   return L.divIcon({
-    className: "shopp-precision-marker",
-
-    html: `
-      <div
-        style="
-          width: ${width}px;
-          height: ${height}px;
-          display: flex;
-          align-items: flex-start;
-          justify-content: center;
-          pointer-events: auto;
-        "
-      >
-        <svg
-          width="${width}"
-          height="${height}"
-          viewBox="0 0 42 56"
-          xmlns="http://www.w3.org/2000/svg"
-          style="
-            display: block;
-            overflow: visible;
-            filter: drop-shadow(
-              0 5px 5px rgba(15, 23, 42, 0.32)
-            );
-          "
-        >
-          <path
-            d="
-              M21 1
-              C10.2 1 1.5 9.7 1.5 20.5
-              C1.5 34.3 15.3 48.6 21 55
-              C26.7 48.6 40.5 34.3 40.5 20.5
-              C40.5 9.7 31.8 1 21 1
-              Z
-            "
-            fill="${color}"
-            stroke="#ffffff"
-            stroke-width="3"
-            stroke-linejoin="round"
-          />
-
-          <circle
-            cx="21"
-            cy="20.5"
-            r="8"
-            fill="${centerColor}"
-          />
-
-          <circle
-            cx="21"
-            cy="20.5"
-            r="5"
-            fill="rgba(15, 23, 42, 0.10)"
-          />
-        </svg>
-      </div>
-    `,
-
+    className: "",
+    html: `<svg width="${width}" height="${height}" viewBox="0 0 42 56" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible;filter:drop-shadow(0 4px 4px rgba(15,23,42,.3))"><path d="M21 1C10.2 1 1.5 9.7 1.5 20.5C1.5 34.3 15.3 48.6 21 55C26.7 48.6 40.5 34.3 40.5 20.5C40.5 9.7 31.8 1 21 1Z" fill="${color}" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/><circle cx="21" cy="20.5" r="7" fill="#fff"/></svg>`,
     iconSize: [width, height],
-
-    /*
-     * El extremo inferior del SVG coincide exactamente
-     * con la coordenada del parkingSpot.
-     */
-    iconAnchor: [Math.round(width / 2), height],
-
-    popupAnchor: [0, -height + 8],
+    iconAnchor: [width / 2, height],
+    popupAnchor: [0, -height + 6],
   });
 }
-const parkingIcon = createPrecisionPinIcon({
-  color: "#f97316",
-  centerColor: "#ffffff",
-  size: 25,
-});
-
-const selectedIcon = createPinIcon({
-  color: "#dc2626",
-  label: "X",
-});
 
 function MapClickHandler({ onMapPress }) {
   useMapEvents({
     click(event) {
-      if (typeof onMapPress !== "function") {
-        return;
-      }
-
+      if (typeof onMapPress !== "function") return;
       const lat = Number(event?.latlng?.lat);
       const lng = Number(event?.latlng?.lng);
-
-      if (!isValidCoords(lat, lng)) {
-        return;
-      }
-
-      onMapPress({
-        lat,
-        lng,
-        latitude: lat,
-        longitude: lng,
-      });
+      if (!isValidCoords(lat, lng)) return;
+      onMapPress({ lat, lng, latitude: lat, longitude: lng });
     },
   });
-
   return null;
 }
 
-/*
- * Este componente solo se monta cuando preserveViewportOnMarkerChange
- * es false.
- *
- * En la pantalla GPS Debug no se monta, por lo que añadir o borrar
- * marcadores no cambia automáticamente el centro ni el zoom.
- */
-function MapAutoFit({
-  destinationPoint,
-  userPoint,
-  selectedPoint,
-  parkingPoints,
-  defaultZoom = DEFAULT_ZOOM,
-  fitMaxZoom = DEFAULT_FIT_MAX_ZOOM,
-}) {
+function ZoomObserver({ onZoom }) {
+  const map = useMapEvents({ zoomend: () => onZoom(map.getZoom()) });
+  useEffect(() => onZoom(map.getZoom()), [map, onZoom]);
+  return null;
+}
+
+function MapAutoFit({ points, defaultZoom, fitMaxZoom }) {
   const map = useMap();
-
-  const points = useMemo(() => {
-    return [
-      destinationPoint,
-      userPoint,
-      selectedPoint,
-      ...parkingPoints,
-    ].filter(Boolean);
-  }, [destinationPoint, userPoint, selectedPoint, parkingPoints]);
-
-  const pointsKey = useMemo(() => {
-    return points
-      .map((point) => `${point.lat.toFixed(6)},${point.lng.toFixed(6)}`)
-      .join("|");
-  }, [points]);
-
+  const key = points
+    .map((p) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`)
+    .join("|");
   useEffect(() => {
-    let cancelled = false;
-    let frameOne = null;
-    let frameTwo = null;
-
-    const fitMap = () => {
-      if (cancelled || !map) {
-        return;
-      }
-
-      const container =
-        typeof map.getContainer === "function" ? map.getContainer() : null;
-
-      if (!container || !container.isConnected) {
-        return;
-      }
-
-      if (!map._container || !map._mapPane) {
-        return;
-      }
-
+    const id = requestAnimationFrame(() => {
       try {
         map.invalidateSize(false);
-
-        if (points.length === 0) {
-          map.setView([DEFAULT_LAT, DEFAULT_LNG], defaultZoom, {
-            animate: false,
-          });
-
-          return;
-        }
-
+        if (!points.length) return;
         if (points.length === 1) {
           map.setView([points[0].lat, points[0].lng], defaultZoom, {
             animate: false,
           });
-
           return;
         }
-
-        const bounds = L.latLngBounds(
-          points.map((point) => [point.lat, point.lng]),
-        );
-
-        if (bounds.isValid()) {
+        const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
+        if (bounds.isValid())
           map.fitBounds(bounds, {
             padding: [34, 34],
             maxZoom: fitMaxZoom,
             animate: false,
           });
-        }
       } catch (error) {
         console.warn(
           "[StoreMapPreview.web] Error ajustando mapa:",
           error?.message || error,
         );
       }
-    };
-
-    frameOne = requestAnimationFrame(() => {
-      frameTwo = requestAnimationFrame(fitMap);
     });
-
-    return () => {
-      cancelled = true;
-
-      if (frameOne) {
-        cancelAnimationFrame(frameOne);
-      }
-
-      if (frameTwo) {
-        cancelAnimationFrame(frameTwo);
-      }
-    };
-  }, [map, pointsKey, points.length, defaultZoom, fitMaxZoom]);
-
+    return () => cancelAnimationFrame(id);
+  }, [map, key, points.length, defaultZoom, fitMaxZoom]);
   return null;
 }
 
@@ -322,6 +146,8 @@ export default function StoreMapPreview({
   userLat,
   userLng,
   parkingSpots = [],
+  mapStyle = DEFAULT_MAP_TILE_STYLE,
+
   onMapPress,
   selectedLat,
   selectedLng,
@@ -332,68 +158,67 @@ export default function StoreMapPreview({
   zoomControlsEnabled = true,
   zoomGesturesEnabled = false,
   preserveViewportOnMarkerChange = false,
+  parkingMarkerStyle = "traditional-pin",
+  parkingMarkerColor = "#ef4444",
+  parkingMarkerBaseSize = 32,
+  markerSizeByZoom = true,
 }) {
-  const destinationPoint = useMemo(() => {
-    const nextLat = Number(lat);
-    const nextLng = Number(lng);
-
-    if (!isValidCoords(nextLat, nextLng)) {
-      return null;
-    }
-
-    return {
-      lat: nextLat,
-      lng: nextLng,
-    };
-  }, [lat, lng]);
-
-  const userPoint = useMemo(() => {
-    const nextLat = Number(userLat);
-    const nextLng = Number(userLng);
-
-    if (!isValidCoords(nextLat, nextLng)) {
-      return null;
-    }
-
-    return {
-      lat: nextLat,
-      lng: nextLng,
-    };
-  }, [userLat, userLng]);
-
-  const selectedPoint = useMemo(() => {
-    const nextLat = Number(selectedLat);
-    const nextLng = Number(selectedLng);
-
-    if (!isValidCoords(nextLat, nextLng)) {
-      return null;
-    }
-
-    return {
-      lat: nextLat,
-      lng: nextLng,
-    };
-  }, [selectedLat, selectedLng]);
-
-  const parkingPoints = useMemo(() => {
-    if (!Array.isArray(parkingSpots)) {
-      return [];
-    }
-
-    return parkingSpots.map(normalizePoint).filter(Boolean);
-  }, [parkingSpots]);
-
-  /*
-   * MapContainer utiliza center solo durante su creación.
-   * No se proporciona una key variable y, por tanto, no se
-   * reconstruye cuando cambian los marcadores.
-   */
+  const [zoom, setZoom] = useState(defaultZoom);
+  const destinationPoint = useMemo(
+    () => normalizePoint({ lat, lng }),
+    [lat, lng],
+  );
+  const userPoint = useMemo(
+    () => normalizePoint({ lat: userLat, lng: userLng }),
+    [userLat, userLng],
+  );
+  const selectedPoint = useMemo(
+    () => normalizePoint({ lat: selectedLat, lng: selectedLng }),
+    [selectedLat, selectedLng],
+  );
+  const parkingPoints = useMemo(
+    () =>
+      Array.isArray(parkingSpots)
+        ? parkingSpots.map(normalizePoint).filter(Boolean)
+        : [],
+    [parkingSpots],
+  );
   const initialCenter = destinationPoint ||
     userPoint ||
-    selectedPoint || {
-      lat: DEFAULT_LAT,
-      lng: DEFAULT_LNG,
-    };
+    selectedPoint || { lat: DEFAULT_LAT, lng: DEFAULT_LNG };
+  const tile = useMemo(() => getMapTileConfig(mapStyle), [mapStyle]);
+  const parkingSize = markerSizeForZoom(
+    zoom,
+    parkingMarkerBaseSize,
+    markerSizeByZoom,
+  );
+  const parkingIcon = useMemo(
+    () =>
+      createParkingIcon({
+        style: parkingMarkerStyle,
+        color: parkingMarkerColor,
+        size: parkingSize,
+      }),
+    [parkingMarkerStyle, parkingMarkerColor, parkingSize],
+  );
+  const destinationIcon = useMemo(
+    () => createRoundIcon({ color: "#16a34a", label: "D", size: 25 }),
+    [],
+  );
+  const userIcon = useMemo(
+    () => createRoundIcon({ color: "#2563eb", label: "U", size: 25 }),
+    [],
+  );
+  const selectedIcon = useMemo(
+    () => createRoundIcon({ color: "#dc2626", label: "X", size: 34 }),
+    [],
+  );
+  const allPoints = [
+    destinationPoint,
+    userPoint,
+    selectedPoint,
+    ...parkingPoints,
+  ].filter(Boolean);
 
   return (
     <View style={styles.container}>
@@ -412,25 +237,22 @@ export default function StoreMapPreview({
         style={styles.map}
       >
         <TileLayer
-          attribution="&copy; OpenStreetMap contributors"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          key={`tiles-${tile.id}`}
+          attribution={tile.attribution}
+          url={tile.url}
+          minZoom={minZoom}
           maxZoom={maxZoom}
-          maxNativeZoom={19}
+          maxNativeZoom={tile.maxNativeZoom}
         />
-
         <MapClickHandler onMapPress={onMapPress} />
-
+        <ZoomObserver onZoom={setZoom} />
         {!preserveViewportOnMarkerChange ? (
           <MapAutoFit
-            destinationPoint={destinationPoint}
-            userPoint={userPoint}
-            selectedPoint={selectedPoint}
-            parkingPoints={parkingPoints}
+            points={allPoints}
             defaultZoom={defaultZoom}
             fitMaxZoom={fitMaxZoom}
           />
         ) : null}
-
         {destinationPoint ? (
           <Marker
             position={[destinationPoint.lat, destinationPoint.lng]}
@@ -444,7 +266,6 @@ export default function StoreMapPreview({
             </Popup>
           </Marker>
         ) : null}
-
         {userPoint ? (
           <Marker position={[userPoint.lat, userPoint.lng]} icon={userIcon}>
             <Popup>
@@ -454,7 +275,6 @@ export default function StoreMapPreview({
             </Popup>
           </Marker>
         ) : null}
-
         {selectedPoint ? (
           <Marker
             position={[selectedPoint.lat, selectedPoint.lng]}
@@ -467,7 +287,6 @@ export default function StoreMapPreview({
             </Popup>
           </Marker>
         ) : null}
-
         {parkingPoints.map((spot, index) => (
           <Marker
             key={spot.id || spot._id || `${spot.lat}-${spot.lng}-${index}`}
@@ -475,134 +294,18 @@ export default function StoreMapPreview({
             icon={parkingIcon}
           >
             <Popup>
-              <strong>Muestra GPS</strong>
+              <strong>{spot.alias || "Plaza"}</strong>
               <br />
               {spot.lat.toFixed(6)}, {spot.lng.toFixed(6)}
-              {spot.revealedBy ? (
-                <>
-                  <br />
-                  {spot.revealedBy}
-                </>
-              ) : null}
             </Popup>
           </Marker>
         ))}
       </MapContainer>
-
-      <View style={styles.legend} pointerEvents="none">
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.userDot]} />
-          <Text style={styles.legendText}>Usuario</Text>
-        </View>
-
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.destinationDot]} />
-          <Text style={styles.legendText}>Centro</Text>
-        </View>
-
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.parkingDot]} />
-          <Text style={styles.legendText}>Muestra</Text>
-        </View>
-
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, styles.selectedDot]} />
-          <Text style={styles.legendText}>Punto tocado</Text>
-        </View>
-      </View>
-
-      {!parkingPoints.length ? (
-        <View style={styles.emptySpotsBox} pointerEvents="none">
-          <Text style={styles.emptySpotsText}>
-            No hay muestras GPS guardadas.
-          </Text>
-        </View>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    minHeight: 180,
-    position: "relative",
-    backgroundColor: "#e5e7eb",
-  },
-
-  map: {
-    width: "100%",
-    height: "100%",
-    minHeight: 180,
-  },
-
-  legend: {
-    position: "absolute",
-    left: 12,
-    top: 12,
-    borderRadius: 12,
-    backgroundColor: "rgba(255, 255, 255, 0.94)",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 6,
-  },
-
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-  },
-
-  legendDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-  },
-
-  userDot: {
-    backgroundColor: "#2563eb",
-  },
-
-  destinationDot: {
-    backgroundColor: "#16a34a",
-  },
-
-  parkingDot: {
-    backgroundColor: "#f97316",
-  },
-
-  selectedDot: {
-    backgroundColor: "#dc2626",
-  },
-
-  legendText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#334155",
-  },
-
-  emptySpotsBox: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
-    minHeight: 42,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "rgba(255, 255, 255, 0.94)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-
-  emptySpotsText: {
-    color: "#64748b",
-    fontSize: 13,
-    fontWeight: "800",
-    textAlign: "center",
-  },
+  container: { flex: 1, minHeight: 180, overflow: "hidden" },
+  map: { width: "100%", height: "100%" },
 });

@@ -15,7 +15,6 @@ import { api } from "@/convex/_generated/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocation } from "@/src/context/LocationContext";
 import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
-import { ParkingMarkerSelector } from "@/src/screens/parking/ParkingMarkerSelector";
 import { ROUTES } from "@/src/navigation/ROUTES";
 import {
   DEFAULT_PARKING_DESTINATION,
@@ -174,12 +173,6 @@ function blurActiveElement() {
   }
 }
 
-const VALID_PARKING_MARKER_STYLES = new Set([
-  "traditional-pin",
-  "circle-stick",
-  "circle",
-]);
-
 export default function ParkingSettingsScreen({ navigation, route }) {
   const [selectedDestination, setSelectedDestination] = useState(
     route?.params?.activeDestination || DEFAULT_PARKING_DESTINATION,
@@ -191,8 +184,6 @@ export default function ParkingSettingsScreen({ navigation, route }) {
       route?.params?.activeUserId ||
       DEFAULT_PARKING_ALIAS,
   );
-  const [parkingMarkerStyle, setParkingMarkerStyle] =
-    useState("traditional-pin");
 
   const { location } = useLocation();
 
@@ -233,14 +224,33 @@ export default function ParkingSettingsScreen({ navigation, route }) {
   );
 
   const activeParkingSpots = useMemo(() => {
-    if (!Array.isArray(activeParkingSpotsResult)) {
+    const spots = Array.isArray(activeParkingSpotsResult)
+      ? activeParkingSpotsResult
+      : [];
+
+    return spots.map(normalizeParkingSpotForMap).filter(Boolean);
+  }, [activeParkingSpotsResult]);
+
+  const cabuenesTestParkingSpots = useMemo(() => {
+    if (selectedDestination !== "hospital-cabuenes") {
       return [];
     }
 
-    return activeParkingSpotsResult
-      .map(normalizeParkingSpotForMap)
-      .filter(Boolean);
-  }, [activeParkingSpotsResult]);
+    return CABUENES_TEST_SPOTS.map((spot) =>
+      normalizeParkingSpotForMap({
+        ...spot,
+        _id: spot.id,
+        city: DEFAULT_CITY,
+        zone: "hospital-cabuenes",
+        status: "free",
+        isTest: true,
+        testGroup: "cabuenes-test",
+        ownerAlias: "Pruebas Cabueñes",
+        parkingAlias: "cabuenes-test",
+        destinationName: "Hospital de Cabueñes",
+      }),
+    ).filter(Boolean);
+  }, [selectedDestination]);
 
   const destinationPresence = Array.isArray(destinationPresenceResult)
     ? destinationPresenceResult
@@ -254,27 +264,6 @@ export default function ParkingSettingsScreen({ navigation, route }) {
     lat: activeDestinationData?.latitude || 43.5453,
     lng: activeDestinationData?.longitude || -5.6615,
   };
-
-  const exampleParkingSpots = useMemo(() => {
-    if (selectedDestination === "hospital-cabuenes") {
-      return CABUENES_TEST_SPOTS.map(normalizeParkingSpotForMap).filter(
-        Boolean,
-      );
-    }
-
-    return [
-      {
-        id: `marker-preview-${selectedDestination}`,
-        alias: "Plaza de ejemplo",
-        lat: mapCenter.lat + 0.00035,
-        lng: mapCenter.lng + 0.00035,
-        status: "preview",
-      },
-    ];
-  }, [selectedDestination, mapCenter.lat, mapCenter.lng]);
-
-  const displayedParkingSpots =
-    activeParkingSpots.length > 0 ? activeParkingSpots : exampleParkingSpots;
 
   function getTrafficLevel(activeUsersCount) {
     if (activeUsersCount <= 0) {
@@ -318,7 +307,6 @@ export default function ParkingSettingsScreen({ navigation, route }) {
       destinationAddress: activeDestinationData.address,
       destinationLatitude: activeDestinationData.latitude,
       destinationLongitude: activeDestinationData.longitude,
-      parkingMarkerStyle,
       customDestination: "",
     };
 
@@ -542,10 +530,7 @@ export default function ParkingSettingsScreen({ navigation, route }) {
     let isMounted = true;
 
     async function hydrateSettings() {
-      const [preferences, storedSettingsJson] = await Promise.all([
-        loadParkingPreferences(),
-        AsyncStorage.getItem(PARKING_SETTINGS_STORAGE_KEY),
-      ]);
+      const preferences = await loadParkingPreferences();
 
       if (!isMounted) {
         return;
@@ -557,22 +542,6 @@ export default function ParkingSettingsScreen({ navigation, route }) {
 
       if (!route?.params?.activeParkingAlias && !route?.params?.activeUserId) {
         setDraftParkingAlias(preferences.parkingAlias);
-      }
-
-      if (storedSettingsJson) {
-        try {
-          const storedSettings = JSON.parse(storedSettingsJson);
-          if (
-            VALID_PARKING_MARKER_STYLES.has(storedSettings?.parkingMarkerStyle)
-          ) {
-            setParkingMarkerStyle(storedSettings.parkingMarkerStyle);
-          }
-        } catch (error) {
-          console.warn(
-            "[ParkingSettingsScreen] Ajustes locales no válidos:",
-            error?.message || error,
-          );
-        }
       }
     }
 
@@ -679,13 +648,11 @@ export default function ParkingSettingsScreen({ navigation, route }) {
                 <Text style={styles.trafficAdvice}>{trafficInfo.advice}</Text>
               </View>
             </View>
-            {/*
+
             <View style={styles.card}>
               <View style={styles.mapHeader}>
                 <View style={styles.mapTitleBlock}>
-                  <Text style={styles.mapTitle}>
-                    Aparcamientos recientes!!!
-                  </Text>
+                  <Text style={styles.mapTitle}>Aparcamientos recientes</Text>
 
                   <Text style={styles.mapSubtitle}>
                     {activeDestinationData.label}
@@ -710,45 +677,43 @@ export default function ParkingSettingsScreen({ navigation, route }) {
 
               {renderActiveSpots()}
             </View>
- */}
-            <View style={styles.card}>
-              <View style={styles.mapHeader}>
-                <View style={styles.mapTitleBlock}>
-                  <Text style={styles.mapTitle}>Parking Spots</Text>
 
-                  <Text style={styles.mapSubtitle}>
-                    {activeDestinationData.label}
-                  </Text>
+            {selectedDestination === "hospital-cabuenes" ? (
+              <View style={styles.card}>
+                <View style={styles.mapHeader}>
+                  <View style={styles.mapTitleBlock}>
+                    <Text style={styles.mapTitle}>parkingSpots de prueba</Text>
 
-                  <Text style={styles.mapAddress} numberOfLines={2}>
-                    {activeDestinationData.address}
+                    <Text style={styles.mapSubtitle}>Hospital de Cabueñes</Text>
+
+                    <Text style={styles.mapAddress} numberOfLines={2}>
+                      {cabuenesTestParkingSpots.length} muestras sintéticas para
+                      comprobar marcadores, encuadre y proximidad. No
+                      representan plazas reales.
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.mapContainer}>
+                  <StoreMapPreview
+                    key={`parking-settings-test-map-cabuenes-${cabuenesTestParkingSpots.length}`}
+                    lat={43.525186}
+                    lng={-5.606614}
+                    userLat={userCoords?.lat}
+                    userLng={userCoords?.lng}
+                    parkingSpots={cabuenesTestParkingSpots}
+                  />
+                </View>
+
+                <View style={styles.testSpotsSummary}>
+                  <Ionicons name="flask-outline" size={17} color="#1d4ed8" />
+                  <Text style={styles.testSpotsSummaryText}>
+                    Marcadores locales de prueba · source: test · grupo:
+                    cabuenes-test
                   </Text>
                 </View>
               </View>
-
-              <ParkingMarkerSelector
-                value={parkingMarkerStyle}
-                onChange={setParkingMarkerStyle}
-              />
-
-              <View style={styles.mapContainer}>
-                <StoreMapPreview
-                  key={`parking-spots-map-${selectedDestination}-${mapCenter.lat}-${mapCenter.lng}`}
-                  lat={mapCenter.lat}
-                  lng={mapCenter.lng}
-                  userLat={userCoords?.lat}
-                  userLng={userCoords?.lng}
-                  parkingSpots={displayedParkingSpots}
-                  mapStyle="gray"
-                  parkingMarkerStyle={parkingMarkerStyle}
-                  parkingMarkerColor="#ef4444"
-                  parkingMarkerBaseSize={32}
-                  markerSizeByZoom
-                />
-              </View>
-
-              {renderActiveSpots()}
-            </View>
+            ) : null}
 
             <Text style={styles.roomHint}>
               Canal: parking · destino: {selectedDestination}
@@ -1125,49 +1090,24 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  markerSelector: {
-    gap: 8,
-  },
-
-  markerSelectorTitle: {
-    color: "#14532d",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  markerSelectorOptions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-
-  markerSelectorButton: {
-    paddingHorizontal: 12,
+  testSpotsSummary: {
+    paddingHorizontal: 10,
     paddingVertical: 9,
-    borderRadius: 999,
+    borderRadius: 12,
+    backgroundColor: "#eff6ff",
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#ffffff",
+    borderColor: "#bfdbfe",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 
-  markerSelectorButtonSelected: {
-    borderColor: "#15803d",
-    backgroundColor: "#dcfce7",
-  },
-
-  markerSelectorButtonPressed: {
-    opacity: 0.75,
-  },
-
-  markerSelectorButtonText: {
-    color: "#374151",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-
-  markerSelectorButtonTextSelected: {
-    color: "#14532d",
-    fontWeight: "900",
+  testSpotsSummaryText: {
+    flex: 1,
+    color: "#1e3a8a",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "800",
   },
 
   roomHint: {
