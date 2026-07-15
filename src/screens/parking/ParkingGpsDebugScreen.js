@@ -1,134 +1,96 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { useMutation, useQuery } from "convex/react";
-import moment from "moment";
-import "moment/locale/es";
 
 import { api } from "@/convex/_generated/api";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import StoreMapPreview from "@/src/components/features/maps/StoreMapPreview";
 
-moment.locale("es");
-
-const MAP_MODE = {
-  EXPLORE: "explore",
-  ADD_SAMPLE: "add-sample",
+const DEFAULT_CITY = "gijon";
+const DEFAULT_CENTER = { lat: 43.5322, lng: -5.6611 };
+const ACCURACY_MODE = {
+  MAXIMUM: "maximum",
+  NORMAL: "normal",
 };
 
-const DEFAULT_CENTER = {
-  lat: 43.5322,
-  lng: -5.6611,
-};
+function formatCoord(value) {
+  return Number.isFinite(Number(value)) ? Number(value).toFixed(6) : "—";
+}
 
 function formatDateTime(value) {
   if (!value) return "Sin fecha";
 
-  const date = moment(value);
-
-  if (!date.isValid()) return "Fecha no válida";
-
-  return date.format("ddd D MMM HH:mm:ss");
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
 }
 
-function formatCoord(value) {
-  const number = Number(value);
-
-  if (!Number.isFinite(number)) return "—";
-
-  return number.toFixed(6);
+function toRadians(value) {
+  return (value * Math.PI) / 180;
 }
 
-function normalizeBrowserLocation(position) {
+function distanceMeters(lat1, lng1, lat2, lng2) {
+  const values = [lat1, lng1, lat2, lng2].map(Number);
+
+  if (!values.every(Number.isFinite)) return null;
+
+  const [aLat, aLng, bLat, bLng] = values;
+  const earthRadius = 6371000;
+  const dLat = toRadians(bLat - aLat);
+  const dLng = toRadians(bLng - aLng);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(aLat)) *
+      Math.cos(toRadians(bLat)) *
+      Math.sin(dLng / 2) ** 2;
+
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizePosition(position) {
   if (!position?.coords) return null;
 
   const latitude = Number(position.coords.latitude);
   const longitude = Number(position.coords.longitude);
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return null;
-  }
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+
+  const optionalNumber = (value) =>
+    typeof value === "number" && Number.isFinite(value) ? value : null;
 
   return {
     latitude,
     longitude,
     lat: latitude,
     lng: longitude,
-    accuracy:
-      typeof position.coords.accuracy === "number"
-        ? position.coords.accuracy
-        : null,
-    altitude:
-      typeof position.coords.altitude === "number"
-        ? position.coords.altitude
-        : null,
-    altitudeAccuracy:
-      typeof position.coords.altitudeAccuracy === "number"
-        ? position.coords.altitudeAccuracy
-        : null,
-    heading:
-      typeof position.coords.heading === "number"
-        ? position.coords.heading
-        : null,
-    speed:
-      typeof position.coords.speed === "number" ? position.coords.speed : null,
-    updatedAt: Date.now(),
+    accuracy: optionalNumber(position.coords.accuracy),
+    altitude: optionalNumber(position.coords.altitude),
+    altitudeAccuracy: optionalNumber(position.coords.altitudeAccuracy),
+    heading: optionalNumber(position.coords.heading),
+    speed: optionalNumber(position.coords.speed),
+    measuredAt: Date.now(),
   };
 }
 
-function normalizeExpoLocation(location) {
-  if (!location?.coords) return null;
-
-  const latitude = Number(location.coords.latitude);
-  const longitude = Number(location.coords.longitude);
-
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return null;
-  }
-
-  return {
-    latitude,
-    longitude,
-    lat: latitude,
-    lng: longitude,
-    accuracy:
-      typeof location.coords.accuracy === "number"
-        ? location.coords.accuracy
-        : null,
-    altitude:
-      typeof location.coords.altitude === "number"
-        ? location.coords.altitude
-        : null,
-    altitudeAccuracy:
-      typeof location.coords.altitudeAccuracy === "number"
-        ? location.coords.altitudeAccuracy
-        : null,
-    heading:
-      typeof location.coords.heading === "number"
-        ? location.coords.heading
-        : null,
-    speed:
-      typeof location.coords.speed === "number" ? location.coords.speed : null,
-    updatedAt: Date.now(),
-  };
-}
-
-function getBrowserCurrentPosition() {
+function getBrowserCurrentPosition(accuracyMode) {
   return new Promise((resolve, reject) => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      reject(
-        new Error("La geolocalización no está disponible en este navegador."),
-      );
+      reject(new Error("La geolocalización no está disponible."));
       return;
     }
 
@@ -137,55 +99,41 @@ function getBrowserCurrentPosition() {
       window.isSecureContext === false &&
       window.location?.hostname !== "localhost"
     ) {
-      reject(
-        new Error(
-          "La geolocalización requiere HTTPS. Usa localhost o Netlify HTTPS.",
-        ),
-      );
+      reject(new Error("La geolocalización web requiere HTTPS."));
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const normalizedLocation = normalizeBrowserLocation(position);
-
-        if (!normalizedLocation) {
-          reject(new Error("No se pudieron leer coordenadas válidas."));
-          return;
-        }
-
-        resolve(normalizedLocation);
+        const normalized = normalizePosition(position);
+        normalized
+          ? resolve(normalized)
+          : reject(
+              new Error("La lectura GPS no contiene coordenadas válidas."),
+            );
       },
       (error) => {
-        let message = "No se pudo obtener la ubicación actual.";
-
-        if (error.code === error.PERMISSION_DENIED) {
-          message = "Permiso de ubicación denegado en el navegador.";
-        }
-
-        if (error.code === error.POSITION_UNAVAILABLE) {
-          message = "La ubicación no está disponible en este dispositivo.";
-        }
-
-        if (error.code === error.TIMEOUT) {
-          message = "La lectura de ubicación ha tardado demasiado.";
-        }
-
-        const normalizedError = new Error(message);
-        normalizedError.code = error.code;
-
-        reject(normalizedError);
+        const messages = {
+          1: "Permiso de ubicación denegado.",
+          2: "La ubicación no está disponible.",
+          3: "La lectura GPS ha tardado demasiado.",
+        };
+        reject(new Error(messages[error.code] || "No se pudo leer el GPS."));
       },
       {
-        enableHighAccuracy: true,
-        timeout: 15000,
+        enableHighAccuracy: accuracyMode === ACCURACY_MODE.MAXIMUM,
+        timeout: accuracyMode === ACCURACY_MODE.MAXIMUM ? 30000 : 15000,
         maximumAge: 0,
       },
     );
   });
 }
 
-async function getNativeCurrentPosition() {
+async function getCurrentPositionForPlatform(accuracyMode) {
+  if (Platform.OS === "web") {
+    return getBrowserCurrentPosition(accuracyMode);
+  }
+
   const permission = await Location.requestForegroundPermissionsAsync();
 
   if (permission.status !== "granted") {
@@ -193,290 +141,254 @@ async function getNativeCurrentPosition() {
   }
 
   const position = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
+    accuracy:
+      accuracyMode === ACCURACY_MODE.MAXIMUM
+        ? Location.Accuracy.Highest
+        : Location.Accuracy.Balanced,
   });
+  const normalized = normalizePosition(position);
 
-  const normalizedLocation = normalizeExpoLocation(position);
+  if (!normalized) throw new Error("No se obtuvieron coordenadas válidas.");
 
-  if (!normalizedLocation) {
-    throw new Error("No se pudieron leer coordenadas válidas.");
-  }
-
-  return normalizedLocation;
+  return normalized;
 }
 
-async function getCurrentPositionForPlatform() {
-  if (Platform.OS === "web") {
-    return getBrowserCurrentPosition();
-  }
-
-  return getNativeCurrentPosition();
-}
-
-function GpsPointCard({ spot, index, onDelete }) {
-  const createdAt = spot.createdAt || spot.revealedAt || spot.updatedAt;
+function MeasurementCard({
+  measurement,
+  index,
+  destination,
+  onFocus,
+  onDelete,
+}) {
+  const distance = distanceMeters(
+    destination?.latitude,
+    destination?.longitude,
+    measurement.lat,
+    measurement.lng,
+  );
 
   return (
-    <View style={styles.pointCard}>
-      <View style={styles.pointHeader}>
-        <Text style={styles.pointTitle}>Muestra #{index + 1}</Text>
+    <View style={styles.measurementCard}>
+      <View style={styles.measurementHeader}>
+        <View style={styles.measurementTitleBlock}>
+          <Text style={styles.measurementTitle}>Muestra {index + 1}</Text>
+          <Text style={styles.measurementZone}>
+            {measurement.destinationName}
+          </Text>
+        </View>
 
-        <View style={styles.pointBadge}>
-          <Text style={styles.pointBadgeText}>
-            {typeof spot.accuracy === "number"
-              ? `±${Math.round(spot.accuracy)} m`
-              : "sin precisión"}
+        <View style={styles.accuracyBadge}>
+          <Text style={styles.accuracyBadgeText}>
+            {typeof measurement.accuracy === "number"
+              ? `±${measurement.accuracy.toFixed(1)} m`
+              : "Sin precisión"}
           </Text>
         </View>
       </View>
 
-      <View style={styles.pointRow}>
-        <Text style={styles.pointLabel}>Latitud</Text>
-        <Text style={styles.pointValue}>{formatCoord(spot.lat)}</Text>
+      <Text style={styles.coordinatesText}>
+        {formatCoord(measurement.lat)}, {formatCoord(measurement.lng)}
+      </Text>
+
+      <View style={styles.dataRow}>
+        <Text style={styles.dataLabel}>Fecha</Text>
+        <Text style={styles.dataValue}>
+          {formatDateTime(measurement.measuredAt)}
+        </Text>
       </View>
 
-      <View style={styles.pointRow}>
-        <Text style={styles.pointLabel}>Longitud</Text>
-        <Text style={styles.pointValue}>{formatCoord(spot.lng)}</Text>
+      <View style={styles.dataRow}>
+        <Text style={styles.dataLabel}>Distancia al centro</Text>
+        <Text style={styles.dataValue}>
+          {typeof distance === "number" ? `${distance.toFixed(1)} m` : "—"}
+        </Text>
       </View>
 
-      <View style={styles.pointRow}>
-        <Text style={styles.pointLabel}>Fecha</Text>
-        <Text style={styles.pointValue}>{formatDateTime(createdAt)}</Text>
+      <View style={styles.dataRow}>
+        <Text style={styles.dataLabel}>Origen</Text>
+        <Text style={styles.dataValue}>
+          {measurement.locationSource || "gps"} · {measurement.platform || "—"}
+        </Text>
       </View>
 
-      {spot.locationSource ? (
-        <View style={styles.pointRow}>
-          <Text style={styles.pointLabel}>Origen</Text>
-          <Text style={styles.pointValue}>{spot.locationSource}</Text>
-        </View>
-      ) : null}
+      <View style={styles.dataRow}>
+        <Text style={styles.dataLabel}>Modo solicitado</Text>
+        <Text style={styles.dataValue}>
+          {measurement.accuracyMode === ACCURACY_MODE.MAXIMUM
+            ? "Precisión máxima"
+            : "Precisión normal"}
+        </Text>
+      </View>
 
-      {spot.note ? <Text style={styles.pointNote}>{spot.note}</Text> : null}
+      <View style={styles.cardActions}>
+        <Pressable
+          style={styles.focusButton}
+          onPress={() => onFocus(measurement)}
+        >
+          <Ionicons name="locate-outline" size={16} color="#14532d" />
+          <Text style={styles.focusButtonText}>Ver en mapa</Text>
+        </Pressable>
 
-      <Pressable
-        style={styles.deleteSampleButton}
-        onPress={() => onDelete?.(spot)}
-      >
-        <Ionicons name="trash-outline" size={16} color="#b91c1c" />
-        <Text style={styles.deleteSampleButtonText}>Borrar muestra</Text>
-      </Pressable>
+        <Pressable
+          style={styles.deleteButton}
+          onPress={() => onDelete(measurement)}
+        >
+          <Ionicons name="trash-outline" size={16} color="#b91c1c" />
+          <Text style={styles.deleteButtonText}>Borrar</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 export default function ParkingGpsDebugScreen({ navigation }) {
+  const [selectedDestinationId, setSelectedDestinationId] = useState(null);
+  const [destinationPickerVisible, setDestinationPickerVisible] =
+    useState(false);
+  const [readingLocation, setReadingLocation] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lastLocation, setLastLocation] = useState(null);
-  const [selectedPoint, setSelectedPoint] = useState(null);
-  const [mapMode, setMapMode] = useState(MAP_MODE.EXPLORE);
+  const [selectedMapPoint, setSelectedMapPoint] = useState(null);
+  const [mapFocus, setMapFocus] = useState(DEFAULT_CENTER);
+  const [mapRevision, setMapRevision] = useState(0);
+  const [accuracyMode, setAccuracyMode] = useState(ACCURACY_MODE.MAXIMUM);
 
-  const createGpsDebugParkingSpot = useMutation(
-    api.parking.createGpsDebugParkingSpot,
-  );
-
-  const deleteGpsDebugParkingSpot = useMutation(
-    api.parking.deleteGpsDebugParkingSpot,
-  );
-
-  const spots = useQuery(api.parking.listGpsDebugParkingSpots, {
-    limit: 150,
+  const destinationsResult = useQuery(api.parking.listParkingDestinations, {
+    city: DEFAULT_CITY,
   });
+  const destinations = Array.isArray(destinationsResult)
+    ? destinationsResult
+    : [];
 
-  const parkingSpots = useMemo(() => {
-    if (!Array.isArray(spots)) return [];
+  const selectedDestination = useMemo(
+    () =>
+      destinations.find((item) => item.id === selectedDestinationId) ||
+      destinations[0] ||
+      null,
+    [destinations, selectedDestinationId],
+  );
 
-    return spots
-      .filter(
-        (spot) => typeof spot.lat === "number" && typeof spot.lng === "number",
-      )
-      .map((spot, index) => ({
-        id: spot.id || String(spot._id || index),
-        lat: spot.lat,
-        lng: spot.lng,
-        accuracy: spot.accuracy,
-        revealedBy:
-          typeof spot.accuracy === "number"
-            ? `±${Math.round(spot.accuracy)} m`
-            : spot.locationSource || "GPS",
-        status: "free",
-        createdAt: spot.createdAt || spot.revealedAt || spot.updatedAt,
-      }));
-  }, [spots]);
+  const measurementsResult = useQuery(
+    api.parking.listParkingGpsMeasurements,
+    selectedDestination
+      ? { destinationId: selectedDestination.id, limit: 200 }
+      : "skip",
+  );
+  const measurements = Array.isArray(measurementsResult)
+    ? measurementsResult
+    : [];
 
-  /*
-   * selectedPoint no forma parte de mapCenter.
-   *
-   * De esta forma, tocar el mapa o guardar una nueva muestra no modifica
-   * el centro ni la escala actual.
-   */
-  const mapCenter = useMemo(() => {
-    if (lastLocation) {
-      return {
-        lat: lastLocation.latitude,
-        lng: lastLocation.longitude,
-      };
-    }
+  const createMeasurement = useMutation(
+    api.parking.createParkingGpsMeasurement,
+  );
+  const deleteMeasurement = useMutation(
+    api.parking.deleteParkingGpsMeasurement,
+  );
 
-    if (parkingSpots.length > 0) {
-      return {
-        lat: parkingSpots[0].lat,
-        lng: parkingSpots[0].lng,
-      };
-    }
+  useEffect(() => {
+    if (!destinations.length) return;
 
-    return DEFAULT_CENTER;
-  }, [lastLocation, parkingSpots]);
+    const exists = destinations.some(
+      (item) => item.id === selectedDestinationId,
+    );
+    if (!exists) setSelectedDestinationId(destinations[0].id);
+  }, [destinations, selectedDestinationId]);
 
-  const handleMapPress = async (point) => {
+  useEffect(() => {
+    if (!selectedDestination) return;
+
+    setMapFocus({
+      lat: selectedDestination.latitude,
+      lng: selectedDestination.longitude,
+    });
+    setSelectedMapPoint(null);
+    setMapRevision((value) => value + 1);
+  }, [selectedDestination?.id]);
+
+  const mapMeasurements = useMemo(
+    () =>
+      measurements.map((measurement, index) => ({
+        ...measurement,
+        alias: `Muestra ${measurements.length - index}`,
+        status: "measurement",
+      })),
+    [measurements],
+  );
+
+  const focusMap = (point) => {
     const lat = Number(point?.lat ?? point?.latitude);
     const lng = Number(point?.lng ?? point?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return;
-    }
-
-    const nextPoint = {
-      lat,
-      lng,
-      latitude: lat,
-      longitude: lng,
-      selectedAt: Date.now(),
-    };
-
-    /*
-     * En ambos modos mostramos las coordenadas tocadas.
-     *
-     * En modo EXPLORE no se guarda nada.
-     * En modo ADD_SAMPLE se crea inmediatamente una muestra.
-     */
-    setSelectedPoint(nextPoint);
-
-    if (mapMode !== MAP_MODE.ADD_SAMPLE || saving) {
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      await createGpsDebugParkingSpot({
-        lat,
-        lng,
-        accuracy: undefined,
-        locationSource: "map-click",
-        note: `Muestra manual ${formatDateTime(Date.now())}`,
-      });
-    } catch (error) {
-      console.warn("[ParkingGpsDebugScreen] Error saving map sample:", error);
-
-      safeAlert(
-        "No se pudo guardar",
-        error?.message || "No se pudo guardar la muestra seleccionada.",
-      );
-    } finally {
-      setSaving(false);
-    }
+    setMapFocus({ lat, lng });
+    setSelectedMapPoint({ lat, lng });
+    setMapRevision((value) => value + 1);
   };
 
-  const saveCurrentPosition = async () => {
-    if (saving) return;
+  const readCurrentPosition = async ({ save }) => {
+    if (readingLocation || saving || !selectedDestination) return;
 
-    setSaving(true);
+    save ? setSaving(true) : setReadingLocation(true);
 
     try {
-      const location = await getCurrentPositionForPlatform();
-
+      const location = await getCurrentPositionForPlatform(accuracyMode);
       setLastLocation(location);
+      focusMap(location);
 
-      await createGpsDebugParkingSpot({
-        lat: location.latitude,
-        lng: location.longitude,
-        accuracy:
-          typeof location.accuracy === "number" ? location.accuracy : undefined,
-        locationSource: Platform.OS === "web" ? "web-gps-debug" : "gps-debug",
-        note: `GPS debug ${formatDateTime(Date.now())}`,
-      });
+      if (save) {
+        await createMeasurement({
+          destinationId: selectedDestination.id,
+          lat: location.lat,
+          lng: location.lng,
+          accuracy: location.accuracy,
+          altitude: location.altitude,
+          altitudeAccuracy: location.altitudeAccuracy,
+          heading: location.heading,
+          speed: location.speed,
+          source: Platform.OS === "web" ? "web-geolocation" : "expo-location",
+          platform: Platform.OS,
+          accuracyMode,
+        });
 
-      safeAlert(
-        "Posición guardada",
-        "La posición GPS se ha añadido a parkingSpots.",
-      );
+        safeAlert(
+          "Coordenadas guardadas",
+          `La medición se ha añadido a ${selectedDestination.label}.`,
+        );
+      }
     } catch (error) {
-      console.warn("[ParkingGpsDebugScreen] Error:", error);
-
       safeAlert(
-        "No se pudo guardar",
-        error?.message || "No se pudo leer o guardar la ubicación.",
+        save ? "No se pudo guardar" : "No se pudo obtener la posición",
+        error?.message || "No se pudo leer la ubicación del dispositivo.",
       );
     } finally {
+      setReadingLocation(false);
       setSaving(false);
     }
   };
 
-  const deleteSample = (spot) => {
-    if (!spot?._id) {
-      safeAlert(
-        "No se puede borrar",
-        "Esta muestra no tiene identificador válido.",
-      );
-      return;
-    }
-
-    safeAlert(
-      "Borrar muestra",
-      "¿Quieres borrar esta muestra GPS de parkingSpots?",
-      [
-        {
-          key: "cancel",
-          text: "Cancelar",
-          style: "cancel",
+  const requestDelete = (measurement) => {
+    safeAlert("Borrar medición", "¿Quieres eliminar esta lectura GPS?", [
+      { key: "cancel", text: "Cancelar", style: "cancel" },
+      {
+        key: "delete",
+        text: "Borrar",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteMeasurement({ measurementId: measurement._id });
+          } catch (error) {
+            safeAlert(
+              "No se pudo borrar",
+              error?.message || "No se pudo eliminar la medición.",
+            );
+          }
         },
-        {
-          key: "delete",
-          text: "Borrar",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteGpsDebugParkingSpot({
-                spotId: spot._id,
-              });
-
-              safeAlert(
-                "Muestra borrada",
-                "La muestra GPS se ha eliminado correctamente.",
-              );
-            } catch (error) {
-              console.warn(
-                "[ParkingGpsDebugScreen] Error deleting GPS sample:",
-                error,
-              );
-
-              safeAlert(
-                "No se pudo borrar",
-                error?.message || "No se pudo borrar la muestra GPS.",
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const clearSelectedPoint = () => {
-    setSelectedPoint(null);
-  };
-
-  const changeMapMode = (nextMode) => {
-    setMapMode(nextMode);
-    setSelectedPoint(null);
+      },
+    ]);
   };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Pressable
           style={styles.backButton}
@@ -486,267 +398,284 @@ export default function ParkingGpsDebugScreen({ navigation }) {
           <Text style={styles.backText}>Parking</Text>
         </Pressable>
 
-        <Text style={styles.title}>GPS Debug</Text>
-
+        <Text style={styles.title}>Mediciones GPS</Text>
         <Text style={styles.subtitle}>
-          Pantalla privada para estudiar el margen de error del GPS. Cada punto
-          se guarda en Convex dentro de la tabla parkingSpots con zone:
-          gps-debug.
+          Selecciona una zona, desplázate por el mapa y guarda coordenadas
+          tomadas in situ con el móvil.
         </Text>
       </View>
 
-      <View style={styles.privateBox}>
-        <Ionicons name="lock-closed-outline" size={18} color="#92400e" />
-
-        <Text style={styles.privateText}>
-          No mostrar esta pantalla en menús públicos. Úsala solo para pruebas
-          internas.
+      <View style={styles.adminBox}>
+        <Ionicons name="shield-checkmark-outline" size={19} color="#92400e" />
+        <Text style={styles.adminText}>
+          Herramienta administrativa. Convex comprueba el rol antes de leer,
+          guardar o borrar mediciones.
         </Text>
       </View>
 
       <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderText}>
-            <Text style={styles.cardTitle}>Mapa de muestras GPS</Text>
+        <Text style={styles.sectionLabel}>Zona de trabajo</Text>
 
-            <Text style={styles.cardSubtitle}>
-              Puntos guardados: {parkingSpots.length}
+        <Pressable
+          style={styles.destinationSelector}
+          onPress={() => setDestinationPickerVisible((value) => !value)}
+        >
+          <View style={styles.destinationSelectorText}>
+            <Text style={styles.destinationName}>
+              {selectedDestination?.label || "Selecciona un destino"}
+            </Text>
+            <Text style={styles.destinationAddress} numberOfLines={2}>
+              {selectedDestination?.address || "Cargando destinos…"}
             </Text>
           </View>
+          <Ionicons
+            name={destinationPickerVisible ? "chevron-up" : "chevron-down"}
+            size={20}
+            color="#15803d"
+          />
+        </Pressable>
 
-          {saving ? <ActivityIndicator size="small" color="#15803d" /> : null}
-        </View>
+        {destinationPickerVisible ? (
+          <View style={styles.destinationList}>
+            {destinations.map((destination) => {
+              const selected = destination.id === selectedDestination?.id;
+              return (
+                <Pressable
+                  key={destination.id}
+                  style={[
+                    styles.destinationOption,
+                    selected && styles.destinationOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedDestinationId(destination.id);
+                    setDestinationPickerVisible(false);
+                  }}
+                >
+                  <Ionicons
+                    name={selected ? "checkmark-circle" : "navigate-outline"}
+                    size={19}
+                    color={selected ? "#ffffff" : "#15803d"}
+                  />
+                  <View style={styles.destinationOptionText}>
+                    <Text
+                      style={[
+                        styles.destinationOptionName,
+                        selected && styles.destinationOptionNameSelected,
+                      ]}
+                    >
+                      {destination.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.destinationOptionMeta,
+                        selected && styles.destinationOptionMetaSelected,
+                      ]}
+                    >
+                      {destination.category}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
+      </View>
 
-        <View style={styles.modeSelector}>
+      <View style={styles.card}>
+        <Text style={styles.sectionLabel}>Precisión de la lectura</Text>
+
+        <View style={styles.accuracyModeRow}>
           <Pressable
             style={[
-              styles.modeOption,
-              mapMode === MAP_MODE.EXPLORE && styles.modeOptionActive,
+              styles.accuracyModeButton,
+              accuracyMode === ACCURACY_MODE.MAXIMUM &&
+                styles.accuracyModeButtonSelected,
             ]}
-            onPress={() => changeMapMode(MAP_MODE.EXPLORE)}
+            onPress={() => setAccuracyMode(ACCURACY_MODE.MAXIMUM)}
           >
             <Ionicons
-              name="hand-left-outline"
+              name="radio-button-on-outline"
               size={18}
-              color={mapMode === MAP_MODE.EXPLORE ? "#ffffff" : "#334155"}
+              color={
+                accuracyMode === ACCURACY_MODE.MAXIMUM ? "#ffffff" : "#15803d"
+              }
             />
-
-            <View style={styles.modeOptionText}>
+            <View style={styles.accuracyModeTextBlock}>
               <Text
                 style={[
-                  styles.modeOptionTitle,
-                  mapMode === MAP_MODE.EXPLORE && styles.modeOptionTitleActive,
+                  styles.accuracyModeTitle,
+                  accuracyMode === ACCURACY_MODE.MAXIMUM &&
+                    styles.accuracyModeTitleSelected,
                 ]}
               >
-                Explorar y consultar
+                Precisión máxima
               </Text>
-
               <Text
                 style={[
-                  styles.modeOptionDescription,
-                  mapMode === MAP_MODE.EXPLORE &&
-                    styles.modeOptionDescriptionActive,
+                  styles.accuracyModeDescription,
+                  accuracyMode === ACCURACY_MODE.MAXIMUM &&
+                    styles.accuracyModeDescriptionSelected,
                 ]}
               >
-                Zoom, desplazamiento y lectura de coordenadas
+                Más lenta y con mayor consumo; solicita la mejor lectura
+                disponible.
               </Text>
             </View>
           </Pressable>
 
-          <View
+          <Pressable
             style={[
-              styles.modeSwitchBox,
-              mapMode === MAP_MODE.ADD_SAMPLE && styles.modeSwitchBoxActive,
+              styles.accuracyModeButton,
+              accuracyMode === ACCURACY_MODE.NORMAL &&
+                styles.accuracyModeButtonSelected,
             ]}
+            onPress={() => setAccuracyMode(ACCURACY_MODE.NORMAL)}
           >
-            <View style={styles.modeSwitchText}>
+            <Ionicons
+              name="radio-button-on-outline"
+              size={18}
+              color={
+                accuracyMode === ACCURACY_MODE.NORMAL ? "#ffffff" : "#15803d"
+              }
+            />
+            <View style={styles.accuracyModeTextBlock}>
               <Text
                 style={[
-                  styles.modeSwitchLabel,
-                  mapMode === MAP_MODE.ADD_SAMPLE &&
-                    styles.modeSwitchLabelActive,
+                  styles.accuracyModeTitle,
+                  accuracyMode === ACCURACY_MODE.NORMAL &&
+                    styles.accuracyModeTitleSelected,
                 ]}
               >
-                Añadir muestra al tocar
+                Precisión normal
               </Text>
-
               <Text
                 style={[
-                  styles.modeSwitchDescription,
-                  mapMode === MAP_MODE.ADD_SAMPLE &&
-                    styles.modeSwitchDescriptionActive,
+                  styles.accuracyModeDescription,
+                  accuracyMode === ACCURACY_MODE.NORMAL &&
+                    styles.accuracyModeDescriptionSelected,
                 ]}
               >
-                Cada toque crea una muestra nueva
+                Lectura más rápida y con menor consumo de batería.
               </Text>
             </View>
-
-            <Switch
-              value={mapMode === MAP_MODE.ADD_SAMPLE}
-              onValueChange={(enabled) =>
-                changeMapMode(enabled ? MAP_MODE.ADD_SAMPLE : MAP_MODE.EXPLORE)
-              }
-              trackColor={{
-                false: "#cbd5e1",
-                true: "#86efac",
-              }}
-              thumbColor={
-                mapMode === MAP_MODE.ADD_SAMPLE ? "#15803d" : "#f8fafc"
-              }
-              ios_backgroundColor="#cbd5e1"
-            />
-          </View>
+          </Pressable>
         </View>
+      </View>
 
-        <View style={styles.mapHintBox}>
-          <Ionicons
-            name="information-circle-outline"
-            size={17}
-            color="#475569"
-          />
-
-          <Text style={styles.mapHintText}>
-            {mapMode === MAP_MODE.ADD_SAMPLE
-              ? "Modo añadir activo: cada toque válido crea inmediatamente una nueva muestra. El mapa mantiene su centro y su escala."
-              : "Modo consulta activo: usa zoom y desplazamiento libremente. Al tocar solo se muestran las coordenadas; no se crea ninguna muestra."}
-          </Text>
+      <View style={styles.card}>
+        <View style={styles.mapHeader}>
+          <View>
+            <Text style={styles.cardTitle}>Mapa de mediciones</Text>
+            <Text style={styles.cardSubtitle}>
+              {measurements.length} muestras en{" "}
+              {selectedDestination?.label || "la zona"}
+            </Text>
+          </View>
+          {(readingLocation || saving) && (
+            <ActivityIndicator size="small" color="#15803d" />
+          )}
         </View>
 
         <View style={styles.mapContainer}>
           <StoreMapPreview
-            lat={mapCenter.lat}
-            lng={mapCenter.lng}
-            userLat={lastLocation?.latitude}
-            userLng={lastLocation?.longitude}
-            parkingSpots={parkingSpots}
-            onMapPress={handleMapPress}
-            selectedLat={selectedPoint?.lat}
-            selectedLng={selectedPoint?.lng}
-            defaultZoom={17}
-            minZoom={14}
+            key={`gps-map-${selectedDestination?.id || "none"}-${mapRevision}`}
+            lat={selectedDestination?.latitude ?? DEFAULT_CENTER.lat}
+            lng={selectedDestination?.longitude ?? DEFAULT_CENTER.lng}
+            centerLat={mapFocus.lat}
+            centerLng={mapFocus.lng}
+            userLat={lastLocation?.lat}
+            userLng={lastLocation?.lng}
+            selectedLat={selectedMapPoint?.lat}
+            selectedLng={selectedMapPoint?.lng}
+            parkingSpots={mapMeasurements}
+            onMapPress={(point) => setSelectedMapPoint(point)}
+            defaultZoom={18}
+            minZoom={13}
             maxZoom={21}
-            fitMaxZoom={18}
+            fitMaxZoom={19}
             preserveViewportOnMarkerChange
             zoomControlsEnabled
             zoomGesturesEnabled={false}
+            mapStyle="gray"
+            parkingMarkerStyle="circle-stick"
+            parkingMarkerBaseSize={18}
+            markerSizeByZoom={false}
           />
         </View>
 
-        {selectedPoint ? (
-          <View style={styles.selectedPointBox}>
-            <View style={styles.selectedPointHeader}>
-              <View style={styles.selectedPointTitleRow}>
-                <Ionicons name="pin-outline" size={18} color="#dc2626" />
+        <Text style={styles.mapHelp}>
+          Arrastra el mapa para desplazarte. Usa +/−, rueda, doble toque o gesto
+          de pinza para cambiar el zoom.
+        </Text>
 
-                <Text style={styles.selectedPointTitle}>
-                  {mapMode === MAP_MODE.ADD_SAMPLE
-                    ? "Última muestra añadida"
-                    : "Punto consultado en el mapa"}
-                </Text>
-              </View>
-
-              <Pressable
-                hitSlop={8}
-                onPress={clearSelectedPoint}
-                style={styles.clearSelectedButton}
-              >
-                <Ionicons name="close-outline" size={18} color="#991b1b" />
-              </Pressable>
-            </View>
-
-            <View style={styles.pointRow}>
-              <Text style={styles.pointLabel}>Latitud</Text>
-              <Text style={styles.pointValue}>
-                {selectedPoint.latitude.toFixed(6)}
-              </Text>
-            </View>
-
-            <View style={styles.pointRow}>
-              <Text style={styles.pointLabel}>Longitud</Text>
-              <Text style={styles.pointValue}>
-                {selectedPoint.longitude.toFixed(6)}
-              </Text>
-            </View>
-
-            <View style={styles.pointRow}>
-              <Text style={styles.pointLabel}>Seleccionado</Text>
-
-              <Text style={styles.pointValue}>
-                {formatDateTime(selectedPoint.selectedAt)}
-              </Text>
-            </View>
+        {lastLocation ? (
+          <View style={styles.currentLocationBox}>
+            <Text style={styles.currentLocationTitle}>
+              Última lectura del móvil
+            </Text>
+            <Text style={styles.coordinatesText}>
+              {formatCoord(lastLocation.lat)}, {formatCoord(lastLocation.lng)}
+            </Text>
+            <Text style={styles.currentLocationMeta}>
+              Precisión:{" "}
+              {typeof lastLocation.accuracy === "number"
+                ? `±${lastLocation.accuracy.toFixed(1)} m`
+                : "sin dato"}
+            </Text>
           </View>
         ) : null}
 
-        <Pressable
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={saveCurrentPosition}
-          disabled={saving}
-        >
-          <Ionicons name="locate-outline" size={18} color="#ffffff" />
+        <View style={styles.mainActions}>
+          <Pressable
+            disabled={readingLocation || saving || !selectedDestination}
+            style={[
+              styles.secondaryButton,
+              (readingLocation || saving) && styles.disabled,
+            ]}
+            onPress={() => readCurrentPosition({ save: false })}
+          >
+            <Ionicons name="locate-outline" size={18} color="#14532d" />
+            <Text style={styles.secondaryButtonText}>Centrar mi posición</Text>
+          </Pressable>
 
-          <Text style={styles.saveButtonText}>
-            {saving
-              ? "Leyendo y guardando..."
-              : "Leer posición GPS actual y guardar"}
-          </Text>
-        </Pressable>
+          <Pressable
+            disabled={readingLocation || saving || !selectedDestination}
+            style={[
+              styles.primaryButton,
+              (readingLocation || saving) && styles.disabled,
+            ]}
+            onPress={() => readCurrentPosition({ save: true })}
+          >
+            <Ionicons name="add-circle-outline" size={18} color="#ffffff" />
+            <Text style={styles.primaryButtonText}>
+              {saving ? "Guardando…" : "Tomar coordenadas"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
-      {lastLocation ? (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Última lectura GPS</Text>
-
-          <View style={styles.pointRow}>
-            <Text style={styles.pointLabel}>Latitud</Text>
-            <Text style={styles.pointValue}>
-              {formatCoord(lastLocation.latitude)}
-            </Text>
-          </View>
-
-          <View style={styles.pointRow}>
-            <Text style={styles.pointLabel}>Longitud</Text>
-            <Text style={styles.pointValue}>
-              {formatCoord(lastLocation.longitude)}
-            </Text>
-          </View>
-
-          <View style={styles.pointRow}>
-            <Text style={styles.pointLabel}>Precisión declarada</Text>
-
-            <Text style={styles.pointValue}>
-              {typeof lastLocation.accuracy === "number"
-                ? `±${Math.round(lastLocation.accuracy)} m`
-                : "Sin dato"}
-            </Text>
-          </View>
-
-          <View style={styles.pointRow}>
-            <Text style={styles.pointLabel}>Fecha</Text>
-            <Text style={styles.pointValue}>
-              {formatDateTime(lastLocation.updatedAt)}
-            </Text>
-          </View>
-        </View>
-      ) : null}
-
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Muestras guardadas</Text>
+        <Text style={styles.cardTitle}>Mediciones guardadas</Text>
+        <Text style={styles.cardSubtitle}>
+          Las cards pertenecen únicamente al destino seleccionado.
+        </Text>
 
-        {!Array.isArray(spots) ? (
-          <Text style={styles.loadingText}>Cargando puntos...</Text>
-        ) : spots.length === 0 ? (
+        {measurementsResult === undefined ? (
+          <Text style={styles.emptyText}>Cargando mediciones…</Text>
+        ) : measurements.length === 0 ? (
           <Text style={styles.emptyText}>
-            Todavía no hay posiciones guardadas.
+            Todavía no hay lecturas en esta zona.
           </Text>
         ) : (
-          <View style={styles.pointsList}>
-            {spots.map((spot, index) => (
-              <GpsPointCard
-                key={spot.id || spot._id || index}
-                spot={spot}
-                index={index}
-                onDelete={deleteSample}
+          <View style={styles.measurementsList}>
+            {measurements.map((measurement, index) => (
+              <MeasurementCard
+                key={measurement._id}
+                measurement={measurement}
+                index={measurements.length - index - 1}
+                destination={selectedDestination}
+                onFocus={focusMap}
+                onDelete={requestDelete}
               />
             ))}
           </View>
@@ -757,23 +686,15 @@ export default function ParkingGpsDebugScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#f3f4f6",
-  },
-
+  screen: { flex: 1, backgroundColor: "#f3f4f6" },
   content: {
     width: "100%",
-    maxWidth: 760,
+    maxWidth: 780,
     alignSelf: "center",
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
-
-  header: {
-    marginBottom: 16,
-  },
-
+  header: { marginBottom: 16 },
   backButton: {
     alignSelf: "flex-start",
     flexDirection: "row",
@@ -781,387 +702,279 @@ const styles = StyleSheet.create({
     gap: 4,
     marginBottom: 14,
   },
-
-  backText: {
-    color: "#14532d",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-
-  title: {
-    fontSize: 30,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
+  backText: { color: "#14532d", fontSize: 15, fontWeight: "900" },
+  title: { color: "#111827", fontSize: 30, fontWeight: "900" },
   subtitle: {
     marginTop: 6,
+    color: "#64748b",
     fontSize: 14,
     lineHeight: 20,
-    color: "#64748b",
     fontWeight: "700",
   },
-
-  privateBox: {
+  adminBox: {
     marginBottom: 16,
+    padding: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#fde68a",
     backgroundColor: "#fffbeb",
-    padding: 12,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
   },
-
-  privateText: {
+  adminText: {
     flex: 1,
+    color: "#92400e",
     fontSize: 13,
     lineHeight: 18,
-    color: "#92400e",
     fontWeight: "800",
   },
-
   card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
-    padding: 16,
     marginBottom: 16,
+    padding: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: "#e5e7eb",
-
+    backgroundColor: "#ffffff",
     ...Platform.select({
-      web: {
-        boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
-      },
-      default: {
-        shadowColor: "#000000",
-        shadowOffset: {
-          width: 0,
-          height: 3,
-        },
-        shadowOpacity: 0.08,
-        shadowRadius: 8,
-        elevation: 2,
-      },
+      web: { boxShadow: "0 8px 20px rgba(15,23,42,0.06)" },
+      default: { elevation: 2 },
     }),
   },
-
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: 12,
-    marginBottom: 12,
-  },
-
-  cardHeaderText: {
-    flex: 1,
-  },
-
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
-  cardSubtitle: {
-    marginTop: 3,
-    color: "#64748b",
+  sectionLabel: {
+    marginBottom: 8,
+    color: "#14532d",
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "900",
   },
-
-  modeSelector: {
-    marginBottom: 12,
-    gap: 10,
-  },
-
-  modeOption: {
-    minHeight: 64,
+  destinationSelector: {
+    minHeight: 70,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#cbd5e1",
-    backgroundColor: "#f8fafc",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: "#86efac",
+    backgroundColor: "#f0fdf4",
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
-
-  modeOptionActive: {
-    borderColor: "#15803d",
-    backgroundColor: "#15803d",
-  },
-
-  modeOptionText: {
-    flex: 1,
-  },
-
-  modeOptionTitle: {
-    color: "#334155",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-
-  modeOptionTitleActive: {
-    color: "#ffffff",
-  },
-
-  modeOptionDescription: {
-    marginTop: 2,
+  destinationSelectorText: { flex: 1, minWidth: 0 },
+  destinationName: { color: "#111827", fontSize: 16, fontWeight: "900" },
+  destinationAddress: {
+    marginTop: 3,
     color: "#64748b",
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "700",
   },
-
-  modeOptionDescriptionActive: {
-    color: "#dcfce7",
+  destinationList: { marginTop: 10, gap: 8 },
+  destinationOption: {
+    padding: 11,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
   },
-
-  modeSwitchBox: {
-    minHeight: 64,
+  destinationOptionSelected: {
+    borderColor: "#15803d",
+    backgroundColor: "#15803d",
+  },
+  destinationOptionText: { flex: 1 },
+  destinationOptionName: { color: "#111827", fontSize: 13, fontWeight: "900" },
+  destinationOptionNameSelected: { color: "#ffffff" },
+  destinationOptionMeta: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  destinationOptionMetaSelected: { color: "#dcfce7" },
+  accuracyModeRow: { gap: 9 },
+  accuracyModeButton: {
+    minHeight: 68,
+    padding: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#bbf7d0",
     backgroundColor: "#f0fdf4",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
+    alignItems: "flex-start",
+    gap: 9,
   },
-
-  modeSwitchBoxActive: {
+  accuracyModeButtonSelected: {
     borderColor: "#15803d",
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#15803d",
   },
-
-  modeSwitchText: {
-    flex: 1,
-  },
-
-  modeSwitchLabel: {
-    color: "#166534",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-
-  modeSwitchLabelActive: {
-    color: "#14532d",
-  },
-
-  modeSwitchDescription: {
-    marginTop: 2,
+  accuracyModeTextBlock: { flex: 1 },
+  accuracyModeTitle: { color: "#14532d", fontSize: 14, fontWeight: "900" },
+  accuracyModeTitleSelected: { color: "#ffffff" },
+  accuracyModeDescription: {
+    marginTop: 3,
     color: "#64748b",
     fontSize: 12,
     lineHeight: 16,
     fontWeight: "700",
   },
-
-  modeSwitchDescriptionActive: {
-    color: "#166534",
-  },
-
-  mapHintBox: {
+  accuracyModeDescriptionSelected: { color: "#dcfce7" },
+  mapHeader: {
     marginBottom: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fafc",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 8,
+    justifyContent: "space-between",
   },
-
-  mapHintText: {
-    flex: 1,
-    color: "#475569",
-    fontSize: 12,
-    lineHeight: 17,
+  cardTitle: { color: "#111827", fontSize: 18, fontWeight: "900" },
+  cardSubtitle: {
+    marginTop: 3,
+    color: "#64748b",
+    fontSize: 13,
     fontWeight: "700",
   },
-
   mapContainer: {
-    height: 320,
-    borderRadius: 16,
+    height: 390,
+    borderRadius: 14,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#d1d5db",
     backgroundColor: "#e5e7eb",
   },
-
-  saveButton: {
-    marginTop: 14,
-    minHeight: 48,
-    borderRadius: 15,
-    backgroundColor: "#15803d",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-  },
-
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-
-  saveButtonText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-
-  selectedPointBox: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fef2f2",
-  },
-
-  selectedPointHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 8,
-  },
-
-  selectedPointTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-  },
-
-  selectedPointTitle: {
-    color: "#991b1b",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-
-  clearSelectedButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#fee2e2",
-  },
-
-  pointRow: {
-    minHeight: 38,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-
-  pointLabel: {
-    color: "#64748b",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  pointValue: {
-    flex: 1,
-    textAlign: "right",
-    color: "#111827",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-
-  pointsList: {
-    marginTop: 12,
-    gap: 10,
-  },
-
-  pointCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#f8fafc",
-    padding: 12,
-  },
-
-  pointHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    marginBottom: 8,
-  },
-
-  pointTitle: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#111827",
-  },
-
-  pointBadge: {
-    borderRadius: 999,
-    backgroundColor: "#ecfdf5",
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-
-  pointBadgeText: {
-    color: "#15803d",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  pointNote: {
-    marginTop: 8,
+  mapHelp: {
+    marginTop: 9,
     color: "#64748b",
     fontSize: 12,
     lineHeight: 17,
     fontWeight: "700",
   },
-
-  loadingText: {
-    marginTop: 10,
-    color: "#64748b",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-
-  emptyText: {
-    marginTop: 10,
-    color: "#64748b",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-
-  deleteSampleButton: {
-    marginTop: 10,
-    minHeight: 38,
+  currentLocationBox: {
+    marginTop: 12,
+    padding: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#fecaca",
-    backgroundColor: "#fef2f2",
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+  },
+  currentLocationTitle: { color: "#1e3a8a", fontSize: 13, fontWeight: "900" },
+  currentLocationMeta: {
+    marginTop: 4,
+    color: "#475569",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  mainActions: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 9,
+  },
+  primaryButton: {
+    flexGrow: 1,
+    minHeight: 46,
+    paddingHorizontal: 15,
+    borderRadius: 999,
+    backgroundColor: "#15803d",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 7,
   },
-
-  deleteSampleButtonText: {
-    color: "#b91c1c",
-    fontSize: 13,
+  primaryButtonText: { color: "#ffffff", fontSize: 13, fontWeight: "900" },
+  secondaryButton: {
+    flexGrow: 1,
+    minHeight: 46,
+    paddingHorizontal: 15,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#86efac",
+    backgroundColor: "#f0fdf4",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+  secondaryButtonText: { color: "#14532d", fontSize: 13, fontWeight: "900" },
+  disabled: { opacity: 0.5 },
+  measurementsList: { marginTop: 12, gap: 10 },
+  measurementCard: {
+    padding: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#f8fafc",
+  },
+  measurementHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  measurementTitleBlock: { flex: 1 },
+  measurementTitle: { color: "#111827", fontSize: 15, fontWeight: "900" },
+  measurementZone: {
+    marginTop: 2,
+    color: "#15803d",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  accuracyBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#dcfce7",
+  },
+  accuracyBadgeText: { color: "#14532d", fontSize: 11, fontWeight: "900" },
+  coordinatesText: {
+    marginTop: 9,
+    color: "#111827",
+    fontSize: 14,
+    fontVariant: ["tabular-nums"],
     fontWeight: "900",
+  },
+  dataRow: {
+    marginTop: 7,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  dataLabel: { color: "#64748b", fontSize: 12, fontWeight: "700" },
+  dataValue: {
+    flex: 1,
+    color: "#334155",
+    fontSize: 12,
+    textAlign: "right",
+    fontWeight: "800",
+  },
+  cardActions: { marginTop: 12, flexDirection: "row", gap: 8 },
+  focusButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#86efac",
+    backgroundColor: "#f0fdf4",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  focusButtonText: { color: "#14532d", fontSize: 12, fontWeight: "900" },
+  deleteButton: {
+    minWidth: 100,
+    minHeight: 38,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    backgroundColor: "#fff1f2",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  deleteButtonText: { color: "#b91c1c", fontSize: 12, fontWeight: "900" },
+  emptyText: {
+    marginTop: 12,
+    color: "#64748b",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

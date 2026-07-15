@@ -5,6 +5,20 @@ import { authTables } from "@convex-dev/auth/server";
 export default defineSchema({
   ...authTables,
 
+  // Tabla de Convex Auth ampliada con el rol de la aplicación.
+  // El campo es opcional para que los usuarios existentes sigan siendo válidos;
+  // cuando no existe, la aplicación lo interpreta como "user".
+  users: defineTable({
+    name: v.optional(v.string()),
+    image: v.optional(v.string()),
+    email: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.float64()),
+    phone: v.optional(v.string()),
+    phoneVerificationTime: v.optional(v.float64()),
+    isAnonymous: v.optional(v.boolean()),
+    role: v.optional(v.union(v.literal("user"), v.literal("admin"))),
+  }).index("email", ["email"]),
+
   products: defineTable({
     barcode: v.string(),
 
@@ -163,6 +177,64 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_city_zone", ["city", "zone"])
     .index("by_expiresAt", ["expiresAt"]),
+
+  // Destinos permanentes de la utilidad Parking.
+  // `externalId` es el identificador estable que usa la aplicación como zona.
+  parkingDestinations: defineTable({
+    externalId: v.string(),
+    label: v.string(),
+    category: v.string(),
+    address: v.string(),
+    city: v.string(),
+
+    location: v.object({
+      lat: v.float64(),
+      lng: v.float64(),
+      source: v.optional(v.string()),
+    }),
+
+    enabled: v.boolean(),
+    sortOrder: v.float64(),
+
+    createdBy: v.optional(v.id("users")),
+    updatedBy: v.optional(v.id("users")),
+    createdAt: v.float64(),
+    updatedAt: v.float64(),
+  })
+    .index("by_externalId", ["externalId"])
+    .index("by_city", ["city"])
+    .index("by_city_enabled_sortOrder", ["city", "enabled", "sortOrder"]),
+
+  // Lecturas GPS tomadas in situ por administradores.
+  parkingGpsMeasurements: defineTable({
+    destinationId: v.string(),
+    destinationRef: v.optional(v.id("parkingDestinations")),
+    destinationName: v.string(),
+    city: v.string(),
+
+    location: v.object({
+      lat: v.float64(),
+      lng: v.float64(),
+      accuracy: v.optional(v.union(v.float64(), v.null())),
+      altitude: v.optional(v.union(v.float64(), v.null())),
+      altitudeAccuracy: v.optional(v.union(v.float64(), v.null())),
+      heading: v.optional(v.union(v.float64(), v.null())),
+      speed: v.optional(v.union(v.float64(), v.null())),
+      source: v.string(),
+    }),
+
+    platform: v.optional(v.string()),
+    accuracyMode: v.optional(
+      v.union(v.literal("maximum"), v.literal("normal")),
+    ),
+    note: v.optional(v.string()),
+    measuredBy: v.id("users"),
+    measuredAt: v.float64(),
+    createdAt: v.float64(),
+  })
+    .index("by_destination_measuredAt", ["destinationId", "measuredAt"])
+    .index("by_measuredBy_measuredAt", ["measuredBy", "measuredAt"])
+    .index("by_city_measuredAt", ["city", "measuredAt"]),
 
   parkingSpots: defineTable({
     /**

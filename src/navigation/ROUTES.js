@@ -59,6 +59,7 @@ export const ROUTES = {
   PROFILE: "Profile",
   SETTINGS: "Settings Screen",
   BARCODE_SETTINGS: "Barcode Settings Screen",
+  ADMIN_USERS: "Admin Users",
   CONFIRM_DELETE: "Confirm Delete Screen",
 
   // Chat stack

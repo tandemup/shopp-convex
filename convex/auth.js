@@ -11,4 +11,13 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       reset: ResendOTPPasswordReset,
     }),
   ],
+  callbacks: {
+    async afterUserCreatedOrUpdated(ctx, { userId }) {
+      const user = await ctx.db.get(userId);
+
+      if (user && !user.role) {
+        await ctx.db.patch(userId, { role: "user" });
+      }
+    },
+  },
 });

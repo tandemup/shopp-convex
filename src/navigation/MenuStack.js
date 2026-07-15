@@ -7,6 +7,7 @@ import MenuScreen from "@/src/screens/settings/MenuScreen";
 import SearchEngines from "@/src/screens/settings/SearchEngines";
 import BarcodeSettingsScreen from "@/src/screens/settings/BarcodeSettingsScreen";
 import ProfileScreen from "@/src/screens/profile/ProfileScreen";
+import AdminUsersScreen from "@/src/screens/admin/AdminUsersScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -48,6 +49,12 @@ export default function MenuStack() {
         name={ROUTES.BARCODE_SETTINGS}
         component={BarcodeSettingsScreen}
         options={{ title: "Código de barras" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.ADMIN_USERS}
+        component={AdminUsersScreen}
+        options={{ title: "Administrar usuarios" }}
       />
     </Stack.Navigator>
   );

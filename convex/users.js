@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { requireAdmin } from "./lib/auth";
 
 function cleanText(value) {
   return String(value || "").trim();
@@ -63,6 +64,8 @@ export const current = query({
       phone: profile?.phone ?? user.phone ?? null,
       phoneVerificationTime: user.phoneVerificationTime ?? null,
       isAnonymous: user.isAnonymous ?? false,
+      role: user.role ?? "user",
+      isAdmin: user.role === "admin",
 
       profile: profile
         ? {
@@ -75,6 +78,54 @@ export const current = query({
           }
         : null,
     };
+  },
+});
+
+export const listForAdmin = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+
+    const users = await ctx.db.query("users").collect();
+
+    return users
+      .map((user) => ({
+        _id: user._id,
+        _creationTime: user._creationTime,
+        name: user.name ?? null,
+        email: user.email ?? null,
+        role: user.role ?? "user",
+        isAnonymous: user.isAnonymous ?? false,
+      }))
+      .sort((a, b) => {
+        const aLabel = a.email || a.name || String(a._id);
+        const bLabel = b.email || b.name || String(b._id);
+        return aLabel.localeCompare(bLabel);
+      });
+  },
+});
+
+export const setRole = mutation({
+  args: {
+    userId: v.id("users"),
+    role: v.union(v.literal("user"), v.literal("admin")),
+  },
+  handler: async (ctx, args) => {
+    const admin = await requireAdmin(ctx);
+
+    if (admin._id === args.userId && args.role !== "admin") {
+      throw new Error("No puedes retirar tu propio rol de administrador.");
+    }
+
+    const targetUser = await ctx.db.get(args.userId);
+
+    if (!targetUser) {
+      throw new Error("Usuario no encontrado.");
+    }
+
+    await ctx.db.patch(args.userId, { role: args.role });
+
+    return { ok: true };
   },
 });
 

@@ -26,59 +26,6 @@ import {
 
 const PARKING_SETTINGS_STORAGE_KEY = "@shopp/parking/settings";
 const DEFAULT_CITY = "gijon";
-const DEFAULT_DESTINATION = "palacio-deportes";
-
-const DESTINATION_OPTIONS = [
-  {
-    id: "palacio-deportes",
-    label: "Palacio de los Deportes",
-    category: "Deporte",
-    address: "Paseo del Doctor Fleming, 929, 33203 Gijón, Asturias",
-    latitude: 43.53502,
-    longitude: -5.63586,
-  },
-  {
-    id: "el-corte-ingles",
-    label: "El Corte Inglés",
-    category: "Centro comercial",
-    address: "C/ Ramón Areces, 2, 33211 Gijón, Asturias",
-    latitude: 43.5361,
-    longitude: -5.6844,
-  },
-  {
-    id: "los-fresnos",
-    label: "C.C. Los Fresnos",
-    category: "Centro comercial",
-    address: "C. Río de Oro, 3, Centro, 33209 Gijón, Asturias",
-    latitude: 43.5321,
-    longitude: -5.6619,
-  },
-  {
-    id: "el-molinon",
-    label: "El Molinón",
-    category: "Estadio",
-    address: "C/ Luis Adaro Falcó, 33203 Gijón, Asturias",
-    latitude: 43.536329,
-    longitude: -5.637417,
-  },
-  {
-    id: "hospital-cabuenes",
-    label: "Hospital de Cabueñes",
-    category: "Hospital",
-    address: "Calle Los Prados, 395, 33203 Gijón, Asturias",
-    latitude: 43.525186,
-    longitude: -5.606614,
-  },
-  {
-    id: "iglesia-san-julian",
-    label: "Iglesia de San Julian",
-    category: "Iglesia",
-    address:
-      "Iglesia de San Julián de Somió, Av. Dionisio Cifuentes, 19, Periurbano - Rural, 33203 Gijón, Asturias",
-    latitude: 43.535538,
-    longitude: -5.62342,
-  },
-];
 
 const CABUENES_TEST_SPOTS = [
   {
@@ -193,10 +140,26 @@ export default function ParkingSettingsScreen({ navigation, route }) {
   );
   const [parkingMarkerStyle, setParkingMarkerStyle] =
     useState("traditional-pin");
+  const [seedingDestinations, setSeedingDestinations] = useState(false);
+  const [destinationsError, setDestinationsError] = useState("");
 
   const { location } = useLocation();
 
   const touchParkingPresence = useMutation(api.parking.touchParkingPresence);
+  const seedParkingDestinations = useMutation(
+    api.parking.seedParkingDestinations,
+  );
+
+  const parkingDestinationsResult = useQuery(
+    api.parking.listParkingDestinations,
+    { city: DEFAULT_CITY },
+  );
+
+  const destinationOptions = Array.isArray(parkingDestinationsResult)
+    ? parkingDestinationsResult
+    : [];
+
+  const destinationsLoading = parkingDestinationsResult === undefined;
 
   const userCoords =
     location?.lat != null && location?.lng != null
@@ -208,11 +171,13 @@ export default function ParkingSettingsScreen({ navigation, route }) {
 
   const activeDestinationData = useMemo(() => {
     return (
-      DESTINATION_OPTIONS.find((destination) => {
+      destinationOptions.find((destination) => {
         return destination.id === selectedDestination;
-      }) || DESTINATION_OPTIONS[0]
+      }) ||
+      destinationOptions[0] ||
+      null
     );
-  }, [selectedDestination]);
+  }, [destinationOptions, selectedDestination]);
 
   const activeParkingSpotsResult = useQuery(
     api.parking.listActiveParkingSpots,
@@ -309,6 +274,10 @@ export default function ParkingSettingsScreen({ navigation, route }) {
   async function handleSave() {
     blurActiveElement();
 
+    if (!activeDestinationData) {
+      return;
+    }
+
     const cleanParkingAlias = draftParkingAlias.trim() || DEFAULT_PARKING_ALIAS;
 
     const nextSettings = {
@@ -346,6 +315,25 @@ export default function ParkingSettingsScreen({ navigation, route }) {
       activeDestination: selectedDestination,
       parkingAlias: cleanParkingAlias,
     });
+  }
+
+  async function handleSeedDestinations() {
+    if (seedingDestinations) {
+      return;
+    }
+
+    setSeedingDestinations(true);
+    setDestinationsError("");
+
+    try {
+      await seedParkingDestinations({});
+    } catch (error) {
+      setDestinationsError(
+        error?.message || "No se pudieron cargar los destinos.",
+      );
+    } finally {
+      setSeedingDestinations(false);
+    }
   }
 
   function formatSpotTimeLeft(expiresAt) {
@@ -427,6 +415,44 @@ export default function ParkingSettingsScreen({ navigation, route }) {
   }
 
   function renderSelectedDestinationCard() {
+    if (destinationsLoading) {
+      return (
+        <View style={styles.destinationStateCard}>
+          <Text style={styles.destinationStateText}>Cargando destinos…</Text>
+        </View>
+      );
+    }
+
+    if (!activeDestinationData) {
+      return (
+        <View style={styles.destinationStateCard}>
+          <Text style={styles.destinationStateText}>
+            No hay destinos activos en Convex.
+          </Text>
+
+          <Pressable
+            disabled={seedingDestinations}
+            onPress={handleSeedDestinations}
+            style={({ pressed }) => [
+              styles.seedDestinationsButton,
+              seedingDestinations && styles.disabledButton,
+              pressed && styles.selectorButtonPressed,
+            ]}
+          >
+            <Ionicons name="cloud-upload-outline" size={17} color="#ffffff" />
+
+            <Text style={styles.seedDestinationsButtonText}>
+              {seedingDestinations ? "Cargando…" : "Cargar destinos iniciales"}
+            </Text>
+          </Pressable>
+
+          {destinationsError ? (
+            <Text style={styles.destinationErrorText}>{destinationsError}</Text>
+          ) : null}
+        </View>
+      );
+    }
+
     return (
       <View style={styles.selectedDestinationCard}>
         <View style={styles.selectedDestinationIcon}>
@@ -486,7 +512,48 @@ export default function ParkingSettingsScreen({ navigation, route }) {
             contentContainerStyle={styles.pickerScrollContent}
             keyboardShouldPersistTaps="handled"
           >
-            {DESTINATION_OPTIONS.map(renderDestinationButton)}
+            {destinationsLoading ? (
+              <View style={styles.destinationStateCard}>
+                <Text style={styles.destinationStateText}>
+                  Cargando destinos…
+                </Text>
+              </View>
+            ) : destinationOptions.length > 0 ? (
+              destinationOptions.map(renderDestinationButton)
+            ) : (
+              <View style={styles.destinationStateCard}>
+                <Text style={styles.destinationStateText}>
+                  No hay destinos activos. Ejecuta primero la carga inicial.
+                </Text>
+
+                <Pressable
+                  disabled={seedingDestinations}
+                  onPress={handleSeedDestinations}
+                  style={({ pressed }) => [
+                    styles.seedDestinationsButton,
+                    seedingDestinations && styles.disabledButton,
+                    pressed && styles.selectorButtonPressed,
+                  ]}
+                >
+                  <Ionicons
+                    name="cloud-upload-outline"
+                    size={17}
+                    color="#ffffff"
+                  />
+                  <Text style={styles.seedDestinationsButtonText}>
+                    {seedingDestinations
+                      ? "Cargando…"
+                      : "Cargar destinos iniciales"}
+                  </Text>
+                </Pressable>
+
+                {destinationsError ? (
+                  <Text style={styles.destinationErrorText}>
+                    {destinationsError}
+                  </Text>
+                ) : null}
+              </View>
+            )}
           </ScrollView>
         </View>
       </View>
@@ -587,6 +654,20 @@ export default function ParkingSettingsScreen({ navigation, route }) {
     route?.params?.activeUserId,
   ]);
 
+  useEffect(() => {
+    if (!destinationOptions.length) {
+      return;
+    }
+
+    const selectedExists = destinationOptions.some(
+      (destination) => destination.id === selectedDestination,
+    );
+
+    if (!selectedExists) {
+      setSelectedDestination(destinationOptions[0].id);
+    }
+  }, [destinationOptions, selectedDestination]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screenShell}>
@@ -625,12 +706,15 @@ export default function ParkingSettingsScreen({ navigation, route }) {
                 <Text style={styles.fieldLabel}>Destino</Text>
 
                 <Pressable
+                  disabled={destinationsLoading}
                   onPress={() => {
                     blurActiveElement();
                     setDestinationPickerVisible(true);
                   }}
                   style={({ pressed }) => [
                     styles.changeDestinationButton,
+                    (destinationsLoading || !destinationOptions.length) &&
+                      styles.disabledButton,
                     pressed && styles.selectorButtonPressed,
                   ]}
                 >
@@ -688,11 +772,11 @@ export default function ParkingSettingsScreen({ navigation, route }) {
                   </Text>
 
                   <Text style={styles.mapSubtitle}>
-                    {activeDestinationData.label}
+                    {activeDestinationData?.label || "Destino no disponible"}
                   </Text>
 
                   <Text style={styles.mapAddress} numberOfLines={2}>
-                    {activeDestinationData.address}
+                    {activeDestinationData?.address || ""}
                   </Text>
                 </View>
               </View>
@@ -717,11 +801,11 @@ export default function ParkingSettingsScreen({ navigation, route }) {
                   <Text style={styles.mapTitle}>Parking Spots</Text>
 
                   <Text style={styles.mapSubtitle}>
-                    {activeDestinationData.label}
+                    {activeDestinationData?.label || "Destino no disponible"}
                   </Text>
 
                   <Text style={styles.mapAddress} numberOfLines={2}>
-                    {activeDestinationData.address}
+                    {activeDestinationData?.address || ""}
                   </Text>
                 </View>
               </View>
@@ -770,9 +854,11 @@ export default function ParkingSettingsScreen({ navigation, route }) {
             </Pressable>
 
             <Pressable
+              disabled={!activeDestinationData}
               onPress={handleSave}
               style={({ pressed }) => [
                 styles.saveButton,
+                !activeDestinationData && styles.disabledButton,
                 pressed && styles.footerButtonPressed,
               ]}
             >
@@ -883,6 +969,55 @@ const styles = StyleSheet.create({
 
   selectorButtonPressed: {
     opacity: 0.75,
+  },
+
+  disabledButton: {
+    opacity: 0.45,
+  },
+
+  destinationStateCard: {
+    minHeight: 68,
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    backgroundColor: "#f8fafc",
+    justifyContent: "center",
+  },
+
+  destinationStateText: {
+    color: "#64748b",
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+  },
+
+  seedDestinationsButton: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#15803d",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+  },
+
+  seedDestinationsButtonText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  destinationErrorText: {
+    marginTop: 10,
+    color: "#b91c1c",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
   },
 
   destinationGrid: {

@@ -721,6 +721,10 @@ export default function MenuScreen({ navigation }) {
     navigation.navigate(ROUTES.PROFILE);
   };
 
+  const goToAdminUsers = () => {
+    navigation.navigate(ROUTES.ADMIN_USERS);
+  };
+
   const goToProductSearchEngines = () => {
     navigation.navigate(ROUTES.SEARCH_ENGINE_SETTINGS, {
       type: "product",
@@ -902,6 +906,16 @@ export default function MenuScreen({ navigation }) {
               subtitle="Editar alias público, teléfono y privacidad de Parking"
               onPress={goToProfile}
             />
+
+            {currentUser?.isAdmin ? (
+              <SettingsCard
+                icon="shield-checkmark-outline"
+                title="Administrar usuarios"
+                subtitle="Consultar usuarios y asignar roles"
+                badge="ADMIN"
+                onPress={goToAdminUsers}
+              />
+            ) : null}
 
             <SettingsCard
               icon="log-out-outline"

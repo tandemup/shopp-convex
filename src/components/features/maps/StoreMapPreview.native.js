@@ -55,6 +55,8 @@ function normalizeSpot(spot) {
 export default function StoreMapPreview({
   lat,
   lng,
+  centerLat,
+  centerLng,
   userLat,
   userLng,
   parkingSpots = [],
@@ -81,8 +83,10 @@ export default function StoreMapPreview({
         : [],
     [parkingSpots],
   );
+  const initialLat = isValidCoord(centerLat) ? Number(centerLat) : Number(lat);
+  const initialLng = isValidCoord(centerLng) ? Number(centerLng) : Number(lng);
   const html = `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><style>html,body,#map{width:100%;height:100%;margin:0;overflow:hidden}.round{border-radius:999px;border:3px solid #fff;box-shadow:0 4px 12px rgba(15,23,42,.35);display:flex;align-items:center;justify-content:center;color:#fff;font:900 12px system-ui}</style></head><body><div id="map"></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
-  const map=L.map('map',{zoomControl:${zoomControlsEnabled},dragging:true,scrollWheelZoom:${zoomGesturesEnabled},doubleClickZoom:${zoomGesturesEnabled},touchZoom:${zoomGesturesEnabled},boxZoom:${zoomGesturesEnabled},keyboard:${zoomGesturesEnabled},minZoom:${Number(minZoom)},maxZoom:${Number(maxZoom)}}).setView([${Number(lat)},${Number(lng)}],${Number(defaultZoom)});
+  const map=L.map('map',{zoomControl:${zoomControlsEnabled},dragging:true,scrollWheelZoom:${zoomGesturesEnabled},doubleClickZoom:${zoomGesturesEnabled},touchZoom:${zoomGesturesEnabled},boxZoom:${zoomGesturesEnabled},keyboard:${zoomGesturesEnabled},minZoom:${Number(minZoom)},maxZoom:${Number(maxZoom)}}).setView([${initialLat},${initialLng}],${Number(defaultZoom)});
   L.tileLayer(${JSON.stringify(tile.url)},{attribution:${JSON.stringify(tile.attribution)},maxZoom:${Number(maxZoom)},maxNativeZoom:${tile.maxNativeZoom}}).addTo(map);
   function roundIcon(color,label,size=34){return L.divIcon({className:'',html:'<div class="round" style="width:'+size+'px;height:'+size+'px;background:'+color+'">'+label+'</div>',iconSize:[size,size],iconAnchor:[size/2,size/2],popupAnchor:[0,-size/2]});}
   function sizeForZoom(z){const b=${Number(parkingMarkerBaseSize)};if(!${markerSizeByZoom})return b;if(z<=13)return Math.max(18,Math.round(b*.68));if(z<=15)return Math.max(22,Math.round(b*.82));if(z<=17)return b;if(z<=19)return Math.round(b*1.15);return Math.round(b*1.28);}

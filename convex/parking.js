@@ -22,6 +22,58 @@ const MAX_SPOTS_LIMIT = 300;
 const MAX_PRESENCE_LIMIT = 200;
 const MAX_NOTIFICATIONS_LIMIT = 100;
 
+const INITIAL_PARKING_DESTINATIONS = [
+  {
+    externalId: "palacio-deportes",
+    label: "Palacio de los Deportes",
+    category: "Deporte",
+    address: "Paseo del Doctor Fleming, 929, 33203 Gijón, Asturias",
+    lat: 43.53502,
+    lng: -5.63586,
+  },
+  {
+    externalId: "el-corte-ingles",
+    label: "El Corte Inglés",
+    category: "Centro comercial",
+    address: "C/ Ramón Areces, 2, 33211 Gijón, Asturias",
+    lat: 43.5361,
+    lng: -5.6844,
+  },
+  {
+    externalId: "los-fresnos",
+    label: "C.C. Los Fresnos",
+    category: "Centro comercial",
+    address: "C. Río de Oro, 3, Centro, 33209 Gijón, Asturias",
+    lat: 43.5321,
+    lng: -5.6619,
+  },
+  {
+    externalId: "el-molinon",
+    label: "El Molinón",
+    category: "Estadio",
+    address: "C/ Luis Adaro Falcó, 33203 Gijón, Asturias",
+    lat: 43.536329,
+    lng: -5.637417,
+  },
+  {
+    externalId: "hospital-cabuenes",
+    label: "Hospital de Cabueñes",
+    category: "Hospital",
+    address: "Calle Los Prados, 395, 33203 Gijón, Asturias",
+    lat: 43.525186,
+    lng: -5.606614,
+  },
+  {
+    externalId: "iglesia-san-julian",
+    label: "Iglesia de San Julian",
+    category: "Iglesia",
+    address:
+      "Iglesia de San Julián de Somió, Av. Dionisio Cifuentes, 19, Periurbano - Rural, 33203 Gijón, Asturias",
+    lat: 43.535538,
+    lng: -5.62342,
+  },
+];
+
 const parkingMessageStatusValidator = v.union(
   v.literal("looking"),
   v.literal("parked"),
@@ -64,6 +116,114 @@ async function requireAuthUserId(ctx) {
 
   return String(userId);
 }
+
+async function requireAdminUserId(ctx) {
+  const userId = await getAuthUserId(ctx);
+
+  if (!userId) {
+    throw new Error("Usuario no autenticado.");
+  }
+
+  const user = await ctx.db.get(userId);
+
+  if (!user || user.role !== "admin") {
+    throw new Error("Se requiere el rol de administrador.");
+  }
+
+  return userId;
+}
+
+export const listParkingDestinations = query({
+  args: {
+    city: v.optional(v.string()),
+  },
+
+  handler: async (ctx, args) => {
+    await requireAuthUserId(ctx);
+
+    const city = cleanCity(args.city);
+    const destinations = await ctx.db
+      .query("parkingDestinations")
+      .withIndex("by_city_enabled_sortOrder", (q) =>
+        q.eq("city", city).eq("enabled", true),
+      )
+      .collect();
+
+    return destinations.map((destination) => ({
+      _id: destination._id,
+      id: destination.externalId,
+      label: destination.label,
+      category: destination.category,
+      address: destination.address,
+      city: destination.city,
+      latitude: destination.location.lat,
+      longitude: destination.location.lng,
+      location: destination.location,
+      sortOrder: destination.sortOrder,
+    }));
+  },
+});
+
+export const seedParkingDestinations = mutation({
+  args: {},
+
+  handler: async (ctx) => {
+    const adminUserId = await requireAdminUserId(ctx);
+    const now = Date.now();
+    let inserted = 0;
+    let updated = 0;
+
+    for (
+      let index = 0;
+      index < INITIAL_PARKING_DESTINATIONS.length;
+      index += 1
+    ) {
+      const destination = INITIAL_PARKING_DESTINATIONS[index];
+      const existing = await ctx.db
+        .query("parkingDestinations")
+        .withIndex("by_externalId", (q) =>
+          q.eq("externalId", destination.externalId),
+        )
+        .unique();
+
+      const values = {
+        label: destination.label,
+        category: destination.category,
+        address: destination.address,
+        city: DEFAULT_CITY,
+        location: {
+          lat: destination.lat,
+          lng: destination.lng,
+          source: "seed",
+        },
+        enabled: true,
+        sortOrder: index + 1,
+        updatedBy: adminUserId,
+        updatedAt: now,
+      };
+
+      if (existing) {
+        await ctx.db.patch(existing._id, values);
+        updated += 1;
+      } else {
+        await ctx.db.insert("parkingDestinations", {
+          externalId: destination.externalId,
+          ...values,
+          createdBy: adminUserId,
+          createdAt: now,
+        });
+        inserted += 1;
+      }
+    }
+
+    return {
+      ok: true,
+      inserted,
+      updated,
+      total: INITIAL_PARKING_DESTINATIONS.length,
+    };
+  },
+});
 
 function cleanAlias(value) {
   const alias = cleanText(value);
@@ -1714,6 +1874,139 @@ export const listValidParkingSpots = query({
   },
 });
 
+const optionalGpsNumberValidator = v.optional(v.union(v.float64(), v.null()));
+
+function normalizeOptionalGpsNumber(value) {
+  return isFiniteNumber(value) ? value : null;
+}
+
+export const createParkingGpsMeasurement = mutation({
+  args: {
+    destinationId: v.string(),
+    lat: v.float64(),
+    lng: v.float64(),
+    accuracy: optionalGpsNumberValidator,
+    altitude: optionalGpsNumberValidator,
+    altitudeAccuracy: optionalGpsNumberValidator,
+    heading: optionalGpsNumberValidator,
+    speed: optionalGpsNumberValidator,
+    source: v.optional(v.string()),
+    platform: v.optional(v.string()),
+    accuracyMode: v.optional(
+      v.union(v.literal("maximum"), v.literal("normal")),
+    ),
+    note: v.optional(v.string()),
+  },
+
+  handler: async (ctx, args) => {
+    const adminUserId = await requireAdminUserId(ctx);
+
+    if (!hasValidCoords(args.lat, args.lng)) {
+      throw new Error("Coordenadas no válidas.");
+    }
+
+    const destinationId = cleanText(args.destinationId);
+    const destination = await ctx.db
+      .query("parkingDestinations")
+      .withIndex("by_externalId", (q) => q.eq("externalId", destinationId))
+      .unique();
+
+    if (!destination || destination.enabled !== true) {
+      throw new Error("El destino no existe o no está activo.");
+    }
+
+    const now = Date.now();
+    const measurementId = await ctx.db.insert("parkingGpsMeasurements", {
+      destinationId: destination.externalId,
+      destinationRef: destination._id,
+      destinationName: destination.label,
+      city: destination.city,
+      location: {
+        lat: args.lat,
+        lng: args.lng,
+        accuracy: normalizeOptionalGpsNumber(args.accuracy),
+        altitude: normalizeOptionalGpsNumber(args.altitude),
+        altitudeAccuracy: normalizeOptionalGpsNumber(args.altitudeAccuracy),
+        heading: normalizeOptionalGpsNumber(args.heading),
+        speed: normalizeOptionalGpsNumber(args.speed),
+        source: cleanText(args.source) || "gps",
+      },
+      platform: cleanText(args.platform) || undefined,
+      accuracyMode: args.accuracyMode,
+      note: cleanText(args.note).slice(0, 240) || undefined,
+      measuredBy: adminUserId,
+      measuredAt: now,
+      createdAt: now,
+    });
+
+    return { ok: true, measurementId };
+  },
+});
+
+export const listParkingGpsMeasurements = query({
+  args: {
+    destinationId: v.string(),
+    limit: v.optional(v.float64()),
+  },
+
+  handler: async (ctx, args) => {
+    await requireAdminUserId(ctx);
+
+    const destinationId = cleanText(args.destinationId);
+    const limit = clampLimit(args.limit, 100, 1, 300);
+    const measurements = await ctx.db
+      .query("parkingGpsMeasurements")
+      .withIndex("by_destination_measuredAt", (q) =>
+        q.eq("destinationId", destinationId),
+      )
+      .order("desc")
+      .take(limit);
+
+    return measurements.map((measurement) => ({
+      _id: measurement._id,
+      id: String(measurement._id),
+      destinationId: measurement.destinationId,
+      destinationName: measurement.destinationName,
+      city: measurement.city,
+      lat: measurement.location.lat,
+      lng: measurement.location.lng,
+      accuracy: measurement.location.accuracy ?? null,
+      altitude: measurement.location.altitude ?? null,
+      altitudeAccuracy: measurement.location.altitudeAccuracy ?? null,
+      heading: measurement.location.heading ?? null,
+      speed: measurement.location.speed ?? null,
+      locationSource: measurement.location.source,
+      platform: measurement.platform,
+      accuracyMode: measurement.accuracyMode,
+      note: measurement.note,
+      measuredAt: measurement.measuredAt,
+      createdAt: measurement.createdAt,
+    }));
+  },
+});
+
+export const deleteParkingGpsMeasurement = mutation({
+  args: {
+    measurementId: v.id("parkingGpsMeasurements"),
+  },
+
+  handler: async (ctx, args) => {
+    await requireAdminUserId(ctx);
+
+    const measurement = await ctx.db.get(args.measurementId);
+
+    if (!measurement) {
+      throw new Error("La medición GPS no existe.");
+    }
+
+    await ctx.db.delete(args.measurementId);
+
+    return { ok: true, measurementId: args.measurementId };
+  },
+});
+
+// Funciones heredadas de GPS Debug. Se conservan temporalmente para no romper
+// versiones antiguas del cliente; la nueva pantalla usa parkingGpsMeasurements.
 export const createGpsDebugParkingSpot = mutation({
   args: {
     lat: v.float64(),

@@ -141,6 +141,8 @@ function MapAutoFit({ points, defaultZoom, fitMaxZoom }) {
 export default function StoreMapPreview({
   lat,
   lng,
+  centerLat,
+  centerLng,
   userLat,
   userLng,
   parkingSpots = [],
@@ -166,6 +168,10 @@ export default function StoreMapPreview({
     () => normalizePoint({ lat, lng }),
     [lat, lng],
   );
+  const requestedCenter = useMemo(
+    () => normalizePoint({ lat: centerLat, lng: centerLng }),
+    [centerLat, centerLng],
+  );
   const userPoint = useMemo(
     () => normalizePoint({ lat: userLat, lng: userLng }),
     [userLat, userLng],
@@ -181,7 +187,8 @@ export default function StoreMapPreview({
         : [],
     [parkingSpots],
   );
-  const initialCenter = destinationPoint ||
+  const initialCenter = requestedCenter ||
+    destinationPoint ||
     userPoint ||
     selectedPoint || { lat: DEFAULT_LAT, lng: DEFAULT_LNG };
   const tile = useMemo(() => getMapTileConfig(mapStyle), [mapStyle]);

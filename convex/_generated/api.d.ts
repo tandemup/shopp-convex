@@ -16,6 +16,7 @@ import type * as chat from "../chat.js";
 import type * as factory from "../factory.js";
 import type * as http from "../http.js";
 import type * as items from "../items.js";
+import type * as lib_auth from "../lib/auth.js";
 import type * as migrations from "../migrations.js";
 import type * as parking from "../parking.js";
 import type * as productCache from "../productCache.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   factory: typeof factory;
   http: typeof http;
   items: typeof items;
+  "lib/auth": typeof lib_auth;
   migrations: typeof migrations;
   parking: typeof parking;
   productCache: typeof productCache;
