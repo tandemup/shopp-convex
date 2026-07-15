@@ -13,7 +13,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useQuery } from "convex/react";
 
+import { api } from "@/convex/_generated/api";
 import DatePill from "@/src/components/controls/DatePill";
 import CurrencyBadge from "@/src/components/ui/CurrencyBadge";
 import { safeAlert, safeMenu } from "@/src/components/ui/alert/safeAlert";
@@ -141,6 +143,7 @@ function QuickActions({
   archivedCount = 0,
   historyCount = 0,
   scannedCount = 0,
+  isAdmin = false,
 }) {
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
@@ -220,18 +223,25 @@ function QuickActions({
         onPress: () =>
           navigateToNestedRoute(ROUTES.CHAT_TAB, ROUTES.PARKING_SCREEN),
       },
-      {
-        key: "parkingGpsDebug",
-        label: "GPS Debug",
-        description: "Comprueba la precisión",
-        icon: "locate-outline",
-        iconColor: COLORS.orange,
-        iconBackground: COLORS.orangeSoft,
-        badgeLabel: "DEV",
-        onPress: () =>
-          navigateToNestedRoute(ROUTES.CHAT_TAB, ROUTES.PARKING_GPS_DEBUG),
-      },
-      ...(__DEV__
+      ...(isAdmin
+        ? [
+            {
+              key: "parkingGpsDebug",
+              label: "GPS Debug",
+              description: "Comprueba la precisión",
+              icon: "locate-outline",
+              iconColor: COLORS.orange,
+              iconBackground: COLORS.orangeSoft,
+              badgeLabel: "DEV",
+              onPress: () =>
+                navigateToNestedRoute(
+                  ROUTES.CHAT_TAB,
+                  ROUTES.PARKING_GPS_DEBUG,
+                ),
+            },
+          ]
+        : []),
+      ...(__DEV__ && isAdmin
         ? [
             {
               key: "carrefour",
@@ -250,7 +260,7 @@ function QuickActions({
           ]
         : []),
     ],
-    [archivedCount, historyCount, navigateToNestedRoute, scannedCount],
+    [archivedCount, historyCount, isAdmin, navigateToNestedRoute, scannedCount],
   );
 
   return (
@@ -340,6 +350,7 @@ function ListCard({ item, onOpen, onOpenMenu }) {
 export default function ShoppingListsScreen() {
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
+  const currentUser = useQuery(api.users.current);
 
   const {
     activeLists = [],
@@ -586,6 +597,7 @@ export default function ShoppingListsScreen() {
         archivedCount={archivedLists.length}
         historyCount={0}
         scannedCount={0}
+        isAdmin={currentUser?.isAdmin === true}
       />
 
       <View style={styles.listsSectionHeader}>

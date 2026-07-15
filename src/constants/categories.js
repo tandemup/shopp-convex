@@ -5,6 +5,7 @@ const CATEGORY_IMAGES = {
   lacteos_huevos: require("@/assets/categories/4.png"),
   refrigerados: require("@/assets/categories/5.png"),
   congelados: require("@/assets/categories/6.png"),
+  conservas: require("@/assets/categories/7a.png"),
   despensa: require("@/assets/categories/7.png"),
   bebidas: require("@/assets/categories/8.png"),
   dulces_aperitivos: require("@/assets/categories/9.png"),
@@ -39,7 +40,6 @@ export const PRODUCT_CATEGORIES = [
       "Zanahoria",
       "Patata",
       "Cebolla",
-      "Otros",
     ],
   },
   {
@@ -63,7 +63,6 @@ export const PRODUCT_CATEGORIES = [
       "Sardina",
       "Bacalao",
       "Gambas",
-      "Otros",
     ],
   },
   {
@@ -87,7 +86,6 @@ export const PRODUCT_CATEGORIES = [
       "Bizcocho",
       "Palmeras",
       "Bolleria",
-      "Otros",
     ],
   },
   {
@@ -112,7 +110,6 @@ export const PRODUCT_CATEGORIES = [
       "Requeson",
       "Batido",
       "Natillas",
-      "Otros",
     ],
   },
   {
@@ -136,7 +133,6 @@ export const PRODUCT_CATEGORIES = [
       "Pasta",
       "Queso",
       "Sushi",
-      "Otros",
     ],
   },
   {
@@ -160,8 +156,13 @@ export const PRODUCT_CATEGORIES = [
       "Empanadillas",
       "Nuggets",
       "Wok",
-      "Otros",
     ],
+  },
+  {
+    id: "conservas",
+    name: "Conservas",
+    image: CATEGORY_IMAGES.conservas,
+    subcategories: ["Anchoas", "Sardinas"],
   },
   {
     id: "despensa",
@@ -213,7 +214,6 @@ export const PRODUCT_CATEGORIES = [
       "Infusion",
       "Soda",
       "Kombucha",
-      "Otros",
     ],
   },
   {
@@ -238,7 +238,6 @@ export const PRODUCT_CATEGORIES = [
       "Turron",
       "Bombones",
       "Nachos",
-      "Otros",
     ],
   },
   {
@@ -262,7 +261,6 @@ export const PRODUCT_CATEGORIES = [
       "Bastoncillos",
       "Crema",
       "Toallitas",
-      "Otros",
     ],
   },
   {
@@ -286,7 +284,6 @@ export const PRODUCT_CATEGORIES = [
       "Cristales",
       "Quitagrasas",
       "Insecticida",
-      "Otros",
     ],
   },
   {
@@ -310,7 +307,6 @@ export const PRODUCT_CATEGORIES = [
       "Babero",
       "Juguete",
       "Mordedor",
-      "Otros",
     ],
   },
   {
@@ -334,7 +330,6 @@ export const PRODUCT_CATEGORIES = [
       "Gato",
       "Pajaros",
       "Roedores",
-      "Otros",
     ],
   },
   {
@@ -359,7 +354,6 @@ export const PRODUCT_CATEGORIES = [
       "Bombillas",
       "Cuerda",
       "Pajitas",
-      "Otros",
     ],
   },
   {
@@ -383,7 +377,6 @@ export const PRODUCT_CATEGORIES = [
       "Pastillero",
       "Repelente",
       "Algodon",
-      "Otros",
     ],
   },
   {
@@ -407,7 +400,6 @@ export const PRODUCT_CATEGORIES = [
       "Granola",
       "Muesli",
       "Almendra",
-      "Otros",
     ],
   },
 ];
