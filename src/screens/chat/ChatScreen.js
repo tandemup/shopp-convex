@@ -293,6 +293,7 @@ function LayoutPanel({
   setRoom,
   username,
   setUsername,
+  setShowAdminContact,
   compact = false,
 }) {
   return (
@@ -305,6 +306,40 @@ function LayoutPanel({
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
       >
+        <View style={styles.layoutPanelHeader}>
+          <View style={styles.layoutPanelHeaderIcon}>
+            <Ionicons name="options-outline" size={19} color="#1d4ed8" />
+          </View>
+          <View style={styles.layoutPanelHeaderText}>
+            <Text style={styles.layoutPanelTitle}>Ajustes del chat</Text>
+            <Text style={styles.layoutPanelSubtitle}>
+              Personaliza tu usuario y selecciona una room
+            </Text>
+          </View>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Contactar con la administración de Shopp"
+          onPress={() => setShowAdminContact(true)}
+          style={({ pressed }) => [
+            styles.contactEmailButton,
+            styles.layoutPanelEmailButton,
+            pressed && styles.contactEmailButtonPressed,
+          ]}
+        >
+          <Ionicons name="mail-outline" size={15} color="#1d4ed8" />
+          <Text
+            style={[styles.contactEmailText, styles.layoutPanelEmailText]}
+            numberOfLines={1}
+          >
+            info@ramshopp.com
+          </Text>
+          <Text style={[styles.contactEmailHint, styles.layoutPanelEmailHint]}>
+            Contactar
+          </Text>
+        </Pressable>
+
         <View
           style={[
             styles.settingsFields,
@@ -335,7 +370,7 @@ function LayoutPanel({
             <TextInput
               value={room}
               onChangeText={setRoom}
-              placeholder="Nombre de la room"
+              placeholder="general"
               placeholderTextColor="#9ca3af"
               style={styles.roomInput}
               autoCapitalize="none"
@@ -803,46 +838,6 @@ export default function ChatScreen() {
 
                   <Text style={layoutStyles.title}>Chat</Text>
                 </View>
-
-                <View style={styles.headerInfoContainer}>
-                  <View style={styles.headerInfoItem}>
-                    <Ionicons
-                      name="chatbox-outline"
-                      size={15}
-                      color="#475569"
-                    />
-                    <Text
-                      style={[layoutStyles.subtitle, styles.headerInfoText]}
-                      numberOfLines={1}
-                    >
-                      Room: {room || DEFAULT_ROOM}
-                    </Text>
-                  </View>
-                  <View style={styles.headerInfoItem}>
-                    <Ionicons name="person-outline" size={15} color="#475569" />
-                    <Text
-                      style={[layoutStyles.subtitle, styles.headerInfoText]}
-                      numberOfLines={1}
-                    >
-                      Usuario: {visibleUsername || DEFAULT_USERNAME}
-                    </Text>
-                  </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Contactar con la administración de Shopp"
-                    onPress={() => setShowAdminContact(true)}
-                    style={({ pressed }) => [
-                      styles.contactEmailButton,
-                      pressed && styles.contactEmailButtonPressed,
-                    ]}
-                  >
-                    <Ionicons name="mail-outline" size={15} color="#1d4ed8" />
-                    <Text style={styles.contactEmailText} numberOfLines={1}>
-                      info@ramshopp.com
-                    </Text>
-                    <Text style={styles.contactEmailHint}>Contactar</Text>
-                  </Pressable>
-                </View>
               </View>
 
               <Pressable
@@ -883,6 +878,7 @@ export default function ChatScreen() {
                   setRoom={setRoom}
                   username={username}
                   setUsername={setUsername}
+                  setShowAdminContact={setShowAdminContact}
                   compact={!isDesktop}
                 />
               ) : null}
@@ -1445,7 +1441,64 @@ const styles = StyleSheet.create({
   },
 
   layoutPanelScrollContent: {
-    paddingBottom: 4,
+    paddingBottom: 8,
+  },
+
+  layoutPanelHeader: {
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  layoutPanelHeaderIcon: {
+    width: 38,
+    height: 38,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 12,
+    backgroundColor: "#dbeafe",
+  },
+
+  layoutPanelHeaderText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  layoutPanelTitle: {
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+
+  layoutPanelSubtitle: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "600",
+  },
+
+  layoutPanelEmailButton: {
+    width: "100%",
+    minHeight: 44,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    justifyContent: "flex-start",
+    borderRadius: 12,
+    borderColor: "#d1d5db",
+    backgroundColor: "#f9fafb",
+  },
+
+  layoutPanelEmailText: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  layoutPanelEmailHint: {
+    marginLeft: "auto",
   },
 
   panelTitle: {
@@ -1488,6 +1541,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
+  usernameInput: {
+    minHeight: 44,
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#111827",
+    outlineStyle: Platform.OS === "web" ? "none" : undefined,
+  },
+
   roomInput: {
     minHeight: 44,
     backgroundColor: "#f9fafb",
@@ -1497,8 +1563,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: "#111827",
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 15,
   },
 
   quickRoomsLabel: {
@@ -1562,19 +1627,6 @@ const styles = StyleSheet.create({
 
   roomButtonTextActive: {
     color: "#ffffff",
-  },
-
-  usernameInput: {
-    minHeight: 44,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: "#111827",
-    outlineStyle: Platform.OS === "web" ? "none" : undefined,
   },
 
   chatContent: {
