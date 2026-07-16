@@ -14,6 +14,7 @@ export const TRUSTED_DOMAINS = [
   "wikipedia.org",
   "google.com",
   "youtube.com",
+  "youtube.com/live/",
   "youtu.be",
   "amazon.com",
   "amazon.es",

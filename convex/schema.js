@@ -136,6 +136,21 @@ export default defineSchema({
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_expiresAt", ["expiresAt"]),
 
+  // Adjuntos temporales para comunicaciones privadas con la administración.
+  // Se eliminan del almacenamiento después de enviar el correo, incluso si
+  // Resend devuelve un error.
+  rightsReportAttachments: defineTable({
+    userId: v.id("users"),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    mimeType: v.string(),
+    size: v.float64(),
+    createdAt: v.float64(),
+    expiresAt: v.float64(),
+  })
+    .index("by_userId_createdAt", ["userId", "createdAt"])
+    .index("by_expiresAt", ["expiresAt"]),
+
   parkingPresence: defineTable({
     userId: v.string(),
 

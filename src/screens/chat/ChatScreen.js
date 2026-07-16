@@ -7,9 +7,11 @@ import {
   Image,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -22,6 +24,7 @@ import { api } from "@/convex/_generated/api";
 
 import { Ionicons } from "@expo/vector-icons";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
+import ShoppAdminContact from "@/src/components/chat/ShoppAdminContact";
 
 import { extractUrlsFromText, normalizeUrl } from "@/src/services/urlSafety";
 
@@ -294,50 +297,92 @@ function LayoutPanel({
 }) {
   return (
     <View style={[styles.layoutPanel, compact && styles.layoutPanelCompact]}>
-      <Text style={styles.panelTitle}>Room</Text>
+      <ScrollView
+        style={styles.layoutPanelScroll}
+        contentContainerStyle={styles.layoutPanelScrollContent}
+        showsVerticalScrollIndicator
+        persistentScrollbar
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled"
+      >
+        <View
+          style={[
+            styles.settingsFields,
+            compact && styles.settingsFieldsCompact,
+          ]}
+        >
+          <View style={styles.settingsField}>
+            <View style={styles.fieldLabelRow}>
+              <Ionicons name="person-outline" size={16} color="#2563eb" />
+              <Text style={styles.panelTitle}>Username</Text>
+            </View>
+            <TextInput
+              value={username}
+              onChangeText={setUsername}
+              placeholder="anonymous"
+              placeholderTextColor="#9ca3af"
+              style={styles.usernameInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
 
-      <View style={[styles.roomGrid, compact && styles.roomGridCompact]}>
-        {rooms.map((item) => {
-          const active = item.id === room;
+          <View style={styles.settingsField}>
+            <View style={styles.fieldLabelRow}>
+              <Ionicons name="chatbox-outline" size={16} color="#2563eb" />
+              <Text style={styles.panelTitle}>Room</Text>
+            </View>
+            <TextInput
+              value={room}
+              onChangeText={setRoom}
+              placeholder="Nombre de la room"
+              placeholderTextColor="#9ca3af"
+              style={styles.roomInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={50}
+              returnKeyType="done"
+            />
+          </View>
+        </View>
 
-          return (
-            <Pressable
-              key={item.id}
-              onPress={() => setRoom(item.id)}
-              style={[styles.roomButton, active && styles.roomButtonActive]}
-            >
-              <Ionicons
-                name={item.icon}
-                size={18}
-                color={active ? "#ffffff" : "#111827"}
-              />
+        <View style={styles.quickRoomsHeader}>
+          <View style={styles.quickRoomsTitleRow}>
+            <Ionicons name="flash-outline" size={16} color="#2563eb" />
+            <Text style={styles.quickRoomsLabel}>Rooms rápidas</Text>
+          </View>
+          <Text style={styles.quickRoomsHint}>Pulsa para cambiar</Text>
+        </View>
 
-              <Text
-                style={[
-                  styles.roomButtonText,
-                  active && styles.roomButtonTextActive,
-                ]}
+        <View style={styles.roomGrid}>
+          {rooms.map((item) => {
+            const active = item.id === room;
+
+            return (
+              <Pressable
+                key={item.id}
+                onPress={() => setRoom(item.id)}
+                style={[styles.roomButton, active && styles.roomButtonActive]}
               >
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+                <Ionicons
+                  name={item.icon}
+                  size={18}
+                  color={active ? "#ffffff" : "#111827"}
+                />
 
-      <View style={styles.userBlock}>
-        <Text style={styles.panelTitle}>Usuario</Text>
-
-        <TextInput
-          value={username}
-          onChangeText={setUsername}
-          placeholder="anonymous"
-          placeholderTextColor="#9ca3af"
-          style={styles.usernameInput}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
+                <Text
+                  style={[
+                    styles.roomButtonText,
+                    active && styles.roomButtonTextActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -479,6 +524,7 @@ export default function ChatScreen() {
   const [username, setUsername] = useState(DEFAULT_USERNAME);
   const [input, setInput] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [showAdminContact, setShowAdminContact] = useState(false);
   const [sending, setSending] = useState(false);
   const [localAliasByMessage, setLocalAliasByMessage] = useState({});
 
@@ -758,9 +804,45 @@ export default function ChatScreen() {
                   <Text style={layoutStyles.title}>Chat</Text>
                 </View>
 
-                <Text style={layoutStyles.subtitle} numberOfLines={2}>
-                  Room: {room || DEFAULT_ROOM} · Usuario: {visibleUsername}
-                </Text>
+                <View style={styles.headerInfoContainer}>
+                  <View style={styles.headerInfoItem}>
+                    <Ionicons
+                      name="chatbox-outline"
+                      size={15}
+                      color="#475569"
+                    />
+                    <Text
+                      style={[layoutStyles.subtitle, styles.headerInfoText]}
+                      numberOfLines={1}
+                    >
+                      Room: {room || DEFAULT_ROOM}
+                    </Text>
+                  </View>
+                  <View style={styles.headerInfoItem}>
+                    <Ionicons name="person-outline" size={15} color="#475569" />
+                    <Text
+                      style={[layoutStyles.subtitle, styles.headerInfoText]}
+                      numberOfLines={1}
+                    >
+                      Usuario: {visibleUsername || DEFAULT_USERNAME}
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Contactar con la administración de Shopp"
+                    onPress={() => setShowAdminContact(true)}
+                    style={({ pressed }) => [
+                      styles.contactEmailButton,
+                      pressed && styles.contactEmailButtonPressed,
+                    ]}
+                  >
+                    <Ionicons name="mail-outline" size={15} color="#1d4ed8" />
+                    <Text style={styles.contactEmailText} numberOfLines={1}>
+                      info@ramshopp.com
+                    </Text>
+                    <Text style={styles.contactEmailHint}>Contactar</Text>
+                  </Pressable>
+                </View>
               </View>
 
               <Pressable
@@ -904,6 +986,76 @@ export default function ChatScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <Modal
+        visible={showAdminContact}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setShowAdminContact(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.contactModalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cerrar contacto con administración"
+            style={styles.contactModalBackdrop}
+            onPress={() => setShowAdminContact(false)}
+          />
+
+          <View
+            style={[
+              styles.contactModalCard,
+              isSmallMobile && styles.contactModalCardSmall,
+            ]}
+          >
+            <View style={styles.contactModalHeader}>
+              <View style={styles.contactModalTitleBlock}>
+                <View style={styles.contactModalIconBox}>
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={21}
+                    color="#1d4ed8"
+                  />
+                </View>
+
+                <View style={styles.contactModalTitleText}>
+                  <Text style={styles.contactModalTitle}>
+                    Contacto con administración
+                  </Text>
+                  <Text style={styles.contactModalSubtitle}>
+                    Comunicación privada con Shopp
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cerrar"
+                onPress={() => setShowAdminContact(false)}
+                style={({ pressed }) => [
+                  styles.contactModalCloseButton,
+                  pressed && styles.contactModalCloseButtonPressed,
+                ]}
+              >
+                <Ionicons name="close" size={23} color="#334155" />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.contactModalScroll}
+              contentContainerStyle={styles.contactModalContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+            >
+              <ShoppAdminContact room={room} username={username} inModal />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -917,6 +1069,145 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: "#f3f4f6",
+  },
+
+  contactEmailButton: {
+    alignSelf: "flex-start",
+    minHeight: 30,
+    maxWidth: "100%",
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  contactEmailButtonPressed: {
+    opacity: 0.72,
+  },
+
+  contactEmailText: {
+    flexShrink: 1,
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
+  contactEmailHint: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  contactModalOverlay: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+
+  contactModalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.66)",
+  },
+
+  contactModalCard: {
+    width: "100%",
+    maxWidth: 720,
+    maxHeight: "90%",
+    minHeight: 320,
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.28,
+    shadowRadius: 28,
+    elevation: 18,
+  },
+
+  contactModalCardSmall: {
+    maxHeight: "96%",
+    borderRadius: 16,
+  },
+
+  contactModalHeader: {
+    minHeight: 70,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#f8fafc",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  contactModalTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  contactModalIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#dbeafe",
+  },
+
+  contactModalTitleText: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  contactModalTitle: {
+    color: "#0f172a",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
+  contactModalSubtitle: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  contactModalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+  },
+
+  contactModalCloseButtonPressed: {
+    backgroundColor: "#e2e8f0",
+  },
+
+  contactModalScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+
+  contactModalContent: {
+    padding: 18,
+    paddingBottom: 28,
   },
 
   page: {
@@ -992,7 +1283,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 14,
-    marginBottom: 12,
+    marginBottom: 18,
   },
 
   cardHeaderMobile: {
@@ -1002,6 +1293,39 @@ const styles = StyleSheet.create({
   cardTitleBlock: {
     flex: 1,
     minWidth: 0,
+  },
+
+  headerInfoContainer: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    padding: 10,
+    maxWidth: "100%",
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 14,
+    backgroundColor: "#f8fafc",
+  },
+
+  headerInfoItem: {
+    alignSelf: "flex-start",
+    minHeight: 30,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+
+  headerInfoText: {
+    marginTop: 0,
   },
 
   titleRow: {
@@ -1096,7 +1420,7 @@ const styles = StyleSheet.create({
   },
 
   layoutPanel: {
-    width: 260,
+    width: 300,
     flexShrink: 0,
     backgroundColor: "#ffffff",
     borderRadius: 18,
@@ -1104,23 +1428,105 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e7eb",
     alignSelf: "stretch",
+    minHeight: 0,
+    overflow: "hidden",
   },
 
   layoutPanelCompact: {
     width: "100%",
     alignSelf: "auto",
     padding: 14,
+    maxHeight: 320,
+  },
+
+  layoutPanelScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+
+  layoutPanelScrollContent: {
+    paddingBottom: 4,
   },
 
   panelTitle: {
     fontSize: 13,
     fontWeight: "900",
     color: "#374151",
-    marginBottom: 8,
+  },
+
+  settingsFields: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  settingsFieldsCompact: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+
+  settingsField: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 190,
+    minWidth: 0,
+  },
+
+  fieldLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 7,
   },
 
   roomGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
+  },
+
+  roomInput: {
+    minHeight: 44,
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#111827",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  quickRoomsLabel: {
+    color: "#374151",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  quickRoomsHeader: {
+    marginTop: 18,
+    marginBottom: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+
+  quickRoomsTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  quickRoomsHint: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
   },
 
   roomGridCompact: {
@@ -1129,6 +1535,8 @@ const styles = StyleSheet.create({
   },
 
   roomButton: {
+    alignSelf: "flex-start",
+    flexShrink: 0,
     minHeight: 42,
     paddingHorizontal: 12,
     paddingVertical: 9,
@@ -1154,10 +1562,6 @@ const styles = StyleSheet.create({
 
   roomButtonTextActive: {
     color: "#ffffff",
-  },
-
-  userBlock: {
-    marginTop: 16,
   },
 
   usernameInput: {
