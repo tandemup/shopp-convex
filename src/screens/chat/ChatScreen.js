@@ -287,6 +287,32 @@ function getYouTubeRenderConfig(url, mode = DEFAULT_YOUTUBE_RENDER_MODE) {
   };
 }
 
+function Email({ onPress }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Contactar con la administración de Shopp"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.contactEmailButton,
+        styles.layoutPanelEmailButton,
+        pressed && styles.contactEmailButtonPressed,
+      ]}
+    >
+      <Ionicons name="mail-outline" size={15} color="#1d4ed8" />
+      <Text
+        style={[styles.contactEmailText, styles.layoutPanelEmailText]}
+        numberOfLines={1}
+      >
+        info@ramshopp.com
+      </Text>
+      <Text style={[styles.contactEmailHint, styles.layoutPanelEmailHint]}>
+        Contactar
+      </Text>
+    </Pressable>
+  );
+}
+
 function LayoutPanel({
   rooms,
   room,
@@ -318,27 +344,7 @@ function LayoutPanel({
           </View>
         </View>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Contactar con la administración de Shopp"
-          onPress={() => setShowAdminContact(true)}
-          style={({ pressed }) => [
-            styles.contactEmailButton,
-            styles.layoutPanelEmailButton,
-            pressed && styles.contactEmailButtonPressed,
-          ]}
-        >
-          <Ionicons name="mail-outline" size={15} color="#1d4ed8" />
-          <Text
-            style={[styles.contactEmailText, styles.layoutPanelEmailText]}
-            numberOfLines={1}
-          >
-            info@ramshopp.com
-          </Text>
-          <Text style={[styles.contactEmailHint, styles.layoutPanelEmailHint]}>
-            Contactar
-          </Text>
-        </Pressable>
+        <Email onPress={() => setShowAdminContact(true)} />
 
         <View
           style={[

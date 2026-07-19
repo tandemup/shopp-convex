@@ -42,6 +42,47 @@ function getAssetMimeType(asset) {
   ).toLowerCase();
 }
 
+function getGoogleDriveFileId(value) {
+  const text = String(value || "").trim();
+
+  if (!text) return "";
+
+  const filePathMatch = text.match(/\/file\/d\/([^/?#]+)/);
+
+  if (filePathMatch?.[1]) {
+    return filePathMatch[1];
+  }
+
+  try {
+    const parsedUrl = new URL(text);
+    return parsedUrl.searchParams.get("id") || "";
+  } catch {
+    return "";
+  }
+}
+
+function getGoogleDriveDownloadLink(value) {
+  const text = String(value || "").trim();
+  const fileId = getGoogleDriveFileId(text);
+
+  if (!fileId) return text;
+
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
+}
+
+function isValidExternalLink(value) {
+  const text = String(value || "").trim();
+
+  if (!text) return true;
+
+  try {
+    const parsedUrl = new URL(text);
+    return parsedUrl.protocol === "https:" || parsedUrl.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 export default function ShoppAdminContact({
   adminEmail = DEFAULT_ADMIN_EMAIL,
   room = "general",
@@ -50,6 +91,7 @@ export default function ShoppAdminContact({
 }) {
   const [subject, setSubject] = useState(DEFAULT_SUBJECT);
   const [message, setMessage] = useState("");
+  const [driveLink, setDriveLink] = useState("");
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -67,6 +109,7 @@ export default function ShoppAdminContact({
   const cleanEmail = String(adminEmail || "").trim();
   const cleanSubject = subject.trim();
   const cleanMessage = message.trim();
+  const cleanDriveLink = driveLink.trim();
   const remainingChars = MAX_REPORT_LENGTH - message.length;
   const totalAttachmentSize = attachments.reduce(
     (sum, item) => sum + item.size,
@@ -221,12 +264,25 @@ export default function ShoppAdminContact({
   const handleSend = async () => {
     if (!canSend) return;
 
+    if (!isValidExternalLink(cleanDriveLink)) {
+      safeAlert(
+        "Enlace no válido",
+        "Introduce un enlace completo, por ejemplo https://drive.google.com/...",
+      );
+      return;
+    }
+
     setSending(true);
 
     try {
+      const driveDownloadLink = getGoogleDriveDownloadLink(cleanDriveLink);
+      const reportMessage = driveDownloadLink
+        ? `${cleanMessage}\n\nEnlace de descarga Google Drive:\n${driveDownloadLink}`
+        : cleanMessage;
+
       await sendReport({
         subject: cleanSubject,
-        message: cleanMessage,
+        message: reportMessage,
         room: String(room || "general").trim(),
         username: String(username || "anonymous").trim(),
         attachmentIds: attachments.map((item) => item.id),
@@ -234,6 +290,7 @@ export default function ShoppAdminContact({
 
       setMessage("");
       setSubject(DEFAULT_SUBJECT);
+      setDriveLink("");
       setAttachments([]);
       safeAlert(
         "Mensaje enviado",
@@ -300,6 +357,23 @@ export default function ShoppAdminContact({
         maxLength={MAX_REPORT_LENGTH}
         editable={!sending}
       />
+
+      <Text style={styles.label}>Enlace de Google Drive</Text>
+      <TextInput
+        value={driveLink}
+        onChangeText={setDriveLink}
+        placeholder="https://drive.google.com/file/d/..."
+        placeholderTextColor="#94a3b8"
+        style={styles.input}
+        keyboardType="url"
+        autoCapitalize="none"
+        autoCorrect={false}
+        editable={!sending}
+      />
+      <Text style={styles.helpText}>
+        Para fotos o vídeos grandes, pega aquí un enlace compartido de Drive. Si
+        es posible, se enviará como enlace de descarga.
+      </Text>
 
       <View style={styles.attachmentHeader}>
         <Text style={styles.label}>Documentos adjuntos</Text>
@@ -449,6 +523,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   counter: { color: "#64748b", fontSize: 11, fontWeight: "700" },
+  helpText: {
+    marginTop: -3,
+    color: "#64748b",
+    fontSize: 11,
+    lineHeight: 16,
+  },
   messageInput: {
     minHeight: 112,
     paddingHorizontal: 11,

@@ -8,7 +8,6 @@ import {
   Text,
   View,
 } from "react-native";
-
 import { useFocusEffect } from "@react-navigation/native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -56,17 +55,6 @@ const EXPORT_STORAGE_KEYS = {
 };
 
 const CAMERA_GRANTED_STORAGE_KEY = "shopp:web-camera-access-granted";
-
-const ADMIN_EMAIL = "info@ramshopp.com";
-
-function openAdminEmail() {
-  const subject = encodeURIComponent("Contacto con administración Shopp");
-  const body = encodeURIComponent(
-    "Hola,\n\nQuiero ponerme en contacto con la administración de Shopp y denunciar Fake News y delitos contra la intimidad personal y familiar.\n\n",
-  );
-
-  Linking.openURL(`mailto:${ADMIN_EMAIL}?subject=${subject}&body=${body}`);
-}
 
 function buildProductSearchEngineSubtitle(settings) {
   const engineId =
@@ -215,11 +203,21 @@ async function exportUserDataToJsonFile() {
     encoding: FileSystem.EncodingType.UTF8,
   });
 
+  const canShare = await Sharing.isAvailableAsync();
+
+  if (canShare) {
+    await Sharing.shareAsync(fileUri, {
+      mimeType: "application/json",
+      dialogTitle: "Exportar datos de Shopp",
+      UTI: "public.json",
+    });
+  }
+
   return {
     ok: true,
     filename,
     platform: Platform.OS,
-    shared: false,
+    shared: canShare,
     fileUri,
   };
 }
@@ -871,17 +869,24 @@ export default function MenuScreen({ navigation }) {
     }, [loadProductSearchEngineSubtitle]),
   );
 
-  function Email({ onPress }) {
+  function Email({}) {
     return (
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Email</Text>
+        <Text style={styles.sectionTitle}>email</Text>
 
         <SettingsCard
-          icon="mail-outline"
-          title="Contacto con administración"
-          subtitle={`Enviar un mensaje privado a ${ADMIN_EMAIL} con fotos, vídeos o documentos adjuntos`}
-          badge="EMAIL"
-          onPress={onPress}
+          icon="trash-outline"
+          title="Borrar listas activas"
+          subtitle="Elimina las listas de compra que todavía no están archivadas"
+          danger
+          onPress={() =>
+            showDestructiveConfirm(
+              "Borrar listas activas",
+              "¿Seguro?",
+              "Borrar",
+              handleClearActiveLists,
+            )
+          }
         />
       </View>
     );
@@ -1157,7 +1162,7 @@ export default function MenuScreen({ navigation }) {
               )}
             </View>
           </View>
-          <Email onPress={openAdminEmail} />
+          <Email />
           {/* <DangerZone /> */}
 
           <View style={styles.footerSpace} />
