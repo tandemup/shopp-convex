@@ -3,13 +3,10 @@ import { View, StyleSheet } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 
 import BarcodeScannerView from "@/src/components/features/scanner/BarcodeScannerView";
-import {
-  getScannedEntryByBarcode,
-  saveScannedEntry,
-} from "@/src/services/scannerHistory";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import { ROUTES } from "@/src/navigation/ROUTES";
 import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
+import { useScannedHistoryStorage } from "@/src/hooks/useScannedHistoryStorage";
 import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
 
 export default function ScannerScreen() {
@@ -18,6 +15,7 @@ export default function ScannerScreen() {
 
   const isHandlingScanRef = useRef(false);
   const { lookupWithCache } = useProductLookupWithCache();
+  const scanHistoryStorage = useScannedHistoryStorage();
 
   const onScan = route.params?.onScan;
 
@@ -41,7 +39,8 @@ export default function ScannerScreen() {
 
     const now = new Date().toISOString();
 
-    const cachedItem = await getScannedEntryByBarcode(barcode);
+    const cachedItem =
+      await scanHistoryStorage.getScannedEntryByBarcode(barcode);
 
     const hasUsefulCachedData =
       cachedItem?.name?.trim() || cachedItem?.imageUrl?.trim();
@@ -54,7 +53,7 @@ export default function ScannerScreen() {
         updatedAt: now,
       };
 
-      await saveScannedEntry(barcode, updatedItem);
+      await scanHistoryStorage.saveScannedEntry(barcode, updatedItem);
 
       return updatedItem;
     }
@@ -80,7 +79,7 @@ export default function ScannerScreen() {
       updatedAt: now,
     };
 
-    await saveScannedEntry(barcode, scannedItem);
+    await scanHistoryStorage.saveScannedEntry(barcode, scannedItem);
 
     return scannedItem;
   }

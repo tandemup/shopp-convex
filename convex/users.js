@@ -73,6 +73,7 @@ export const current = query({
             alias: profile.alias,
             phone: profile.phone ?? null,
             phoneVisible: profile.phoneVisible ?? false,
+            scanHistorySyncEnabled: profile.scanHistorySyncEnabled === true,
             createdAt: profile.createdAt,
             updatedAt: profile.updatedAt,
           }
@@ -149,6 +150,7 @@ export const getMyProfile = query({
       alias: profile.alias,
       phone: profile.phone ?? null,
       phoneVisible: profile.phoneVisible ?? false,
+      scanHistorySyncEnabled: profile.scanHistorySyncEnabled === true,
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
     };
@@ -160,6 +162,7 @@ export const upsertMyProfile = mutation({
     alias: v.string(),
     phone: v.optional(v.string()),
     phoneVisible: v.optional(v.boolean()),
+    scanHistorySyncEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await requireAuthUserId(ctx);
@@ -168,6 +171,7 @@ export const upsertMyProfile = mutation({
     const alias = cleanAlias(args.alias);
     const phone = cleanPhone(args.phone);
     const phoneVisible = args.phoneVisible === true;
+    const scanHistorySyncEnabled = args.scanHistorySyncEnabled === true;
 
     const existingProfile = await getProfileByUserId(ctx, userId);
 
@@ -176,6 +180,7 @@ export const upsertMyProfile = mutation({
         alias,
         phone,
         phoneVisible,
+        scanHistorySyncEnabled,
         updatedAt: now,
       });
 
@@ -190,6 +195,7 @@ export const upsertMyProfile = mutation({
       alias,
       phone,
       phoneVisible,
+      scanHistorySyncEnabled,
       createdAt: now,
       updatedAt: now,
     });

@@ -1,6 +1,6 @@
 // screens/scanner/ScannedHistoryScreen.js
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -20,10 +20,7 @@ import { buildHeaderConfig } from "@/src/utils/layout/headerStyles";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import { safeQuestion } from "@/src/components/ui/alert/safeQuestion";
 
-import {
-  getScannedHistory,
-  removeScannedItem,
-} from "@/src/services/scannerHistory";
+import { useScannedHistoryStorage } from "@/src/hooks/useScannedHistoryStorage";
 
 export default function ScannedHistoryScreen({ navigation, route }) {
   const [scannedItems, setScannedItems] = useState([]);
@@ -31,6 +28,7 @@ export default function ScannedHistoryScreen({ navigation, route }) {
   const [filteredItems, setFilteredItems] = useState([]);
 
   const isFocused = useIsFocused();
+  const scanHistoryStorage = useScannedHistoryStorage();
 
   const headerConfig = useMemo(
     () =>
@@ -45,11 +43,32 @@ export default function ScannedHistoryScreen({ navigation, route }) {
     navigation.setOptions(headerConfig.navigationOptions);
   }, [navigation, headerConfig]);
 
+  const loadScannedHistory = useCallback(async () => {
+    try {
+      const all = await scanHistoryStorage.getScannedHistory();
+
+      const onlyScanned = all.filter((item) => Boolean(item?.barcode));
+
+      onlyScanned.sort((a, b) => {
+        const dateA = new Date(a.updatedAt || a.scannedAt || 0).valueOf();
+        const dateB = new Date(b.updatedAt || b.scannedAt || 0).valueOf();
+
+        return dateB - dateA;
+      });
+
+      setScannedItems(onlyScanned);
+      setFilteredItems(onlyScanned);
+    } catch (error) {
+      console.log("Error loading scanned history:", error);
+      safeAlert("Error", "No se pudo cargar el historial de escaneos");
+    }
+  }, [scanHistoryStorage]);
+
   useEffect(() => {
     if (isFocused) {
       loadScannedHistory();
     }
-  }, [isFocused]);
+  }, [isFocused, loadScannedHistory]);
 
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -70,27 +89,6 @@ export default function ScannedHistoryScreen({ navigation, route }) {
     setFilteredItems(results);
   }, [searchQuery, scannedItems]);
 
-  const loadScannedHistory = async () => {
-    try {
-      const all = await getScannedHistory();
-
-      const onlyScanned = all.filter((item) => Boolean(item?.barcode));
-
-      onlyScanned.sort((a, b) => {
-        const dateA = new Date(a.updatedAt || a.scannedAt || 0).valueOf();
-        const dateB = new Date(b.updatedAt || b.scannedAt || 0).valueOf();
-
-        return dateB - dateA;
-      });
-
-      setScannedItems(onlyScanned);
-      setFilteredItems(onlyScanned);
-    } catch (error) {
-      console.log("Error loading scanned history:", error);
-      safeAlert("Error", "No se pudo cargar el historial de escaneos");
-    }
-  };
-
   const handleDelete = (item) => {
     safeQuestion(
       "Eliminar escaneo",
@@ -99,7 +97,7 @@ export default function ScannedHistoryScreen({ navigation, route }) {
         yesStyle: "destructive",
         onYes: async () => {
           try {
-            await removeScannedItem(item.barcode);
+            await scanHistoryStorage.removeScannedItem(item.barcode);
             await loadScannedHistory();
           } catch (error) {
             console.log("Error deleting scanned item:", error);

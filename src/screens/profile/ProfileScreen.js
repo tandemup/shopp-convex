@@ -40,6 +40,7 @@ export default function ProfileScreen({ navigation }) {
   const [alias, setAlias] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneVisible, setPhoneVisible] = useState(false);
+  const [scanHistorySyncEnabled, setScanHistorySyncEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formTouched, setFormTouched] = useState(false);
 
@@ -56,12 +57,14 @@ export default function ProfileScreen({ navigation }) {
       setAlias(profile.alias || "");
       setPhone(profile.phone || "");
       setPhoneVisible(profile.phoneVisible === true);
+      setScanHistorySyncEnabled(profile.scanHistorySyncEnabled === true);
       return;
     }
 
     setAlias("");
     setPhone("");
     setPhoneVisible(false);
+    setScanHistorySyncEnabled(false);
   }, [profile, formTouched]);
 
   const handleChangeAlias = (value) => {
@@ -77,6 +80,11 @@ export default function ProfileScreen({ navigation }) {
   const handleChangePhoneVisible = (value) => {
     setFormTouched(true);
     setPhoneVisible(value);
+  };
+
+  const handleChangeScanHistorySync = (value) => {
+    setFormTouched(true);
+    setScanHistorySyncEnabled(value);
   };
 
   const handleSave = async () => {
@@ -114,6 +122,7 @@ export default function ProfileScreen({ navigation }) {
         alias: cleanAlias,
         phone: cleanPhone || undefined,
         phoneVisible,
+        scanHistorySyncEnabled,
       });
 
       setFormTouched(false);
@@ -228,6 +237,26 @@ export default function ProfileScreen({ navigation }) {
               value={phoneVisible}
               onValueChange={handleChangePhoneVisible}
               disabled={!cleanText(phone)}
+            />
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.switchRow}>
+            <View style={styles.switchTextBox}>
+              <Text style={styles.switchTitle}>
+                Sincronizar historial de escaneos
+              </Text>
+              <Text style={styles.helpNoMargin}>
+                Si está activado, los productos escaneados se guardan en Convex
+                para tu cuenta. Si está desactivado, se guardan solo en este
+                navegador o teléfono.
+              </Text>
+            </View>
+
+            <Switch
+              value={scanHistorySyncEnabled}
+              onValueChange={handleChangeScanHistorySync}
             />
           </View>
         </View>

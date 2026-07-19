@@ -8,7 +8,7 @@ import { Platform } from "react-native";
 const STORAGE_KEYS = {
   shoppingLists: "shopping_lists",
   purchaseHistory: "purchase_history",
-  scanHistory: "scanned_history",
+  scanHistory: "scanner_history_v1",
   userProfile: "user_profile",
 };
 

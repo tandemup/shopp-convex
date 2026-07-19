@@ -1569,7 +1569,7 @@ const styles = StyleSheet.create({
   },
 
   textInputBase: {
-    minHeight: 30,
+    minHeight: 40,
     backgroundColor: "#f9fafb",
     borderWidth: 1,
     borderColor: "#d1d5db",

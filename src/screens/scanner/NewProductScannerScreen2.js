@@ -40,12 +40,8 @@ import { buildHeaderConfig } from "@/src/utils/layout/headerStyles";
 
 import { safeAlert, safeMenu } from "@/src/components/ui/alert/safeAlert";
 
-import {
-  getScannedEntryByBarcode,
-  saveScannedEntry,
-} from "@/src/services/scannerHistory";
-
 import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
+import { useScannedHistoryStorage } from "@/src/hooks/useScannedHistoryStorage";
 import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
 import {
   DEFAULT_SCANNER_ZOOM,
@@ -118,6 +114,7 @@ export default function NewProductScannerScreen2() {
   const handlingScanRef = useRef(false);
 
   const { lookupWithCache } = useProductLookupWithCache();
+  const scanHistoryStorage = useScannedHistoryStorage();
 
   const {
     autoOpenEngine = false,
@@ -350,7 +347,8 @@ export default function NewProductScannerScreen2() {
 
     const now = new Date().toISOString();
 
-    const cachedItem = await getScannedEntryByBarcode(barcode);
+    const cachedItem =
+      await scanHistoryStorage.getScannedEntryByBarcode(barcode);
 
     const hasUsefulCachedData =
       cachedItem?.name?.trim() || cachedItem?.imageUrl?.trim();
@@ -367,7 +365,7 @@ export default function NewProductScannerScreen2() {
       };
 
       if (saveToHistory) {
-        await saveScannedEntry(barcode, updatedItem);
+        await scanHistoryStorage.saveScannedEntry(barcode, updatedItem);
       }
 
       return updatedItem;
@@ -403,7 +401,7 @@ export default function NewProductScannerScreen2() {
     };
 
     if (saveToHistory) {
-      await saveScannedEntry(barcode, scannedItem);
+      await scanHistoryStorage.saveScannedEntry(barcode, scannedItem);
     }
 
     return scannedItem;

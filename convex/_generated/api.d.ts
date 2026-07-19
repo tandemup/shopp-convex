@@ -27,6 +27,7 @@ import type * as rightsReports from "../rightsReports.js";
 import type * as scanHistory from "../scanHistory.js";
 import type * as storeFavorites from "../storeFavorites.js";
 import type * as stores from "../stores.js";
+import type * as userScanHistory from "../userScanHistory.js";
 import type * as users from "../users.js";
 
 import type {
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   scanHistory: typeof scanHistory;
   storeFavorites: typeof storeFavorites;
   stores: typeof stores;
+  userScanHistory: typeof userScanHistory;
   users: typeof users;
 }>;
 

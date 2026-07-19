@@ -35,10 +35,7 @@ import {
   getProductUrl,
 } from "@/src/services/productLookup";
 
-import {
-  removeScannedItem,
-  updateScannedEntry,
-} from "@/src/services/scannerHistory";
+import { useScannedHistoryStorage } from "@/src/hooks/useScannedHistoryStorage";
 import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
 
 function normalizeString(value) {
@@ -243,6 +240,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
 
   const registerAccess = useMutation(api.productCache.registerAccess);
   const saveProductData = useMutation(api.productCache.saveProductData);
+  const scanHistoryStorage = useScannedHistoryStorage();
 
   const {
     loading: internetLookupLoading,
@@ -484,7 +482,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
         dataSource: "manual",
       };
 
-      await updateScannedEntry(barcode, historyPatch);
+      await scanHistoryStorage.updateScannedEntry(barcode, historyPatch);
 
       setProduct(savedProduct);
       navigation.goBack();
@@ -506,6 +504,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
     imageUrl,
     productUrl,
     saveProductData,
+    scanHistoryStorage,
     navigation,
   ]);
 
@@ -519,7 +518,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
     setLocalError(null);
 
     try {
-      await removeScannedItem(barcode);
+      await scanHistoryStorage.removeScannedItem(barcode);
       navigation.goBack();
     } catch (error) {
       console.error("EditScannedItemScreen delete error:", error);
@@ -528,7 +527,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
     } finally {
       setDeleting(false);
     }
-  }, [barcode, navigation]);
+  }, [barcode, navigation, scanHistoryStorage]);
 
   const openGoogleAIMode = async (query) => {
     const url = `https://www.google.com/search?udm=50&q=${encodeURIComponent(

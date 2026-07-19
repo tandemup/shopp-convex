@@ -73,12 +73,40 @@ export default defineSchema({
     alias: v.string(),
     phone: v.optional(v.string()),
     phoneVisible: v.optional(v.boolean()),
+    scanHistorySyncEnabled: v.optional(v.boolean()),
     createdAt: v.float64(),
     updatedAt: v.float64(),
   })
     .index("by_userId", ["userId"])
     .index("by_alias", ["alias"])
     .index("by_phone", ["phone"]),
+
+  userScanHistory: defineTable({
+    userId: v.string(),
+    barcode: v.string(),
+
+    name: v.optional(v.string()),
+    brand: v.optional(v.string()),
+    url: v.optional(v.string()),
+    productUrl: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    thumbnailUri: v.optional(v.union(v.string(), v.null())),
+    category: v.optional(v.string()),
+    notes: v.optional(v.string()),
+
+    source: v.optional(v.string()),
+    lookupSource: v.optional(v.union(v.string(), v.null())),
+    dataSource: v.optional(v.string()),
+
+    scannedAt: v.string(),
+    updatedAt: v.string(),
+    scanCount: v.float64(),
+    createdAt: v.float64(),
+    updatedAtMs: v.float64(),
+  })
+    .index("by_user_updatedAt", ["userId", "updatedAt"])
+    .index("by_user_barcode", ["userId", "barcode"])
+    .index("by_barcode", ["barcode"]),
 
   chatMessages: defineTable({
     userId: v.optional(v.string()),

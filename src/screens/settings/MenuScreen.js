@@ -41,7 +41,7 @@ import {
   clearStorage,
 } from "@/src/storage";
 
-import { clearScannedHistory } from "@/src/services/scannerHistory";
+import { useScannedHistoryStorage } from "@/src/hooks/useScannedHistoryStorage";
 import { useLists } from "@/src/context/ListsContext";
 import { useStores } from "@/src/context/StoresContext";
 
@@ -52,7 +52,7 @@ const EXPORT_STORAGE_KEYS = {
   shoppingLists: "shopping_lists",
   archivedLists: "archived_lists",
   purchaseHistory: "purchase_history",
-  scanHistory: "scanned_history",
+  scanHistory: "scanner_history_v1",
 };
 
 const CAMERA_GRANTED_STORAGE_KEY = "shopp:web-camera-access-granted";
@@ -512,6 +512,7 @@ async function requestWebCameraPermission() {
 export default function MenuScreen({ navigation }) {
   const { signOut } = useAuthActions();
   const currentUser = useQuery(api.users.current);
+  const scanHistoryStorage = useScannedHistoryStorage();
 
   const [nativeCameraPermission, requestNativeCameraPermission] =
     useCameraPermissions();
@@ -805,7 +806,7 @@ export default function MenuScreen({ navigation }) {
   };
 
   const handleClearScannedHistory = async () => {
-    await clearScannedHistory();
+    await scanHistoryStorage.clearScannedHistory();
     goToScannedHistory();
   };
 
@@ -839,7 +840,7 @@ export default function MenuScreen({ navigation }) {
           onPress: async () => {
             await clearStorage();
             clearAllListsState();
-            await clearScannedHistory();
+            await scanHistoryStorage.clearScannedHistory();
             await reloadStoresFromSeed();
             goToShoppingLists();
           },
