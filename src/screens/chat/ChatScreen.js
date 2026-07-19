@@ -327,8 +327,8 @@ function LayoutPanel({
       <ScrollView
         style={styles.layoutPanelScroll}
         contentContainerStyle={styles.layoutPanelScrollContent}
-        showsVerticalScrollIndicator
-        persistentScrollbar
+        showsVerticalScrollIndicator={false}
+        persistentScrollbar={false}
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
       >
@@ -362,7 +362,7 @@ function LayoutPanel({
               onChangeText={setUsername}
               placeholder="anonymous"
               placeholderTextColor="#9ca3af"
-              style={styles.usernameInput}
+              style={styles.textInputBase}
               autoCapitalize="none"
               autoCorrect={false}
             />
@@ -378,7 +378,7 @@ function LayoutPanel({
               onChangeText={setRoom}
               placeholder="general"
               placeholderTextColor="#9ca3af"
-              style={styles.roomInput}
+              style={[styles.textInputBase, styles.roomInput]}
               autoCapitalize="none"
               autoCorrect={false}
               maxLength={50}
@@ -844,6 +844,26 @@ export default function ChatScreen() {
 
                   <Text style={layoutStyles.title}>Chat</Text>
                 </View>
+
+                <View style={styles.headerInfoContainer}>
+                  <View style={styles.headerInfoItem}>
+                    <Ionicons name="person-outline" size={14} color="#2563eb" />
+                    <Text style={styles.headerInfoText} numberOfLines={1}>
+                      {visibleUsername}
+                    </Text>
+                  </View>
+
+                  <View style={styles.headerInfoItem}>
+                    <Ionicons
+                      name="chatbox-outline"
+                      size={14}
+                      color="#2563eb"
+                    />
+                    <Text style={styles.headerInfoText} numberOfLines={1}>
+                      #{activeRoom}
+                    </Text>
+                  </View>
+                </View>
               </View>
 
               <Pressable
@@ -1299,24 +1319,20 @@ const styles = StyleSheet.create({
 
   headerInfoContainer: {
     alignSelf: "flex-start",
-    marginTop: 12,
-    padding: 10,
+    marginTop: 6,
     maxWidth: "100%",
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
-    gap: 8,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    borderRadius: 14,
-    backgroundColor: "#f8fafc",
+    gap: 6,
   },
 
   headerInfoItem: {
     alignSelf: "flex-start",
-    minHeight: 30,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    minHeight: 26,
+    maxWidth: "100%",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
@@ -1328,6 +1344,11 @@ const styles = StyleSheet.create({
 
   headerInfoText: {
     marginTop: 0,
+    flexShrink: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "800",
+    color: "#475569",
   },
 
   titleRow: {
@@ -1547,29 +1568,22 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  usernameInput: {
-    minHeight: 44,
+  textInputBase: {
+    minHeight: 30,
     backgroundColor: "#f9fafb",
     borderWidth: 1,
     borderColor: "#d1d5db",
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 5,
+    marginHorizontal: 0,
     fontSize: 15,
     color: "#111827",
     outlineStyle: Platform.OS === "web" ? "none" : undefined,
   },
 
   roomInput: {
-    minHeight: 44,
-    backgroundColor: "#f9fafb",
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: "#111827",
-    fontSize: 15,
+    minWidth: 0,
   },
 
   quickRoomsLabel: {
@@ -1789,24 +1803,24 @@ const styles = StyleSheet.create({
   inputBlock: {
     marginTop: 10,
     marginBottom: 2,
-    backgroundColor: "#ffffff",
-    borderRadius: 14,
+    backgroundColor: "#f9fafb",
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: "#d1d5db",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     minHeight: 58,
   },
 
   inputBlockDesktop: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
   },
 
   inputBlockSmallMobile: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
+    paddingVertical: 5,
+    borderRadius: 12,
   },
 
   inputMainRow: {
@@ -1829,7 +1843,7 @@ const styles = StyleSheet.create({
   },
 
   input: {
-    minHeight: 22,
+    minHeight: 30,
     maxHeight: 38,
     fontSize: 15,
     lineHeight: 20,
