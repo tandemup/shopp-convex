@@ -90,7 +90,9 @@ export function useScannedHistoryStorage() {
   const removeMyScannedEntry = useMutation(
     api.userScanHistory.removeMyScannedEntry,
   );
-  const clearMyScanHistory = useMutation(api.userScanHistory.clearMyScanHistory);
+  const clearMyScanHistory = useMutation(
+    api.userScanHistory.clearMyScanHistory,
+  );
 
   const syncEnabled = profile?.scanHistorySyncEnabled === true;
   const loading = profile === undefined;
