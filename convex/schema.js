@@ -627,6 +627,43 @@ export default defineSchema({
     .index("by_userId_storeId", ["userId", "storeId"])
     .index("by_storeId", ["storeId"]),
 
+  shoppingItemsImport: defineTable({
+    userId: v.id("users"),
+    importBatchId: v.string(),
+    importKey: v.string(),
+
+    listId: v.optional(v.string()),
+    listName: v.optional(v.string()),
+    listArchived: v.optional(v.boolean()),
+    listCreatedAt: v.optional(v.float64()),
+    listArchivedAt: v.optional(v.union(v.float64(), v.null())),
+    storeId: v.optional(v.union(v.string(), v.null())),
+
+    itemId: v.optional(v.string()),
+    name: v.optional(v.string()),
+    barcode: v.optional(v.string()),
+    quantity: v.optional(v.float64()),
+    unit: v.optional(v.string()),
+    unitPrice: v.optional(v.float64()),
+    checked: v.optional(v.boolean()),
+
+    categoryId: v.optional(v.union(v.string(), v.null())),
+    categoryName: v.optional(v.union(v.string(), v.null())),
+    subcategoryId: v.optional(v.union(v.string(), v.null())),
+    subcategoryName: v.optional(v.union(v.string(), v.null())),
+
+    rawList: v.optional(v.any()),
+    rawItem: v.any(),
+
+    importedBy: v.id("users"),
+    importedAt: v.float64(),
+    updatedAt: v.float64(),
+  })
+    .index("by_user_importKey", ["userId", "importKey"])
+    .index("by_user_importedAt", ["userId", "importedAt"])
+    .index("by_importBatchId", ["importBatchId"])
+    .index("by_barcode", ["barcode"]),
+
   scanHistory: defineTable({
     barcode: v.string(),
 

@@ -15,7 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 
 import {
@@ -39,6 +39,8 @@ import {
   clearArchivedLists,
   clearPurchaseHistory,
   clearStorage,
+  getUserScopedStorageKey,
+  STORAGE_KEYS,
 } from "@/src/storage";
 
 import { useScannedHistoryStorage } from "@/src/hooks/useScannedHistoryStorage";
@@ -58,6 +60,92 @@ const EXPORT_STORAGE_KEYS = {
 const CAMERA_GRANTED_STORAGE_KEY = "shopp:web-camera-access-granted";
 
 const ADMIN_EMAIL = "info@ramshopp.com";
+const IMPORT_ITEMS_CHUNK_SIZE = 150;
+
+function buildImportBatchId() {
+  return `async-storage-items-${Date.now().toString(36)}`;
+}
+
+function normalizeImportNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function normalizeImportString(value) {
+  const text = String(value ?? "").trim();
+  return text || undefined;
+}
+
+function sanitizeForConvex(value) {
+  try {
+    return JSON.parse(JSON.stringify(value ?? null));
+  } catch (error) {
+    return null;
+  }
+}
+
+function buildImportKey(list, item, listIndex, itemIndex) {
+  const listId = normalizeImportString(list?.id) || `list-${listIndex}`;
+  const itemId = normalizeImportString(item?.id) || `item-${itemIndex}`;
+  const barcode = normalizeImportString(item?.barcode) || "no-barcode";
+  const name = normalizeImportString(item?.name) || "no-name";
+
+  return [listId, itemId, barcode, name].join(":");
+}
+
+function buildImportItemsFromLists(lists) {
+  if (!Array.isArray(lists)) {
+    return [];
+  }
+
+  return lists.flatMap((list, listIndex) => {
+    const items = Array.isArray(list?.items) ? list.items : [];
+
+    return items.map((item, itemIndex) => ({
+      importKey: buildImportKey(list, item, listIndex, itemIndex),
+
+      listId: normalizeImportString(list?.id),
+      listName: normalizeImportString(list?.name),
+      listArchived: list?.archived === true,
+      listCreatedAt: normalizeImportNumber(list?.createdAt),
+      listArchivedAt:
+        list?.archivedAt === null
+          ? null
+          : normalizeImportNumber(list?.archivedAt),
+      storeId: list?.storeId ?? null,
+
+      itemId: normalizeImportString(item?.id),
+      name: normalizeImportString(item?.name),
+      barcode: normalizeImportString(item?.barcode),
+      quantity: normalizeImportNumber(
+        item?.quantity ?? item?.qty ?? item?.priceInfo?.qty,
+      ),
+      unit: normalizeImportString(item?.unit ?? item?.priceInfo?.unit),
+      unitPrice: normalizeImportNumber(
+        item?.unitPrice ?? item?.price ?? item?.priceInfo?.unitPrice,
+      ),
+      checked: item?.checked === true,
+
+      categoryId: item?.categoryId ?? null,
+      categoryName: item?.categoryName ?? null,
+      subcategoryId: item?.subcategoryId ?? null,
+      subcategoryName: item?.subcategoryName ?? null,
+
+      rawList: sanitizeForConvex(list),
+      rawItem: sanitizeForConvex(item),
+    }));
+  });
+}
+
+function chunkArray(items, size) {
+  const chunks = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
 
 function openAdminEmail() {
   const subject = encodeURIComponent("Contacto con administración Shopp");
@@ -512,6 +600,9 @@ async function requestWebCameraPermission() {
 export default function MenuScreen({ navigation }) {
   const { signOut } = useAuthActions();
   const currentUser = useQuery(api.users.current);
+  const importItemsFromAsyncStorage = useMutation(
+    api.shoppingImport.importItemsFromAsyncStorage,
+  );
   const scanHistoryStorage = useScannedHistoryStorage();
 
   const [nativeCameraPermission, requestNativeCameraPermission] =
@@ -521,6 +612,7 @@ export default function MenuScreen({ navigation }) {
 
   const [locationPermission, setLocationPermission] = useState(null);
   const [exportingUserData, setExportingUserData] = useState(false);
+  const [importingItems, setImportingItems] = useState(false);
   const [productSearchEngineSubtitle, setProductSearchEngineSubtitle] =
     useState("Motor activo: Google");
 
@@ -529,6 +621,8 @@ export default function MenuScreen({ navigation }) {
 
   const tabBarHeight = useBottomTabBarHeight();
   const { reloadStoresFromSeed } = useStores();
+  const isAdmin =
+    currentUser?.isAdmin === true || currentUser?.role === "admin";
 
   const handleSignOut = () => {
     safeAlert("Cerrar sesión", "¿Quieres cerrar tu sesión de Shopp?", [
@@ -788,6 +882,81 @@ export default function MenuScreen({ navigation }) {
     }
   };
 
+  const handleImportItemsToConvex = async () => {
+    if (importingItems) return;
+
+    if (!isAdmin) {
+      safeAlert(
+        "Acceso restringido",
+        "Solo los administradores pueden subir items a Convex.",
+      );
+      return;
+    }
+
+    try {
+      setImportingItems(true);
+
+      const userId = currentUser?._id || "anonymous";
+      const scopedListsKey = getUserScopedStorageKey(
+        userId,
+        STORAGE_KEYS.LISTS,
+      );
+
+      const scopedLists = await getStoredJson(scopedListsKey, null);
+      const legacyLists = await getStoredJson(
+        EXPORT_STORAGE_KEYS.shoppingLists,
+        [],
+      );
+      const lists = Array.isArray(scopedLists) ? scopedLists : legacyLists;
+      const items = buildImportItemsFromLists(lists);
+
+      if (items.length === 0) {
+        safeAlert(
+          "Sin items para subir",
+          "No se encontraron items en las listas guardadas en AsyncStorage.",
+        );
+        return;
+      }
+
+      const importBatchId = buildImportBatchId();
+      const chunks = chunkArray(items, IMPORT_ITEMS_CHUNK_SIZE);
+      const summary = {
+        total: 0,
+        inserted: 0,
+        skipped: 0,
+      };
+
+      for (const chunk of chunks) {
+        const result = await importItemsFromAsyncStorage({
+          importBatchId,
+          items: chunk,
+        });
+
+        summary.total += result.total || 0;
+        summary.inserted += result.inserted || 0;
+        summary.skipped += result.skipped || 0;
+      }
+
+      safeAlert(
+        "Importación completada",
+        [
+          `Items encontrados: ${summary.total}`,
+          `Subidos a Convex: ${summary.inserted}`,
+          `Omitidos por duplicado: ${summary.skipped}`,
+        ].join("\n"),
+      );
+    } catch (error) {
+      console.warn("[MenuScreen] import items to Convex error", error);
+
+      safeAlert(
+        "Error al subir items",
+        error?.message || "No se pudieron subir los items a Convex.",
+      );
+    } finally {
+      setImportingItems(false);
+    }
+  };
+
   const handleClearActiveLists = async () => {
     await clearActiveLists();
     clearActiveListsState();
@@ -1010,7 +1179,7 @@ export default function MenuScreen({ navigation }) {
               onPress={goToProfile}
             />
 
-            {currentUser?.isAdmin ? (
+            {isAdmin ? (
               <SettingsCard
                 icon="shield-checkmark-outline"
                 title="Administrar usuarios"
@@ -1077,6 +1246,21 @@ export default function MenuScreen({ navigation }) {
               onPress={handleExportUserData}
             />
           </View>
+
+          {isAdmin ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Migración temporal</Text>
+
+              <SettingsCard
+                icon="cloud-upload-outline"
+                title="Subir items locales a Convex"
+                subtitle="Lee los items de AsyncStorage y los guarda en una tabla temporal"
+                badge={importingItems ? "..." : "ADMIN"}
+                disabled={importingItems}
+                onPress={handleImportItemsToConvex}
+              />
+            </View>
+          ) : null}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Permisos</Text>
