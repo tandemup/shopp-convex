@@ -7,13 +7,19 @@ import { openExternalUrl } from "@/src/utils/openExternalUrl";
 
 import * as Clipboard from "expo-clipboard";
 
-import { showOptions } from "@/src/utils/ui/primitives/ActionSheet";
+import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 
 import { SEARCH_ENGINES, DEFAULT_ENGINE } from "@/src/constants/searchEngines";
 
 import { getSearchSettings } from "@/src/storage/settingsStorage";
 
-export default function BarcodeLink({ barcode, label, iconColor = "#2563eb" }) {
+export default function BarcodeLink({
+  barcode,
+  label,
+  iconColor = "#2563eb",
+  style,
+  textStyle,
+}) {
   const getSelectedProductEngine = async () => {
     const settings = await getSearchSettings();
 
@@ -53,10 +59,24 @@ export default function BarcodeLink({ barcode, label, iconColor = "#2563eb" }) {
 
     const { label: engineLabel } = await getSelectedProductEngine();
 
-    showOptions("Barcodes", [
+    safeAlert("Código de barras", barcode, [
       {
-        text: "Copiar",
-        onPress: () => Clipboard.setStringAsync(barcode),
+        text: "Copiar código",
+        onPress: async () => {
+          try {
+            await Clipboard.setStringAsync(barcode);
+            safeAlert(
+              "Código copiado",
+              `Se ha copiado ${barcode} al portapapeles.`,
+            );
+          } catch (error) {
+            console.warn("Error copiando barcode:", error);
+            safeAlert(
+              "No se pudo copiar",
+              "No se pudo copiar el código de barras al portapapeles.",
+            );
+          }
+        },
       },
       {
         text: `Buscar en ${engineLabel}`,
@@ -72,14 +92,23 @@ export default function BarcodeLink({ barcode, label, iconColor = "#2563eb" }) {
   if (!barcode) return null;
 
   return (
-    <Pressable onPress={handlePress}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Opciones del código de barras"
+      onPress={handlePress}
+      style={style}
+    >
       <Text
-        style={{
-          color: iconColor,
-          fontSize: 13,
-          fontWeight: "600",
-          textDecorationLine: "underline",
-        }}
+        selectable
+        style={[
+          {
+            color: iconColor,
+            fontSize: 13,
+            fontWeight: "600",
+            textDecorationLine: "underline",
+          },
+          textStyle,
+        ]}
       >
         {label || barcode}
       </Text>

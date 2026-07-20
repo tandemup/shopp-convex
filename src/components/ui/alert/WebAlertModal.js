@@ -28,6 +28,7 @@ export default function WebAlertModal({ dialog, onSelect, onClose }) {
         ];
 
   const isQuestion = dialog.type === "question";
+  const shouldStackActions = buttons.length >= 3;
 
   return (
     <Modal
@@ -71,6 +72,8 @@ export default function WebAlertModal({ dialog, onSelect, onClose }) {
               styles.actions,
 
               buttons.length === 1 && styles.singleAction,
+
+              shouldStackActions && styles.stackedActions,
             ]}
           >
             {buttons.map((button, index) => {
@@ -93,6 +96,8 @@ export default function WebAlertModal({ dialog, onSelect, onClose }) {
 
                     buttons.length === 1 && styles.singleButton,
 
+                    shouldStackActions && styles.stackedButton,
+
                     isCancel && styles.cancelButton,
 
                     isDestructive && styles.destructiveButton,
@@ -103,7 +108,7 @@ export default function WebAlertModal({ dialog, onSelect, onClose }) {
                   ]}
                 >
                   <Text
-                    numberOfLines={1}
+                    numberOfLines={shouldStackActions ? 2 : 1}
                     adjustsFontSizeToFit
                     minimumFontScale={0.8}
                     style={[
@@ -224,6 +229,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
 
+  stackedActions: {
+    flexDirection: "column",
+  },
+
   actionButton: {
     flex: 1,
 
@@ -246,6 +255,11 @@ const styles = StyleSheet.create({
   singleButton: {
     flex: 0,
     minWidth: 110,
+  },
+
+  stackedButton: {
+    flex: 0,
+    width: "100%",
   },
 
   cancelButton: {

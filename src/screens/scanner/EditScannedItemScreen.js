@@ -20,9 +20,10 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
+import BarcodeLink from "@/src/components/controls/BarcodeLink";
 import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
 
 import { openGoogleShoppingSearch } from "@/src/services/googleProductSearch";
@@ -240,7 +241,10 @@ export default function EditScannedItemScreen({ route, navigation }) {
 
   const registerAccess = useMutation(api.productCache.registerAccess);
   const saveProductData = useMutation(api.productCache.saveProductData);
+  const currentUser = useQuery(api.users.current);
   const scanHistoryStorage = useScannedHistoryStorage();
+  const userIsLoading = currentUser === undefined;
+  const canAccessAdminScreen = currentUser?.isAdmin === true;
 
   const {
     loading: internetLookupLoading,
@@ -271,6 +275,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
   const [productUrl, setProductUrl] = useState("");
 
   const busy =
+    userIsLoading ||
     initializing ||
     consultingInternet ||
     internetLookupLoading ||
@@ -320,6 +325,10 @@ export default function EditScannedItemScreen({ route, navigation }) {
 
   const searchExternalProduct = useCallback(
     async ({ silent = false } = {}) => {
+      if (!canAccessAdminScreen) {
+        return null;
+      }
+
       if (!barcode) {
         setLocalError("No se ha recibido ningún código de barras.");
         return null;
@@ -368,13 +377,22 @@ export default function EditScannedItemScreen({ route, navigation }) {
         setConsultingInternet(false);
       }
     },
-    [barcode, lookupWithCache, applyConvexProduct],
+    [barcode, canAccessAdminScreen, lookupWithCache, applyConvexProduct],
   );
 
   useEffect(() => {
     let active = true;
 
     async function initializeProduct() {
+      if (userIsLoading) {
+        return;
+      }
+
+      if (!canAccessAdminScreen) {
+        setInitializing(false);
+        return;
+      }
+
       if (!barcode) {
         setLocalError("No se ha recibido ningún código de barras.");
         setInitializing(false);
@@ -435,6 +453,8 @@ export default function EditScannedItemScreen({ route, navigation }) {
     };
   }, [
     barcode,
+    userIsLoading,
+    canAccessAdminScreen,
     initialProduct,
     registerAccess,
     applyConvexProduct,
@@ -443,6 +463,11 @@ export default function EditScannedItemScreen({ route, navigation }) {
   ]);
 
   const handleSave = useCallback(async () => {
+    if (!canAccessAdminScreen) {
+      setLocalError("Solo los administradores pueden editar productos.");
+      return;
+    }
+
     if (!barcode) {
       setLocalError("No hay código de barras para guardar.");
       return;
@@ -497,6 +522,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
     }
   }, [
     barcode,
+    canAccessAdminScreen,
     historyItem,
     name,
     brand,
@@ -509,6 +535,11 @@ export default function EditScannedItemScreen({ route, navigation }) {
   ]);
 
   const handleDeleteFromHistory = useCallback(async () => {
+    if (!canAccessAdminScreen) {
+      setLocalError("Solo los administradores pueden editar productos.");
+      return;
+    }
+
     if (!barcode) {
       navigation.goBack();
       return;
@@ -527,7 +558,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
     } finally {
       setDeleting(false);
     }
-  }, [barcode, navigation, scanHistoryStorage]);
+  }, [barcode, canAccessAdminScreen, navigation, scanHistoryStorage]);
 
   const openGoogleAIMode = async (query) => {
     const url = `https://www.google.com/search?udm=50&q=${encodeURIComponent(
@@ -537,7 +568,20 @@ export default function EditScannedItemScreen({ route, navigation }) {
     await Linking.openURL(url);
   };
 
+  const openBingShoppingSearch = async (query) => {
+    const url = `https://www.bing.com/shop?q=${encodeURIComponent(query)}`;
+
+    await Linking.openURL(url);
+  };
+
   const handleGoogleAIModeSearch = useCallback(async () => {
+    if (!canAccessAdminScreen) {
+      setLocalError(
+        "Solo los administradores pueden buscar desde esta pantalla.",
+      );
+      return;
+    }
+
     if (!barcode) {
       setLocalError("No hay código de barras para buscar.");
       return;
@@ -551,9 +595,16 @@ export default function EditScannedItemScreen({ route, navigation }) {
         error?.message || "No se pudo abrir la búsqueda de Google.",
       );
     }
-  }, [barcode]);
+  }, [barcode, canAccessAdminScreen]);
 
   const handleGoogleShoppingSearch = useCallback(async () => {
+    if (!canAccessAdminScreen) {
+      setLocalError(
+        "Solo los administradores pueden buscar desde esta pantalla.",
+      );
+      return;
+    }
+
     if (!barcode) {
       setLocalError("No hay código de barras para buscar.");
       return;
@@ -567,7 +618,187 @@ export default function EditScannedItemScreen({ route, navigation }) {
         error?.message || "No se pudo abrir la búsqueda de Google Shopping.",
       );
     }
-  }, [barcode]);
+  }, [barcode, canAccessAdminScreen]);
+
+  const handleBingShoppingSearch = useCallback(async () => {
+    if (!canAccessAdminScreen) {
+      setLocalError(
+        "Solo los administradores pueden buscar desde esta pantalla.",
+      );
+      return;
+    }
+
+    if (!barcode) {
+      setLocalError("No hay código de barras para buscar.");
+      return;
+    }
+
+    try {
+      setLocalError(null);
+      await openBingShoppingSearch(barcode);
+    } catch (error) {
+      setLocalError(
+        error?.message || "No se pudo abrir la búsqueda de Bing Shopping.",
+      );
+    }
+  }, [barcode, canAccessAdminScreen]);
+
+  function GoogleModeIA() {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Buscar producto en Google Modo IA"
+        style={({ pressed }) => [
+          styles.externalAction,
+          pressed && styles.externalActionPressed,
+          (busy || !barcode) && styles.disabledButton,
+        ]}
+        disabled={busy || !barcode}
+        onPress={handleGoogleAIModeSearch}
+      >
+        <View style={styles.googleIcon}>
+          <Text style={styles.googleIconText}>G</Text>
+        </View>
+
+        <View style={styles.externalActionContent}>
+          <Text style={styles.externalActionTitle}>Google Modo IA</Text>
+          <Text style={styles.externalActionDescription}>
+            Respuesta generada a partir del código
+          </Text>
+        </View>
+
+        <Ionicons name="chevron-forward" size={20} color="#667085" />
+      </Pressable>
+    );
+  }
+
+  function GoogleShopping() {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Buscar producto en Google Shopping"
+        style={({ pressed }) => [
+          styles.externalAction,
+          styles.externalActionPrimary,
+          pressed && styles.externalActionPrimaryPressed,
+          (busy || !barcode) && styles.disabledButton,
+        ]}
+        disabled={busy || !barcode}
+        onPress={handleGoogleShoppingSearch}
+      >
+        <View style={styles.shoppingIcon}>
+          <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
+        </View>
+
+        <View style={styles.externalActionContent}>
+          <Text
+            style={[
+              styles.externalActionTitle,
+              styles.externalActionTitleLight,
+            ]}
+          >
+            Google Shopping
+          </Text>
+          <Text
+            style={[
+              styles.externalActionDescription,
+              styles.externalActionDescriptionLight,
+            ]}
+          >
+            Precios, tiendas y ofertas
+          </Text>
+        </View>
+
+        <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+      </Pressable>
+    );
+  }
+
+  function MicrosoftBing() {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Buscar producto en Bing"
+        style={({ pressed }) => [
+          styles.externalAction,
+          styles.externalActionPrimary,
+          pressed && styles.externalActionPrimaryPressed,
+          (busy || !barcode) && styles.disabledButton,
+        ]}
+        disabled={busy || !barcode}
+        onPress={handleBingShoppingSearch}
+      >
+        <View style={styles.shoppingIcon}>
+          <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
+        </View>
+
+        <View style={styles.externalActionContent}>
+          <Text
+            style={[
+              styles.externalActionTitle,
+              styles.externalActionTitleLight,
+            ]}
+          >
+            Bing
+          </Text>
+          <Text
+            style={[
+              styles.externalActionDescription,
+              styles.externalActionDescriptionLight,
+            ]}
+          >
+            Precios, tiendas y ofertas
+          </Text>
+        </View>
+
+        <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+      </Pressable>
+    );
+  }
+
+  if (userIsLoading) {
+    return (
+      <View style={styles.accessScreen}>
+        <View style={styles.accessCard}>
+          <ActivityIndicator color="#2563EB" />
+          <Text style={styles.accessTitle}>Comprobando permisos</Text>
+          <Text style={styles.accessDescription}>
+            Estamos verificando si tu usuario puede editar productos escaneados.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!canAccessAdminScreen) {
+    return (
+      <View style={styles.accessScreen}>
+        <View style={styles.accessCard}>
+          <View style={styles.accessIcon}>
+            <Ionicons name="lock-closed-outline" size={24} color="#B42318" />
+          </View>
+
+          <Text style={styles.accessTitle}>Acceso restringido</Text>
+          <Text style={styles.accessDescription}>
+            Esta pantalla solo está disponible para administradores.
+          </Text>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Volver a la pantalla anterior"
+            style={({ pressed }) => [
+              styles.accessButton,
+              pressed && styles.accessButtonPressed,
+            ]}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.accessButtonText}>Volver</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -618,11 +849,17 @@ export default function EditScannedItemScreen({ route, navigation }) {
           </View>
 
           <View style={styles.barcodeRow}>
-            <View>
+            <View style={styles.barcodeContent}>
               <Text style={styles.barcodeLabel}>Código de barras</Text>
-              <Text selectable style={styles.barcode}>
-                {barcode || "Sin código"}
-              </Text>
+              {barcode ? (
+                <BarcodeLink
+                  barcode={barcode}
+                  iconColor="#FFFFFF"
+                  textStyle={styles.barcode}
+                />
+              ) : (
+                <Text style={styles.barcode}>Sin código</Text>
+              )}
             </View>
 
             <View style={styles.barcodeTypeBadge}>
@@ -684,69 +921,9 @@ export default function EditScannedItemScreen({ route, navigation }) {
 
                 <Ionicons name="open-outline" size={20} color="#667085" />
               </View>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Buscar producto en Google Modo IA"
-                style={({ pressed }) => [
-                  styles.externalAction,
-                  pressed && styles.externalActionPressed,
-                  (busy || !barcode) && styles.disabledButton,
-                ]}
-                disabled={busy || !barcode}
-                onPress={handleGoogleAIModeSearch}
-              >
-                <View style={styles.googleIcon}>
-                  <Text style={styles.googleIconText}>G</Text>
-                </View>
-
-                <View style={styles.externalActionContent}>
-                  <Text style={styles.externalActionTitle}>Google Modo IA</Text>
-                  <Text style={styles.externalActionDescription}>
-                    Respuesta generada a partir del código
-                  </Text>
-                </View>
-
-                <Ionicons name="chevron-forward" size={20} color="#667085" />
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Buscar producto en Google Shopping"
-                style={({ pressed }) => [
-                  styles.externalAction,
-                  styles.externalActionPrimary,
-                  pressed && styles.externalActionPrimaryPressed,
-                  (busy || !barcode) && styles.disabledButton,
-                ]}
-                disabled={busy || !barcode}
-                onPress={handleGoogleShoppingSearch}
-              >
-                <View style={styles.shoppingIcon}>
-                  <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
-                </View>
-
-                <View style={styles.externalActionContent}>
-                  <Text
-                    style={[
-                      styles.externalActionTitle,
-                      styles.externalActionTitleLight,
-                    ]}
-                  >
-                    Google Shopping
-                  </Text>
-                  <Text
-                    style={[
-                      styles.externalActionDescription,
-                      styles.externalActionDescriptionLight,
-                    ]}
-                  >
-                    Precios, tiendas y ofertas
-                  </Text>
-                </View>
-
-                <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
-              </Pressable>
+              <GoogleModeIA />
+              <GoogleShopping />
+              <MicrosoftBing />
             </View>
           </View>
 
@@ -940,6 +1117,88 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2F4F7",
   },
 
+  accessScreen: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    backgroundColor: "#F2F4F7",
+  },
+
+  accessCard: {
+    width: "100%",
+    maxWidth: 420,
+    alignItems: "center",
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "#E4E7EC",
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 10px 28px rgba(16, 24, 40, 0.08)",
+      },
+      default: {
+        shadowColor: "#101828",
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        elevation: 2,
+      },
+    }),
+  },
+
+  accessIcon: {
+    width: 52,
+    height: 52,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+    borderRadius: 18,
+    backgroundColor: "#FEF3F2",
+  },
+
+  accessTitle: {
+    marginTop: 12,
+    color: "#101828",
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  accessDescription: {
+    marginTop: 8,
+    color: "#667085",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+
+  accessButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "#2563EB",
+  },
+
+  accessButtonPressed: {
+    backgroundColor: "#1D4ED8",
+  },
+
+  accessButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+  },
+
   scroll: {
     flex: 1,
   },
@@ -1060,6 +1319,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+  },
+
+  barcodeContent: {
+    flex: 1,
+    minWidth: 0,
   },
 
   barcodeLabel: {
