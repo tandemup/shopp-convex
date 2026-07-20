@@ -1,5 +1,7 @@
 // src/constants/searchEngines.js
 
+import { Linking } from "react-native";
+
 const encodeQuery = (query) => {
   return encodeURIComponent(String(query ?? "").trim());
 };
@@ -49,6 +51,17 @@ export const SEARCH_ENGINES = {
     },
   },
 
+  bing_shopping: {
+    id: "bing_shopping",
+    label: "Bing Shopping",
+    description: "Precios, tiendas y ofertas en Bing",
+    family: "Ionicons",
+    icon: "cart-outline",
+    buildUrl: (query) => {
+      return `https://www.bing.com/shop?q=${encodeQuery(query)}`;
+    },
+  },
+
   duckduckgo: {
     id: "duckduckgo",
     label: "DuckDuckGo",
@@ -88,6 +101,7 @@ export const PRODUCT_SEARCH_ENGINE_IDS = [
   "google_shopping",
   "google",
   "bing",
+  "bing_shopping",
   "duckduckgo",
   "openfoodfacts",
   "barcodelookup",
@@ -127,3 +141,35 @@ export const BOOK_ENGINES = {
 
 export const DEFAULT_ENGINE = "google_ai";
 export const DEFAULT_BOOK_ENGINE = "google_books";
+
+export const PRODUCT_EXTERNAL_ACTION_IDS = [
+  "google_ai",
+  "google_shopping",
+  "bing_shopping",
+];
+
+export const getSearchEngine = (engineId) => {
+  return SEARCH_ENGINES[engineId] || SEARCH_ENGINES[DEFAULT_ENGINE];
+};
+
+export const buildSearchEngineUrl = (engineId, query) => {
+  return getSearchEngine(engineId).buildUrl(query);
+};
+
+export const openSearchEngine = async (engineId, query) => {
+  const url = buildSearchEngineUrl(engineId, query);
+
+  await Linking.openURL(url);
+};
+
+export const openGoogleAIMode = (query) => {
+  return openSearchEngine("google_ai", query);
+};
+
+export const openGoogleShoppingSearch = (query) => {
+  return openSearchEngine("google_shopping", query);
+};
+
+export const openBingShoppingSearch = (query) => {
+  return openSearchEngine("bing_shopping", query);
+};
