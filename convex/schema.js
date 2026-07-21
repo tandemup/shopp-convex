@@ -765,4 +765,48 @@ export default defineSchema({
     .index("by_barcode", ["barcode"])
     .index("by_status", ["status"])
     .index("by_lastAccessedAt", ["lastAccessedAt"]),
+
+  productReviewSubmissions: defineTable({
+    barcode: v.string(),
+
+    name: v.string(),
+    brand: v.optional(v.string()),
+    category: v.optional(v.string()),
+
+    imageUrl: v.optional(v.string()),
+    productUrl: v.optional(v.string()),
+
+    source: v.optional(
+      v.union(
+        v.literal("user_review"),
+        v.literal("manual"),
+        v.literal("scanner"),
+        v.literal("internet"),
+      ),
+    ),
+
+    status: v.union(
+      v.literal("pending_review"),
+      v.literal("approved"),
+      v.literal("rejected"),
+    ),
+
+    submittedBy: v.id("users"),
+    submitterEmail: v.optional(v.string()),
+
+    reviewedBy: v.optional(v.id("users")),
+    reviewedAt: v.optional(v.float64()),
+    reviewNote: v.optional(v.string()),
+
+    createdAt: v.float64(),
+    updatedAt: v.float64(),
+  })
+    .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_barcode_status", ["barcode", "status"])
+    .index("by_submittedBy_status", ["submittedBy", "status"])
+    .index("by_submittedBy_barcode_status", [
+      "submittedBy",
+      "barcode",
+      "status",
+    ]),
 });

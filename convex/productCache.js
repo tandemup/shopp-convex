@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 const NEGATIVE_CACHE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -180,6 +181,107 @@ export const saveProductData = mutation({
     });
 
     return await ctx.db.get(productId);
+  },
+});
+
+export const submitProductReview = mutation({
+  args: {
+    barcode: v.string(),
+    name: v.string(),
+    brand: v.optional(v.string()),
+    category: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    productUrl: v.optional(v.string()),
+    source: v.optional(
+      v.union(
+        v.literal("user_review"),
+        v.literal("manual"),
+        v.literal("scanner"),
+        v.literal("internet"),
+      ),
+    ),
+    status: v.optional(v.literal("pending_review")),
+  },
+
+  handler: async (ctx, args) => {
+    const submittedBy = await getAuthUserId(ctx);
+
+    if (!submittedBy) {
+      throw new Error("Debes iniciar sesión para enviar productos a revisión.");
+    }
+
+    const barcode = normalizeBarcode(args.barcode);
+    validateBarcode(barcode);
+
+    const name = normalizeOptionalString(args.name);
+
+    if (!name) {
+      throw new Error("El nombre del producto no puede estar vacío.");
+    }
+
+    const now = Date.now();
+    const identity = await ctx.auth.getUserIdentity();
+    const patch = {
+      barcode,
+      name,
+      brand: normalizeOptionalString(args.brand),
+      category: normalizeOptionalString(args.category),
+      imageUrl: normalizeOptionalString(args.imageUrl),
+      productUrl: normalizeOptionalString(args.productUrl),
+      source: args.source || "user_review",
+      status: "pending_review",
+      submittedBy,
+      submitterEmail: normalizeOptionalString(identity?.email),
+      updatedAt: now,
+    };
+
+    const existingSubmission = await ctx.db
+      .query("productReviewSubmissions")
+      .withIndex("by_submittedBy_barcode_status", (q) =>
+        q
+          .eq("submittedBy", submittedBy)
+          .eq("barcode", barcode)
+          .eq("status", "pending_review"),
+      )
+      .unique();
+
+    if (existingSubmission) {
+      await ctx.db.patch(existingSubmission._id, patch);
+      return await ctx.db.get(existingSubmission._id);
+    }
+
+    const submissionId = await ctx.db.insert("productReviewSubmissions", {
+      ...patch,
+      createdAt: now,
+    });
+
+    return await ctx.db.get(submissionId);
+  },
+});
+
+export const listPendingProductReviews = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+
+    if (!userId) {
+      return [];
+    }
+
+    const user = await ctx.db.get(userId);
+
+    if (user?.role !== "admin") {
+      return [];
+    }
+
+    return await ctx.db
+      .query("productReviewSubmissions")
+      .withIndex("by_status_createdAt", (q) => q.eq("status", "pending_review"))
+      .order("desc")
+      .take(args.limit || 50);
   },
 });
 
