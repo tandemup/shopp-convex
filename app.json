@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ramnworksshopp.shopp"
+      "bundleIdentifier": "com.ramnworksshopp.shopp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.ramnworksshopp.shopp",
