@@ -22,7 +22,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "convex/react";
 
 import { api } from "@/convex/_generated/api";
-import BarcodeLink from "@/src/components/controls/BarcodeLink";
 import { useProductLookupWithCache } from "@/src/hooks/useProductLookupWithCache";
 import {
   openBingShoppingSearch,
@@ -778,58 +777,50 @@ export default function EditScannedItemScreen({ route, navigation }) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
-          <View style={styles.heroTopRow}>
-            <View style={styles.heroIcon}>
-              <Ionicons name="barcode-outline" size={24} color="#FFFFFF" />
+        <View style={styles.productHeader}>
+          <View style={styles.productHeaderTopRow}>
+            <View style={styles.productHeaderIdentity}>
+              <View style={styles.productIconContainer}>
+                <Ionicons name="barcode-outline" size={26} color="#FFFFFF" />
+              </View>
+
+              <Text style={styles.productHeaderLabel}>PRODUCTO ESCANEADO</Text>
             </View>
 
-            <View style={styles.heroEyebrowContainer}>
-              <Text style={styles.eyebrow}>PRODUCTO ESCANEADO</Text>
-            </View>
-
-            <View style={styles.heroStatusBadge}>
+            <View style={styles.productLocatedBadge}>
               <View
                 style={[
-                  styles.heroStatusDot,
-                  productStatus === "not_found" && styles.heroStatusDotWarning,
+                  styles.productLocatedDot,
+                  productStatus === "not_found" &&
+                    styles.productLocatedDotWarning,
                 ]}
               />
-
-              <Text style={styles.heroStatusText}>
+              <Text style={styles.productLocatedText}>
                 {productStatus === "not_found"
                   ? "Sin identificar"
-                  : recordCreated
-                    ? "Nuevo registro"
-                    : "Producto localizado"}
+                  : "Producto localizado"}
               </Text>
             </View>
           </View>
 
-          <View style={styles.productTitleContainer}>
-            <Text style={styles.title} numberOfLines={2}>
-              {resolvedName}
-            </Text>
-          </View>
+          <Text style={styles.productName} numberOfLines={3}>
+            {resolvedName}
+          </Text>
 
-          <View style={styles.barcodeRow}>
-            <View style={styles.barcodeContent}>
-              <Text style={styles.barcodeLabel}>Código de barras</Text>
-              {barcode ? (
-                <BarcodeLink
-                  barcode={barcode}
-                  iconColor="#FFFFFF"
-                  textStyle={styles.barcode}
-                />
-              ) : (
-                <Text style={styles.barcode}>Sin código</Text>
-              )}
+          <View style={styles.productBarcodeRow}>
+            <View style={styles.productBarcodeContent}>
+              <Text style={styles.productBarcodeLabel}>Código de barras</Text>
+              <Text
+                style={styles.productBarcodeValue}
+                numberOfLines={1}
+                selectable
+              >
+                {barcode || "Sin código"}
+              </Text>
             </View>
 
-            <View style={styles.barcodeTypeBadge}>
-              <Text style={styles.barcodeTypeText}>
-                {barcode?.length === 13 ? "EAN-13" : "BARCODE"}
-              </Text>
+            <View style={styles.productBarcodeTypeBadge}>
+              <Text style={styles.productBarcodeTypeText}>EAN-13</Text>
             </View>
           </View>
         </View>
@@ -1014,52 +1005,96 @@ export default function EditScannedItemScreen({ route, navigation }) {
                 )}
               </Pressable>
 
-              <Pressable
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  pressed && styles.secondaryButtonPressed,
-                  busy && styles.disabledButton,
-                ]}
-                onPress={() => searchExternalProduct({ silent: false })}
-                disabled={busy}
-              >
-                {consultingInternet || internetLookupLoading ? (
-                  <ActivityIndicator color="#2563EB" />
-                ) : (
-                  <>
-                    <Ionicons
-                      name="refresh-outline"
-                      size={20}
-                      color="#2563EB"
-                    />
-                    <View style={styles.buttonTextBlock}>
-                      <Text style={styles.secondaryButtonText}>
-                        Actualizar desde internet
-                      </Text>
-                      <Text style={styles.secondaryButtonHint}>
-                        {isAdmin
-                          ? "Sustituye los campos con datos externos"
-                          : "Rellena la propuesta con datos externos"}
-                      </Text>
+              {isAdmin ? (
+                <>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && styles.secondaryButtonPressed,
+                      busy && styles.disabledButton,
+                    ]}
+                    onPress={() => searchExternalProduct({ silent: false })}
+                    disabled={busy}
+                  >
+                    {consultingInternet || internetLookupLoading ? (
+                      <ActivityIndicator color="#2563EB" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="refresh-outline"
+                          size={20}
+                          color="#2563EB"
+                        />
+                        <View style={styles.buttonTextBlock}>
+                          <Text style={styles.secondaryButtonText}>
+                            Actualizar desde internet
+                          </Text>
+                          <Text style={styles.secondaryButtonHint}>
+                            Sustituye los campos con datos externos
+                          </Text>
+                        </View>
+                      </>
+                    )}
+                  </Pressable>
+
+                  <View style={styles.dangerZone}>
+                    <View style={styles.dangerZoneHeader}>
+                      <Ionicons
+                        name="warning-outline"
+                        size={18}
+                        color="#B42318"
+                      />
+                      <View style={styles.dangerZoneText}>
+                        <Text style={styles.dangerZoneTitle}>
+                          Historial local
+                        </Text>
+                        <Text style={styles.dangerZoneDescription}>
+                          El registro global de Convex no se eliminará.
+                        </Text>
+                      </View>
                     </View>
-                  </>
-                )}
-              </Pressable>
 
-              <View style={styles.dangerZone}>
-                <View style={styles.dangerZoneHeader}>
-                  <Ionicons name="warning-outline" size={18} color="#B42318" />
-                  <View style={styles.dangerZoneText}>
-                    <Text style={styles.dangerZoneTitle}>Historial local</Text>
-                    <Text style={styles.dangerZoneDescription}>
-                      El registro global de Convex no se eliminará.
-                    </Text>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.deleteButton,
+                        pressed && styles.deleteButtonPressed,
+                        busy && styles.disabledButton,
+                      ]}
+                      onPress={handleDeleteFromHistory}
+                      disabled={busy}
+                    >
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color="#B42318"
+                      />
+                      <Text style={styles.deleteButtonText}>
+                        {deleting
+                          ? "Eliminando..."
+                          : "Eliminar del historial local"}
+                      </Text>
+                    </Pressable>
                   </View>
-                </View>
 
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.cancelButton,
+                      pressed && styles.cancelButtonPressed,
+                    ]}
+                    onPress={() => navigation.goBack()}
+                    disabled={saving || deleting}
+                  >
+                    <Ionicons name="close-outline" size={18} color="#475467" />
+                    <Text style={styles.cancelButtonText}>
+                      Cerrar sin guardar
+                    </Text>
+                  </Pressable>
+                </>
+              ) : (
                 <Pressable
                   style={({ pressed }) => [
                     styles.deleteButton,
+                    styles.deleteButtonStandalone,
                     pressed && styles.deleteButtonPressed,
                     busy && styles.disabledButton,
                   ]}
@@ -1073,19 +1108,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
                       : "Eliminar del historial local"}
                   </Text>
                 </Pressable>
-              </View>
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.cancelButton,
-                  pressed && styles.cancelButtonPressed,
-                ]}
-                onPress={() => navigation.goBack()}
-                disabled={saving || deleting}
-              >
-                <Ionicons name="close-outline" size={18} color="#475467" />
-                <Text style={styles.cancelButtonText}>Cerrar sin guardar</Text>
-              </Pressable>
+              )}
             </View>
           </View>
         </View>
@@ -1137,16 +1160,6 @@ const styles = StyleSheet.create({
     }),
   },
 
-  accessIcon: {
-    width: 52,
-    height: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
-    borderRadius: 18,
-    backgroundColor: "#FEF3F2",
-  },
-
   accessTitle: {
     marginTop: 12,
     color: "#101828",
@@ -1163,29 +1176,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: "500",
     textAlign: "center",
-  },
-
-  accessButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 20,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: "#2563EB",
-  },
-
-  accessButtonPressed: {
-    backgroundColor: "#1D4ED8",
-  },
-
-  accessButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: "900",
   },
 
   scroll: {
@@ -1206,147 +1196,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     paddingBottom: 56,
-  },
-
-  hero: {
-    backgroundColor: "#101828",
-    borderRadius: 24,
-    padding: 20,
-    marginBottom: 14,
-    ...Platform.select({
-      web: {
-        boxShadow: "0 18px 50px rgba(16, 24, 40, 0.16)",
-      },
-      default: {
-        shadowColor: "#101828",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.16,
-        shadowRadius: 22,
-        elevation: 5,
-      },
-    }),
-  },
-
-  heroTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 16,
-  },
-
-  heroIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: "#1D2939",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  heroTextContainer: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  heroEyebrowContainer: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-    marginLeft: 14,
-  },
-
-  eyebrow: {
-    color: "#98A2B3",
-    fontSize: 11,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    marginBottom: 5,
-  },
-
-  title: {
-    color: "#FFFFFF",
-    fontSize: 19,
-    lineHeight: 25,
-    fontWeight: "900",
-  },
-
-  productTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
-    paddingLeft: 2,
-  },
-
-  heroStatusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 7,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-
-  heroStatusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#32D583",
-  },
-
-  heroStatusDotWarning: {
-    backgroundColor: "#FDB022",
-  },
-
-  heroStatusText: {
-    color: "#EAECF0",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-
-  barcodeRow: {
-    marginTop: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 15,
-    backgroundColor: "#1D2939",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-
-  barcodeContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  barcodeLabel: {
-    color: "#98A2B3",
-    fontSize: 11,
-    fontWeight: "800",
-    marginBottom: 3,
-  },
-
-  barcode: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-  },
-
-  barcodeTypeBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#344054",
-  },
-
-  barcodeTypeText: {
-    color: "#D0D5DD",
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 0.7,
   },
 
   workspace: {
@@ -1765,6 +1614,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
 
+  deleteButtonStandalone: {
+    marginTop: 14,
+  },
+
   deleteButtonPressed: {
     backgroundColor: "#FEF3F2",
   },
@@ -1889,5 +1742,141 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 20,
     marginTop: 14,
+  },
+
+  productHeader: {
+    width: "100%",
+    gap: 14,
+    marginBottom: 14,
+    padding: 20,
+    borderRadius: 24,
+    backgroundColor: "#101828",
+    ...Platform.select({
+      web: {
+        boxShadow: "0 18px 50px rgba(16, 24, 40, 0.16)",
+      },
+      default: {
+        shadowColor: "#101828",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.16,
+        shadowRadius: 22,
+        elevation: 5,
+      },
+    }),
+  },
+
+  productHeaderTopRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  productHeaderIdentity: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  productIconContainer: {
+    width: 48,
+    height: 48,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 16,
+    backgroundColor: "#1D2939",
+  },
+
+  productHeaderLabel: {
+    flexShrink: 1,
+    color: "#A5B0C4",
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "900",
+    letterSpacing: 1.6,
+  },
+
+  productLocatedBadge: {
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#202C42",
+  },
+
+  productLocatedDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#39D98A",
+  },
+
+  productLocatedDotWarning: {
+    backgroundColor: "#FDB022",
+  },
+
+  productLocatedText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  productName: {
+    color: "#FFFFFF",
+    fontSize: 19,
+    lineHeight: 25,
+    fontWeight: "900",
+    paddingLeft: 58,
+  },
+
+  productBarcodeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 15,
+    backgroundColor: "#1D2939",
+  },
+
+  productBarcodeContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  productBarcodeLabel: {
+    marginBottom: 3,
+    color: "#98A2B3",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
+  productBarcodeValue: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "900",
+    letterSpacing: 1.1,
+  },
+
+  productBarcodeTypeBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#344054",
+  },
+
+  productBarcodeTypeText: {
+    color: "#D0D5DD",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 0.7,
   },
 });
