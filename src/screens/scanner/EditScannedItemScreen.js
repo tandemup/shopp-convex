@@ -151,7 +151,7 @@ function StatusCard({
   } else if (created) {
     title = "Nuevo código registrado";
     description =
-      "No existía información. Se ha creado un registro mínimo en Convex.";
+      "No existía información. Se ha creado un registro mí­nimo en Convex.";
   } else if (status === "not_found") {
     title = "Información no encontrada";
     description =
@@ -780,18 +780,12 @@ export default function EditScannedItemScreen({ route, navigation }) {
       >
         <View style={styles.hero}>
           <View style={styles.heroTopRow}>
-            <View style={styles.heroIdentity}>
-              <View style={styles.heroIcon}>
-                <Ionicons name="barcode-outline" size={24} color="#FFFFFF" />
-              </View>
+            <View style={styles.heroIcon}>
+              <Ionicons name="barcode-outline" size={24} color="#FFFFFF" />
+            </View>
 
-              <View style={styles.heroTextContainer}>
-                <Text style={styles.eyebrow}>PRODUCTO ESCANEADO</Text>
-
-                <Text style={styles.title} numberOfLines={2}>
-                  {resolvedName}
-                </Text>
-              </View>
+            <View style={styles.heroEyebrowContainer}>
+              <Text style={styles.eyebrow}>PRODUCTO ESCANEADO</Text>
             </View>
 
             <View style={styles.heroStatusBadge}>
@@ -810,6 +804,12 @@ export default function EditScannedItemScreen({ route, navigation }) {
                     : "Producto localizado"}
               </Text>
             </View>
+          </View>
+
+          <View style={styles.productTitleContainer}>
+            <Text style={styles.title} numberOfLines={2}>
+              {resolvedName}
+            </Text>
           </View>
 
           <View style={styles.barcodeRow}>
@@ -1234,14 +1234,6 @@ const styles = StyleSheet.create({
     gap: 16,
   },
 
-  heroIdentity: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-
   heroIcon: {
     width: 48,
     height: 48,
@@ -1256,6 +1248,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
 
+  heroEyebrowContainer: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+    marginLeft: 14,
+  },
+
   eyebrow: {
     color: "#98A2B3",
     fontSize: 11,
@@ -1266,9 +1265,16 @@ const styles = StyleSheet.create({
 
   title: {
     color: "#FFFFFF",
-    fontSize: 24,
-    lineHeight: 30,
+    fontSize: 19,
+    lineHeight: 25,
     fontWeight: "900",
+  },
+
+  productTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    paddingLeft: 2,
   },
 
   heroStatusBadge: {

@@ -7,8 +7,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { useQuery } from "convex/react";
 
 import { ROUTES } from "@/src/navigation/ROUTES";
+import { api } from "@/convex/_generated/api";
 import { DEFAULT_BARCODE_SETTINGS } from "@/src/constants/barcodeFormats";
 import { getBarcodeSettings } from "@/src/storage/barcodeSettingsStorage";
 import { buildHeaderConfig } from "@/src/utils/layout/headerStyles";
@@ -30,6 +32,10 @@ function getEnabledBarcodeTypes(settings) {
 }
 
 export default function ScannerTabScreen({ navigation }) {
+  const currentUser = useQuery(api.users.current);
+  const isAdmin =
+    currentUser?.isAdmin === true || currentUser?.role === "admin";
+
   const [barcodeSettings, setBarcodeSettings] = useState(
     DEFAULT_BARCODE_SETTINGS,
   );
@@ -59,7 +65,10 @@ export default function ScannerTabScreen({ navigation }) {
 
           setBarcodeSettings(data || DEFAULT_BARCODE_SETTINGS);
         } catch (error) {
-          console.log("❌ Error loading barcode settings:", error);
+          console.log(
+            "❌ Error al cargar la configuración de códigos de barras:",
+            error,
+          );
 
           if (!mounted) return;
 
@@ -87,6 +96,10 @@ export default function ScannerTabScreen({ navigation }) {
 
   const goToScannedHistory = () => {
     navigation.navigate(ROUTES.SCANNED_HISTORY);
+  };
+
+  const goToAdminProductReviews = () => {
+    navigation.navigate("AdminProductReviews");
   };
 
   return (
@@ -149,6 +162,37 @@ export default function ScannerTabScreen({ navigation }) {
 
               <Ionicons name="chevron-forward" size={22} color="#9CA3AF" />
             </Pressable>
+
+            {isAdmin ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.card,
+                  styles.adminCard,
+                  pressed && styles.cardPressed,
+                ]}
+                onPress={goToAdminProductReviews}
+              >
+                <View style={[styles.iconBox, styles.adminIconBox]}>
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={26}
+                    color="#2563EB"
+                  />
+                </View>
+
+                <View style={styles.cardText}>
+                  <Text style={styles.cardTitle}>
+                    Productos pendientes de revisión
+                  </Text>
+
+                  <Text style={styles.cardSubtitle}>
+                    Corregir y aprobar productos enviados por usuarios
+                  </Text>
+                </View>
+
+                <Ionicons name="chevron-forward" size={22} color="#2563EB" />
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </SafeAreaView>
@@ -221,6 +265,10 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.99 }],
   },
 
+  adminCard: {
+    borderColor: "#BFDBFE",
+  },
+
   iconBox: {
     width: 46,
     height: 46,
@@ -229,6 +277,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
+  },
+
+  adminIconBox: {
+    backgroundColor: "#EFF6FF",
   },
 
   cardText: {
