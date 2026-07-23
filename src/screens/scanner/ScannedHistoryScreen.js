@@ -1,14 +1,7 @@
 // screens/scanner/ScannedHistoryScreen.js
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  FlatList,
-  StyleSheet,
-  Pressable,
-} from "react-native";
+import { View, Text, FlatList, StyleSheet, Pressable } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +14,7 @@ import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import { safeQuestion } from "@/src/components/ui/alert/safeQuestion";
 
 import { useScannedHistoryStorage } from "@/src/hooks/useScannedHistoryStorage";
+import SearchBar from "@/src/components/features/search/SearchBar";
 
 export default function ScannedHistoryScreen({ navigation, route }) {
   const [scannedItems, setScannedItems] = useState([]);
@@ -190,24 +184,12 @@ export default function ScannedHistoryScreen({ navigation, route }) {
             Consulta productos y códigos de barras escaneados anteriormente.
           </Text>
 
-          <View style={styles.searchContainer}>
-            <Ionicons
-              name="search-outline"
-              size={20}
-              color="#6B7280"
-              style={styles.searchIcon}
-            />
-
-            <TextInput
-              placeholder="Buscar producto o código..."
-              placeholderTextColor="#9CA3AF"
-              style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Buscar producto, marca o código..."
+            style={styles.searchBar}
+          />
 
           <FlatList
             data={filteredItems}
@@ -262,31 +244,8 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
 
-  searchContainer: {
-    minHeight: 50,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
+  searchBar: {
     marginBottom: 16,
-  },
-
-  searchIcon: {
-    marginRight: 8,
-  },
-
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: "#111827",
   },
 
   listContent: {

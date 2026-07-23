@@ -69,7 +69,7 @@ export default function ScannerStack() {
       <Stack.Screen
         name={ROUTES.SCANNED_HISTORY}
         component={ScannedHistoryScreen}
-        options={{ title: "Historial de Escaneos" }}
+        options={{ title: "Historial de escaneos" }}
       />
 
       <Stack.Screen

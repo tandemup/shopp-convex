@@ -142,17 +142,41 @@ function AdminProductReviewsScreen({ navigation }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.eyebrow}>ADMINISTRACIÓN</Text>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.pageHeader}>
+        <View style={styles.headerIcon}>
+          <Ionicons name="clipboard-outline" size={25} color="#2563eb" />
+        </View>
 
-      <Text style={styles.title}>Productos enviados a revisión</Text>
+        <View style={styles.headerText}>
+          <Text style={styles.eyebrow}>ADMINISTRACIÓN</Text>
+          <Text style={styles.title}>Productos enviados a revisión</Text>
+          <Text style={styles.subtitle}>
+            Revisa y valida la información aportada por los usuarios.
+          </Text>
+        </View>
+      </View>
 
       {!selectedSubmission ? (
         <View>
           {submissions.length === 0 ? (
-            <Text style={styles.muted}>
-              No hay productos pendientes de revisión.
-            </Text>
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIcon}>
+                <Ionicons
+                  name="checkmark-done-outline"
+                  size={32}
+                  color="#16a34a"
+                />
+              </View>
+              <Text style={styles.emptyTitle}>Todo está al día</Text>
+              <Text style={styles.emptyText}>
+                No hay productos pendientes de revisión.
+              </Text>
+            </View>
           ) : (
             submissions.map((submission) => (
               <Pressable
@@ -304,13 +328,51 @@ export { AdminProductReviewsScreen };
 export default AdminProductReviewsScreen;
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#eef2f7",
+  },
+
   container: {
     flexGrow: 1,
     width: "100%",
-    maxWidth: 900,
+    maxWidth: 1080,
     alignSelf: "center",
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 40,
     backgroundColor: "#f8fafc",
+  },
+
+  pageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    marginBottom: 24,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: "#dbe5f1",
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+
+  headerIcon: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 52,
+    height: 52,
+    marginRight: 16,
+    borderRadius: 16,
+    backgroundColor: "#e8f0ff",
+  },
+
+  headerText: {
+    flex: 1,
   },
 
   center: {
@@ -329,11 +391,16 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    marginVertical: 8,
+    marginTop: 4,
     color: "#0f172a",
-    fontSize: 25,
+    fontSize: 26,
     fontWeight: "800",
-    textAlign: "center",
+  },
+
+  subtitle: {
+    marginTop: 6,
+    color: "#64748b",
+    fontSize: 14,
   },
 
   muted: {
@@ -345,6 +412,40 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: "#94a3b8",
     fontSize: 12,
+  },
+
+  emptyCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 230,
+    padding: 28,
+    borderWidth: 1,
+    borderColor: "#dbe5f1",
+    borderRadius: 18,
+    backgroundColor: "#ffffff",
+  },
+
+  emptyIcon: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 64,
+    height: 64,
+    marginBottom: 14,
+    borderRadius: 32,
+    backgroundColor: "#dcfce7",
+  },
+
+  emptyTitle: {
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+
+  emptyText: {
+    marginTop: 7,
+    color: "#64748b",
+    fontSize: 14,
+    textAlign: "center",
   },
 
   card: {
@@ -380,6 +481,8 @@ const styles = StyleSheet.create({
 
   formCard: {
     padding: 16,
+    borderWidth: 1,
+    borderColor: "#dbe5f1",
     borderRadius: 14,
     backgroundColor: "#ffffff",
   },
