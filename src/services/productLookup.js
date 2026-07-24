@@ -26,6 +26,13 @@ function isSupportedBarcode(barcode) {
   return barcode.length === 8 || barcode.length === 12 || barcode.length === 13;
 }
 
+function isLikelyIsbn(barcode) {
+  return (
+    barcode.length === 13 &&
+    (barcode.startsWith("978") || barcode.startsWith("979"))
+  );
+}
+
 function getBestImage(product) {
   return (
     product?.image_front_url ||
@@ -81,6 +88,15 @@ export async function lookupProductByBarcode(barcode) {
       found: false,
       product: null,
       reason: "invalid_barcode",
+    };
+  }
+
+  // OpenFoodFacts no es una fuente adecuada para libros identificados por ISBN.
+  if (isLikelyIsbn(cleanBarcode)) {
+    return {
+      found: false,
+      product: null,
+      reason: "isbn_use_external_search",
     };
   }
 

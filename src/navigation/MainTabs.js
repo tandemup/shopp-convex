@@ -100,7 +100,6 @@ export default function MainTabs() {
           ),
         }}
       />
-
       <Tab.Screen
         name={ROUTES.SCANNER_TAB}
         component={ScannerStack}
@@ -120,7 +119,6 @@ export default function MainTabs() {
           ),
         }}
       />
-
       <Tab.Screen
         name={ROUTES.MENU_TAB}
         component={MenuStack}

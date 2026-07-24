@@ -19,7 +19,6 @@ export default function BarcodeLink({
   iconColor = "#2563eb",
   style,
   textStyle,
-  children,
 }) {
   const getSelectedProductEngine = async () => {
     const settings = await getSearchSettings();
@@ -62,7 +61,7 @@ export default function BarcodeLink({
 
     safeAlert("Código de barras", barcode, [
       {
-        text: "Copiar barcode",
+        text: "Copiar código",
         onPress: async () => {
           try {
             await Clipboard.setStringAsync(barcode);
@@ -80,11 +79,11 @@ export default function BarcodeLink({
         },
       },
       {
-        text: "Open browser",
+        text: `Buscar en ${engineLabel}`,
         onPress: () => openSearch(barcode),
       },
       {
-        text: "Cancel",
+        text: "Cancelar",
         style: "cancel",
       },
     ]);
@@ -99,22 +98,20 @@ export default function BarcodeLink({
       onPress={handlePress}
       style={style}
     >
-      {children || (
-        <Text
-          selectable
-          style={[
-            {
-              color: iconColor,
-              fontSize: 13,
-              fontWeight: "600",
-              textDecorationLine: "underline",
-            },
-            textStyle,
-          ]}
-        >
-          {label || barcode}
-        </Text>
-      )}
+      <Text
+        selectable
+        style={[
+          {
+            color: iconColor,
+            fontSize: 13,
+            fontWeight: "600",
+            textDecorationLine: "underline",
+          },
+          textStyle,
+        ]}
+      >
+        {label || barcode}
+      </Text>
     </Pressable>
   );
 }

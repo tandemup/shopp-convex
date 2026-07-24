@@ -1,186 +1,121 @@
-// utils/urlSafety.js
+/**
+ * Helpers para validar y normalizar enlaces de YouTube.
+ *
+ * Acepta, entre otros, estos formatos:
+ * - https://www.youtube.com/watch?v=VIDEO_ID
+ * - https://www.youtube.com/live/VIDEO_ID?si=...
+ * - https://youtu.be/VIDEO_ID
+ */
 
-export const URL_STATUS = {
-  TRUSTED: "trusted",
-  SAFE: "safe",
-  VERIFIED: "verified",
-  PENDING: "pending",
-  UNKNOWN: "unknown",
-  SUSPICIOUS: "suspicious",
-  MALICIOUS: "malicious",
-};
-
-export const TRUSTED_DOMAINS = [
-  "wikipedia.org",
-  "google.com",
+const YOUTUBE_HOSTS = new Set([
   "youtube.com",
-  "youtube.com/live/",
+  "www.youtube.com",
+  "m.youtube.com",
   "youtu.be",
-  "amazon.com",
-  "amazon.es",
-  "foxnews.com",
-  "esdiario.com",
-  "eldiario.es",
-  "elmundo.es",
-];
+]);
 
-export function normalizeUrl(rawUrl) {
-  if (!rawUrl || typeof rawUrl !== "string") return null;
+const VIDEO_ID_REGEX = /^[A-Za-z0-9_-]{11}$/;
 
-  const trimmed = rawUrl.trim();
+const URL_REGEX = /https?:\/\/[^\s<>"']+/gi;
+const TRAILING_URL_PUNCTUATION_REGEX = /[.,!?;:]+$/;
 
-  if (!trimmed) return null;
+function toUrl(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  const rawValue = value.trim();
+  const valueWithProtocol = /^[a-z][a-z\d+.-]*:\/\//i.test(rawValue)
+    ? rawValue
+    : `https://${rawValue}`;
 
   try {
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-      return trimmed;
-    }
-
-    return `https://${trimmed}`;
+    return new URL(valueWithProtocol);
   } catch {
     return null;
   }
 }
 
+/** Extrae URLs HTTP(S) de un texto y elimina la puntuación final. */
 export function extractUrlsFromText(text) {
-  if (!text || typeof text !== "string") return [];
+  if (typeof text !== "string" || !text.trim()) return [];
 
-  const regex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
-  const matches = text.match(regex) || [];
-
-  return matches.map((url) => normalizeUrl(url)).filter(Boolean);
-}
-
-export function getHostnameFromUrl(rawUrl) {
-  try {
-    const normalized = normalizeUrl(rawUrl);
-    if (!normalized) return null;
-
-    const parsed = new URL(normalized);
-    return parsed.hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-export function isTrustedDomain(rawUrl) {
-  const hostname = getHostnameFromUrl(rawUrl);
-
-  if (!hostname) return false;
-
-  return TRUSTED_DOMAINS.some((domain) => {
-    const cleanDomain = domain.toLowerCase();
-
-    return hostname === cleanDomain || hostname.endsWith(`.${cleanDomain}`);
-  });
-}
-
-export function getInitialUrlStatus(rawUrl) {
-  if (!rawUrl) return URL_STATUS.UNKNOWN;
-
-  if (isTrustedDomain(rawUrl)) {
-    return URL_STATUS.TRUSTED;
-  }
-
-  return URL_STATUS.PENDING;
-}
-
-export function canOpenUrlByStatus(status) {
   return (
-    status === URL_STATUS.TRUSTED ||
-    status === URL_STATUS.SAFE ||
-    status === URL_STATUS.VERIFIED
+    text
+      .match(URL_REGEX)
+      ?.map((value) => value.replace(TRAILING_URL_PUNCTUATION_REGEX, ""))
+      .filter(Boolean) || []
   );
 }
 
-export function getUrlBlockedReason(status) {
-  if (status === URL_STATUS.PENDING) {
-    return "Este enlace todavía está pendiente de comprobar. No se puede abrir hasta que sea verificado.";
+/** Normaliza una URL segura HTTP(S); devuelve null si no es válida. */
+export function normalizeUrl(value) {
+  const url = toUrl(value);
+
+  if (!url || !/^https?:$/.test(url.protocol) || !url.hostname) {
+    return null;
   }
 
-  if (status === URL_STATUS.SUSPICIOUS) {
-    return "Este enlace ha sido marcado como sospechoso y no se puede abrir.";
-  }
-
-  if (status === URL_STATUS.MALICIOUS) {
-    return "Este enlace ha sido bloqueado por seguridad.";
-  }
-
-  if (status === URL_STATUS.UNKNOWN) {
-    return "Este enlace todavía no tiene un estado de seguridad conocido.";
-  }
-
-  return "Este enlace no se puede abrir porque no ha sido verificado.";
+  return url.toString();
 }
 
-export function getUrlStatusLabel(status) {
-  if (status === URL_STATUS.TRUSTED) return "Dominio de confianza";
-  if (status === URL_STATUS.SAFE) return "Enlace seguro";
-  if (status === URL_STATUS.VERIFIED) return "Enlace verificado";
-  if (status === URL_STATUS.PENDING) return "Enlace pendiente de comprobar";
-  if (status === URL_STATUS.SUSPICIOUS) return "Enlace sospechoso";
-  if (status === URL_STATUS.MALICIOUS) return "Enlace bloqueado";
-  return "Enlace no verificado";
-}
+/** Devuelve el ID del vídeo si la URL es un enlace YouTube válido. */
+export function getYouTubeVideoId(value) {
+  const url = toUrl(value);
+  if (!url || !/^https?:$/.test(url.protocol)) return null;
 
-export function getUrlStatusTone(status) {
-  if (
-    status === URL_STATUS.TRUSTED ||
-    status === URL_STATUS.SAFE ||
-    status === URL_STATUS.VERIFIED
-  ) {
-    return "safe";
+  const hostname = url.hostname.toLowerCase();
+  if (!YOUTUBE_HOSTS.has(hostname)) return null;
+
+  let videoId = null;
+
+  if (hostname === "youtu.be") {
+    videoId = url.pathname.split("/").filter(Boolean)[0];
+  } else if (url.pathname === "/watch") {
+    videoId = url.searchParams.get("v");
+  } else if (/^\/live\//i.test(url.pathname)) {
+    videoId = url.pathname.split("/").filter(Boolean)[1];
+  } else if (/^\/shorts\//i.test(url.pathname)) {
+    videoId = url.pathname.split("/").filter(Boolean)[1];
+  } else if (/^\/embed\//i.test(url.pathname)) {
+    videoId = url.pathname.split("/").filter(Boolean)[1];
   }
 
-  if (status === URL_STATUS.PENDING || status === URL_STATUS.UNKNOWN) {
-    return "pending";
-  }
-
-  if (status === URL_STATUS.SUSPICIOUS) {
-    return "suspicious";
-  }
-
-  if (status === URL_STATUS.MALICIOUS) {
-    return "malicious";
-  }
-
-  return "pending";
+  return videoId && VIDEO_ID_REGEX.test(videoId) ? videoId : null;
 }
 
-export function buildUrlSafetyRecords(text) {
-  const urls = extractUrlsFromText(text);
-
-  return urls.map((url) => ({
-    url,
-    status: getInitialUrlStatus(url),
-    checkedAt: null,
-  }));
+/** Indica si el valor es un enlace YouTube permitido por Shopp. */
+export function isSafeYouTubeUrl(value) {
+  return Boolean(getYouTubeVideoId(value));
 }
 
-export function getUrlStatusFromMessage(message, url) {
-  if (!message || !url) return URL_STATUS.UNKNOWN;
+/** Convierte cualquier formato aceptado a una URL reproducible estándar. */
+export function normalizeYouTubeUrl(value) {
+  const videoId = getYouTubeVideoId(value);
+  return videoId ? `https://www.youtube.com/watch?v=${videoId}` : null;
+}
 
-  const records = message.urlSafety || message.urls || message.links || [];
+/**
+ * Devuelve los datos necesarios para validación y reproducción.
+ * Es útil para no extraer el ID dos veces en el componente.
+ */
+export function parseYouTubeUrl(value) {
+  const videoId = getYouTubeVideoId(value);
 
-  const found = records.find((item) => {
-    return item?.url === url;
-  });
-
-  if (!found) {
-    return getInitialUrlStatus(url);
+  if (!videoId) {
+    return { isValid: false, videoId: null, playableUrl: null };
   }
 
-  return found.status || URL_STATUS.UNKNOWN;
+  return {
+    isValid: true,
+    videoId,
+    playableUrl: `https://www.youtube.com/watch?v=${videoId}`,
+  };
 }
 
-export function containsOnlySafeOpenableUrls(message) {
-  const text = message?.text || message?.body || "";
-  const urls = extractUrlsFromText(text);
-
-  if (urls.length === 0) return true;
-
-  return urls.every((url) => {
-    const status = getUrlStatusFromMessage(message, url);
-    return canOpenUrlByStatus(status);
-  });
-}
+export default {
+  extractUrlsFromText,
+  normalizeUrl,
+  getYouTubeVideoId,
+  isSafeYouTubeUrl,
+  normalizeYouTubeUrl,
+  parseYouTubeUrl,
+};

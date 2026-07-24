@@ -27,6 +27,10 @@ import {
   getProductImageUrl,
   getProductUrl,
 } from "@/src/services/productLookup";
+import {
+  googleProductSearch,
+  googleShoppingProductSearch,
+} from "@/src/services/productSearchEngines";
 
 export default function ProductInfoScreen({ route, navigation }) {
   const params = route?.params || {};
@@ -122,6 +126,30 @@ export default function ProductInfoScreen({ route, navigation }) {
     loadedBarcodeRef.current = null;
     loadProduct({ force: true });
   }, [loadProduct]);
+
+  const handleGoogleProductSearch = useCallback(async () => {
+    try {
+      setLocalError(null);
+      const result = await googleProductSearch(barcode);
+      if (!result.ok) {
+        setLocalError(result.error);
+      }
+    } catch (err) {
+      setLocalError(err?.message || "No se pudo abrir la búsqueda de Google.");
+    }
+  }, [barcode]);
+
+  const handleGoogleShoppingSearch = useCallback(async () => {
+    try {
+      setLocalError(null);
+      const result = await googleShoppingProductSearch(barcode);
+      if (!result.ok) {
+        setLocalError(result.error);
+      }
+    } catch (err) {
+      setLocalError(err?.message || "No se pudo abrir Google Shopping.");
+    }
+  }, [barcode]);
 
   const handleEdit = useCallback(() => {
     navigation.navigate(ROUTES.EDIT_SCANNED_ITEM, {
@@ -225,6 +253,24 @@ export default function ProductInfoScreen({ route, navigation }) {
 
           <Pressable style={styles.secondaryButton} onPress={handleRefresh}>
             <Text style={styles.secondaryButtonText}>Buscar de nuevo</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={handleGoogleProductSearch}
+          >
+            <Text style={styles.secondaryButtonText}>
+              Buscar producto en Google
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.secondaryButton}
+            onPress={handleGoogleShoppingSearch}
+          >
+            <Text style={styles.secondaryButtonText}>
+              Buscar en Google Shopping
+            </Text>
           </Pressable>
 
           {productUrl ? (

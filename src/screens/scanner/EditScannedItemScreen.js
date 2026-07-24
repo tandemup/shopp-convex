@@ -39,6 +39,7 @@ import {
 
 import { useScannedHistoryStorage } from "@/src/hooks/useScannedHistoryStorage";
 import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
+import BarcodeLink from "@/src/components/controls/BarcodeLink";
 
 function normalizeString(value) {
   return String(value || "").trim();
@@ -376,7 +377,6 @@ export default function EditScannedItemScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [localError, setLocalError] = useState(null);
-
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [category, setCategory] = useState("");
@@ -807,7 +807,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
             {resolvedName}
           </Text>
 
-          <View style={styles.productBarcodeRow}>
+          <BarcodeLink barcode={barcode} style={styles.productBarcodeRow}>
             <View style={styles.productBarcodeContent}>
               <Text style={styles.productBarcodeLabel}>Código de barras</Text>
               <Text
@@ -822,7 +822,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
             <View style={styles.productBarcodeTypeBadge}>
               <Text style={styles.productBarcodeTypeText}>EAN-13</Text>
             </View>
-          </View>
+          </BarcodeLink>
         </View>
 
         {visibleError ? (
@@ -1833,7 +1833,6 @@ const styles = StyleSheet.create({
     fontSize: 19,
     lineHeight: 25,
     fontWeight: "900",
-    paddingLeft: 58,
   },
 
   productBarcodeRow: {
@@ -1845,6 +1844,63 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 15,
     backgroundColor: "#1D2939",
+  },
+
+  productBarcodeRowPressed: {
+    opacity: 0.82,
+  },
+
+  safeMenu: {
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#182337",
+    borderWidth: 1,
+    borderColor: "#2C3A53",
+  },
+
+  safeMenuTitle: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+
+  safeMenuDescription: {
+    marginTop: 4,
+    color: "#A5B0C4",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  safeMenuOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 42,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#25324A",
+  },
+
+  safeMenuOptionPressed: {
+    opacity: 0.72,
+  },
+
+  safeMenuOptionText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  safeMenuCancel: {
+    backgroundColor: "#3A2E25",
+  },
+
+  safeMenuCancelText: {
+    color: "#FDB022",
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   productBarcodeContent: {

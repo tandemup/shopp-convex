@@ -43,10 +43,14 @@ export function buildProductSearchUrl(engine, barcode) {
 
   switch (safeEngine) {
     case PRODUCT_SEARCH_ENGINES.GOOGLE:
-      return `https://www.google.com/search?q=${encodedBarcode}`;
+      return `https://www.google.com/search?q=${encodeURIComponent(
+        `"${safeBarcode}" producto EAN marca`,
+      )}`;
 
     case PRODUCT_SEARCH_ENGINES.GOOGLE_SHOPPING:
-      return `https://www.google.com/search?tbm=shop&q=${encodedBarcode}`;
+      return `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(
+        `"${safeBarcode}"`,
+      )}`;
 
     case PRODUCT_SEARCH_ENGINES.BING:
       return `https://www.bing.com/search?q=${encodedBarcode}`;
@@ -89,3 +93,20 @@ export async function openProductSearchEngine(engine, barcode) {
     url,
   };
 }
+
+// Búsqueda externa directa en Google por código de barras.
+// Estas funciones son aliases claros para usarlas desde las pantallas.
+export async function googleProductSearch(barcode) {
+  return openProductSearchEngine(PRODUCT_SEARCH_ENGINES.GOOGLE, barcode);
+}
+
+export async function googleShoppingProductSearch(barcode) {
+  return openProductSearchEngine(
+    PRODUCT_SEARCH_ENGINES.GOOGLE_SHOPPING,
+    barcode,
+  );
+}
+
+// Alias descriptivo compatible con nombres usados anteriormente.
+export const openGoogleProductSearch = googleProductSearch;
+export const openGoogleShoppingSearch = googleShoppingProductSearch;

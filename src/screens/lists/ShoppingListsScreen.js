@@ -193,13 +193,15 @@ function QuickActions({
       {
         key: "scanned",
         label: "Escaneos",
-        description: "Productos escaneados",
+        description: "Escanea productos y consulta el historial",
         icon: "barcode-outline",
         iconColor: COLORS.cyan,
         iconBackground: COLORS.cyanSoft,
         badge: scannedCount,
-        onPress: () =>
-          navigateToNestedRoute(ROUTES.SCANNER_TAB, ROUTES.SCANNED_HISTORY),
+        // El acceso rápido debe abrir el tab Scanner completo para
+        // centralizar allí todas sus acciones, en lugar de saltar
+        // directamente a una pantalla interna como el historial.
+        onPress: () => navigation.navigate(ROUTES.SCANNER_TAB),
       },
       {
         key: "chat",
