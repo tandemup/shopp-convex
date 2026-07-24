@@ -4,7 +4,6 @@ import React, { useCallback } from "react";
 import { Pressable, Text } from "react-native";
 
 import { openExternalUrl } from "@/src/utils/openExternalUrl";
-
 import * as Clipboard from "expo-clipboard";
 
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
@@ -58,20 +57,20 @@ export default function BarcodeLink({
   const handlePress = useCallback(async () => {
     if (!barcode) return;
 
-    const { label: engineLabel } = await getSelectedProductEngine();
-
     safeAlert("Código de barras", barcode, [
       {
         text: "Copiar barcode",
         onPress: async () => {
           try {
             await Clipboard.setStringAsync(barcode);
+
             safeAlert(
               "Código copiado",
               `Se ha copiado ${barcode} al portapapeles.`,
             );
           } catch (error) {
             console.warn("Error copiando barcode:", error);
+
             safeAlert(
               "No se pudo copiar",
               "No se pudo copiar el código de barras al portapapeles.",

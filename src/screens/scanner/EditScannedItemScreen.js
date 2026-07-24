@@ -1883,59 +1883,6 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
 
-  safeMenu: {
-    marginTop: 8,
-    padding: 12,
-    borderRadius: 14,
-    backgroundColor: "#182337",
-    borderWidth: 1,
-    borderColor: "#2C3A53",
-  },
-
-  safeMenuTitle: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-
-  safeMenuDescription: {
-    marginTop: 4,
-    color: "#A5B0C4",
-    fontSize: 12,
-    lineHeight: 16,
-  },
-
-  safeMenuOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 42,
-    marginTop: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: "#25324A",
-  },
-
-  safeMenuOptionPressed: {
-    opacity: 0.72,
-  },
-
-  safeMenuOptionText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
-  safeMenuCancel: {
-    backgroundColor: "#3A2E25",
-  },
-
-  safeMenuCancelText: {
-    color: "#FDB022",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-
   productBarcodeContent: {
     flex: 1,
     minWidth: 0,

@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import BarcodeLink from "@/src/components/controls/BarcodeLink";
 
 import DatePill from "@/src/components/controls/DatePill";
 import StorePill from "@/src/components/controls/StorePill";
@@ -159,7 +160,14 @@ const ShoppingListItemRow = ({ item, isLast, onToggle, onEdit }) => {
         />
 
         {typeof item.barcode === "string" && item.barcode.length > 0 ? (
-          <Text style={styles.barcode}>🔎 {item.barcode}</Text>
+          <BarcodeLink
+            barcode={item.barcode}
+            style={styles.barcodeLink}
+            textStyle={styles.barcodeText}
+            label={item.barcode}
+          >
+            <Text style={styles.barcodeText}>🔎 {item.barcode}</Text>
+          </BarcodeLink>
         ) : null}
 
         {typeof savings === "number" && savings > 0 ? (
@@ -705,12 +713,6 @@ const styles = StyleSheet.create({
     color: "#64748B",
   },
 
-  barcode: {
-    fontSize: 12,
-    color: "#2563EB",
-    marginTop: 4,
-  },
-
   summaryText: {
     fontSize: 12,
     color: "#6B7280",
@@ -729,6 +731,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#B45309",
     marginTop: 4,
+  },
+
+  barcodeLink: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "#D7DEE8",
+  },
+
+  barcodeText: {
+    color: "#2563EB",
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.2,
   },
 
   itemPriceColumn: {
