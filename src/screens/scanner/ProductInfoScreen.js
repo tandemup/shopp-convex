@@ -27,10 +27,6 @@ import {
   getProductImageUrl,
   getProductUrl,
 } from "@/src/services/productLookup";
-import {
-  googleProductSearch,
-  googleShoppingProductSearch,
-} from "@/src/services/productSearchEngines";
 
 export default function ProductInfoScreen({ route, navigation }) {
   const params = route?.params || {};
@@ -128,24 +124,34 @@ export default function ProductInfoScreen({ route, navigation }) {
   }, [loadProduct]);
 
   const handleGoogleProductSearch = useCallback(async () => {
+    if (!barcode) {
+      setLocalError("No se ha recibido ningún código de barras.");
+      return;
+    }
+
     try {
       setLocalError(null);
-      const result = await googleProductSearch(barcode);
-      if (!result.ok) {
-        setLocalError(result.error);
-      }
+      const url = `https://www.google.com/search?q=${encodeURIComponent(
+        `${barcode}`,
+      )}`;
+      await Linking.openURL(url);
     } catch (err) {
       setLocalError(err?.message || "No se pudo abrir la búsqueda de Google.");
     }
   }, [barcode]);
 
   const handleGoogleShoppingSearch = useCallback(async () => {
+    if (!barcode) {
+      setLocalError("No se ha recibido ningún código de barras.");
+      return;
+    }
+
     try {
       setLocalError(null);
-      const result = await googleShoppingProductSearch(barcode);
-      if (!result.ok) {
-        setLocalError(result.error);
-      }
+      const url = `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(
+        barcode,
+      )}`;
+      await Linking.openURL(url);
     } catch (err) {
       setLocalError(err?.message || "No se pudo abrir Google Shopping.");
     }
@@ -249,10 +255,6 @@ export default function ProductInfoScreen({ route, navigation }) {
         <View style={styles.actions}>
           <Pressable style={styles.primaryButton} onPress={handleEdit}>
             <Text style={styles.primaryButtonText}>Editar producto</Text>
-          </Pressable>
-
-          <Pressable style={styles.secondaryButton} onPress={handleRefresh}>
-            <Text style={styles.secondaryButtonText}>Buscar de nuevo</Text>
           </Pressable>
 
           <Pressable

@@ -40,6 +40,7 @@ import {
 import { useScannedHistoryStorage } from "@/src/hooks/useScannedHistoryStorage";
 import { normalizeBarcode } from "@/src/utils/barcodeNormalization";
 import BarcodeLink from "@/src/components/controls/BarcodeLink";
+import { ROUTES } from "@/src/navigation/ROUTES";
 
 function normalizeString(value) {
   return String(value || "").trim();
@@ -701,6 +702,14 @@ export default function EditScannedItemScreen({ route, navigation }) {
     }
   }, [barcode, navigation, scanHistoryStorage]);
 
+  const handleShowProductInfo = useCallback(() => {
+    navigation.navigate(ROUTES.PRODUCT_INFO, {
+      barcode,
+      product: product || null,
+      fromCache: dataSource === "convex",
+    });
+  }, [barcode, dataSource, navigation, product]);
+
   const handleGoogleAIModeSearch = useCallback(async () => {
     if (!barcode) {
       setLocalError("No hay código de barras para buscar.");
@@ -1035,6 +1044,30 @@ export default function EditScannedItemScreen({ route, navigation }) {
                         </View>
                       </>
                     )}
+                  </Pressable>
+
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.secondaryButton,
+                      pressed && styles.secondaryButtonPressed,
+                      busy && styles.disabledButton,
+                    ]}
+                    onPress={handleShowProductInfo}
+                    disabled={busy || !barcode}
+                  >
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={20}
+                      color="#2563EB"
+                    />
+                    <View style={styles.buttonTextBlock}>
+                      <Text style={styles.secondaryButtonText}>
+                        Ver información del producto
+                      </Text>
+                      <Text style={styles.secondaryButtonHint}>
+                        Consulta la ficha completa del producto
+                      </Text>
+                    </View>
                   </Pressable>
 
                   <View style={styles.dangerZone}>
