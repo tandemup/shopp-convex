@@ -13,6 +13,7 @@ import StorePill from "@/src/components/controls/StorePill";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import SearchBar from "@/src/components/features/search/SearchBar";
+import BarcodeLink from "@/src/components/controls/BarcodeLink";
 import { Ionicons } from "@expo/vector-icons";
 import { formatCurrency } from "@/src/utils/store/formatters";
 import { ROUTES } from "@/src/navigation/ROUTES";
@@ -100,7 +101,14 @@ const ArchivedItemRow = ({ item, isLast }) => {
         )}
 
         {typeof item.barcode === "string" && item.barcode.length > 0 && (
-          <Text style={styles.barcode}>🔎 {item.barcode}</Text>
+          <View style={styles.barcodeLinkContainer}>
+            <BarcodeLink
+              barcode={item.barcode}
+              label={`🔎 ${item.barcode}`}
+              style={styles.barcodeLink}
+              textStyle={styles.barcode}
+            />
+          </View>
         )}
 
         {typeof savings === "number" && savings > 0 && (
@@ -239,7 +247,9 @@ export default function ArchivedListsScreen({ navigation }) {
     });
   };
 
-  const openStoreInfo = (storeId) => {
+  const openStoreInfo = (storeOrId) => {
+    const storeId = typeof storeOrId === "string" ? storeOrId : storeOrId?.id;
+
     if (!storeId) return;
 
     navigation.navigate(ROUTES.STORES_TAB, {
@@ -490,6 +500,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#2563EB",
     marginTop: 4,
+  },
+
+  barcodeLinkContainer: {
+    alignSelf: "flex-start",
+    marginTop: 4,
+  },
+
+  barcodeLink: {
+    paddingVertical: 1,
   },
 
   summaryText: {
