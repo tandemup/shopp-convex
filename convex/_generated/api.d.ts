@@ -10,15 +10,18 @@
 
 import type * as ResendOTPEmailVerification from "../ResendOTPEmailVerification.js";
 import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
+import type * as albums from "../albums.js";
 import type * as auth from "../auth.js";
 import type * as barcodeScans from "../barcodeScans.js";
 import type * as chat from "../chat.js";
 import type * as crons from "../crons.js";
 import type * as factory from "../factory.js";
+import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as items from "../items.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as migrations from "../migrations.js";
+import type * as music from "../music.js";
 import type * as parking from "../parking.js";
 import type * as productCache from "../productCache.js";
 import type * as productReviewSubmissions from "../productReviewSubmissions.js";
@@ -41,15 +44,18 @@ import type {
 declare const fullApi: ApiFromModules<{
   ResendOTPEmailVerification: typeof ResendOTPEmailVerification;
   ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
+  albums: typeof albums;
   auth: typeof auth;
   barcodeScans: typeof barcodeScans;
   chat: typeof chat;
   crons: typeof crons;
   factory: typeof factory;
+  files: typeof files;
   http: typeof http;
   items: typeof items;
   "lib/auth": typeof lib_auth;
   migrations: typeof migrations;
+  music: typeof music;
   parking: typeof parking;
   productCache: typeof productCache;
   productReviewSubmissions: typeof productReviewSubmissions;

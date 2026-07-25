@@ -20,6 +20,7 @@ import StoreMapScreen from "@/src/screens/stores/StoreMapScreen";
 import MenuScreen from "@/src/screens/settings/MenuScreen";
 
 import CarrefourTestScreen from "@/src/screens/CarrefourTestScreen";
+import MusicPlayerScreen from "@/src/screens/music/MusicPlayerScreen";
 
 const Stack = createNativeStackNavigator();
 export default function ShoppingStack() {
@@ -81,6 +82,13 @@ export default function ShoppingStack() {
         component={CarrefourTestScreen}
         options={{
           title: "Catálogo Carrefour",
+        }}
+      />
+      <Stack.Screen
+        name={ROUTES.MUSIC_PLAYER}
+        component={MusicPlayerScreen}
+        options={{
+          headerShown: false,
         }}
       />
     </Stack.Navigator>

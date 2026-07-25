@@ -215,16 +215,6 @@ function QuickActions({
           navigateToNestedRoute(ROUTES.CHAT_TAB, ROUTES.CHAT_SCREEN),
       },
       {
-        key: "music",
-        label: "Música",
-        description: "Escucha tu playlist mientras compras",
-        icon: "musical-notes-outline",
-        iconColor: COLORS.orange,
-        iconBackground: COLORS.orangeSoft,
-        badgeLabel: "NUEVO",
-        onPress: () => navigation.navigate(ROUTES.MUSIC_PLAYER),
-      },
-      {
         key: "parking",
         label: "Parking",
         description: "Localiza tu vehículo",

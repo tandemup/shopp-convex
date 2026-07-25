@@ -11,6 +11,7 @@ export const ROUTES = {
   SHOPPING_LIST: "Shopping List",
   ITEM_DETAIL: "Item Detail",
   CARREFOUR_TEST: "Carrefour Test",
+  MUSIC_PLAYER: "Music Player",
 
   // Stores stack
   STORES_HOME: "Stores Home",

@@ -809,4 +809,35 @@ export default defineSchema({
       "barcode",
       "status",
     ]),
+  musicAlbums: defineTable({
+    title: v.string(),
+    artist: v.string(),
+    description: v.optional(v.string()),
+
+    // Referencia al PNG almacenado en Convex File Storage
+    coverStorageId: v.optional(v.id("_storage")),
+
+    isPublished: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_published", ["isPublished"])
+    .index("by_artist", ["artist"]),
+
+  musicTracks: defineTable({
+    albumId: v.id("musicAlbums"),
+
+    title: v.string(),
+    artist: v.optional(v.string()),
+    trackNumber: v.number(),
+    durationSeconds: v.optional(v.number()),
+
+    // Referencia al fichero MP3
+    audioStorageId: v.id("_storage"),
+
+    isPublished: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index("by_album", ["albumId"])
+    .index("by_album_order", ["albumId", "trackNumber"]),
 });

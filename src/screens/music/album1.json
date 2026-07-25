@@ -1,0 +1,17 @@
+{
+  "title": "Conciertos de Brandeburgo",
+  "artist": "J. S. Bach",
+  "coverUrl": "kg23ytgtvv4r2j1xj27rg9v12h8b6nkf",
+  "tracks": [
+    {
+      "title": "Concierto n.º 1",
+      "trackNumber": 1,
+      "audioUrl": "kg2996fvg7t6my7e41cx7refx98b7xps"
+    },
+    {
+      "title": "Concierto n.º 2",
+      "trackNumber": 2,
+      "audioUrl": "kg201842zqtrfa9wye01c9x1c58b7nf9"
+    }
+  ]
+}
