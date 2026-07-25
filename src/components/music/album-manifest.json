@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "title": "Conciertos de Brandeburgo",
+  "composer": "J. S. Bach",
+  "artist": "",
+  "genre": "Música clásica",
+  "year": 1721,
+  "description": "",
+  "cover": {
+    "storageId": "REEMPLAZAR_CON_STORAGE_ID_DE_CONVEX",
+    "filename": "conciertos-brandeburgo.jpg",
+    "mimeType": "image/jpeg",
+    "sizeBytes": 0
+  },
+  "tracks": [
+    {
+      "title": "Concierto n.º 1",
+      "artist": "",
+      "trackNumber": 1,
+      "audio": {
+        "storageId": "REEMPLAZAR_CON_STORAGE_ID_DE_CONVEX",
+        "filename": "01-concierto-1.mp3",
+        "mimeType": "audio/mpeg",
+        "sizeBytes": 0
+      }
+    }
+  ]
+}

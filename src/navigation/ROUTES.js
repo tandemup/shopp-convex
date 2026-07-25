@@ -11,7 +11,6 @@ export const ROUTES = {
   SHOPPING_LIST: "Shopping List",
   ITEM_DETAIL: "Item Detail",
   CARREFOUR_TEST: "Carrefour Test",
-  MUSIC_PLAYER: "Music Player",
 
   // Stores stack
   STORES_HOME: "Stores Home",
@@ -69,6 +68,11 @@ export const ROUTES = {
   PARKING_SCREEN: "Parking",
   PARKING_SETTINGS: "ParkingSettings",
   YESTERDAY_NEWS_SCREEN: "Yesterday News",
+
+  // Musica
+  MUSIC_LIBRARY: "Music Library",
+  MUSIC_PLAYER: "Music Player",
+  ADMIN_ALBUM_UPLOAD: "Admin Album Upload",
 
   // Debug
   PRODUCT_LEARNING_DEBUG: "Product Learning Debug",

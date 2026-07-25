@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Image,
   Pressable,
@@ -7,282 +8,561 @@ import {
   Text,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import AlbumSearchBar from "../../components/music/AlbumSearchBar";
 
-const COLORS = {
-  background: "#F4F7FB",
-  surface: "#FFFFFF",
-  text: "#172033",
-  muted: "#667085",
-  primary: "#2563EB",
-  border: "#E4E7EC",
-};
+function formatMillis(value) {
+  const totalSeconds = Math.max(0, Math.floor((value || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 
-// Convex debe devolver estas URLs mediante storage.getUrl(storageId).
-const DEFAULT_PLAYLIST = [
-  {
-    id: "demo-1",
-    title: "Canción de ejemplo",
-    artist: "Añade una pista desde Convex",
-    artworkUrl: null,
-    audioUrl: null,
-  },
-];
+export default function MusicPlayerScreen() {
+  const albums = useQuery(api.musicAlbums.listPublished) || [];
 
-export default function MusicPlayerScreen({ navigation, route }) {
-  const playlist = route?.params?.playlist?.length
-    ? route.params.playlist
-    : DEFAULT_PLAYLIST;
-  const [trackIndex, setTrackIndex] = useState(0);
-  const [sound, setSound] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [selectedAlbumId, setSelectedAlbumId] = useState(null);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+  const [status, setStatus] = useState({
+    isLoaded: false,
+    isPlaying: false,
+    positionMillis: 0,
+    durationMillis: 0,
+  });
+  const [playerError, setPlayerError] = useState("");
 
-  const track = playlist[trackIndex] || playlist[0];
-  const hasAudio = Boolean(track?.audioUrl);
+  const soundRef = useRef(null);
 
-  const releaseSound = async () => {
-    if (!sound) return;
-    await sound.unloadAsync();
-    setSound(null);
-    setIsPlaying(false);
-  };
-
-  useEffect(
-    () => () => {
-      if (sound) sound.unloadAsync();
-    },
-    [sound],
+  const album = useQuery(
+    api.musicAlbums.getPublishedWithTracks,
+    selectedAlbumId ? { albumId: selectedAlbumId } : "skip",
   );
 
+  const filteredAlbums = useMemo(() => {
+    const search = searchText.trim().toLocaleLowerCase("es");
+
+    if (!search) return albums;
+
+    return albums.filter((item) => {
+      const searchable =
+        `${item.title} ${item.artist} ${item.genre || ""}`.toLocaleLowerCase(
+          "es",
+        );
+
+      return searchable.includes(search);
+    });
+  }, [albums, searchText]);
+
+  const currentTrack = album?.tracks?.[currentTrackIndex] || null;
+
+  const unloadSound = async () => {
+    const sound = soundRef.current;
+    soundRef.current = null;
+
+    if (sound) {
+      await sound.unloadAsync().catch(() => {});
+    }
+
+    setStatus({
+      isLoaded: false,
+      isPlaying: false,
+      positionMillis: 0,
+      durationMillis: 0,
+    });
+  };
+
   useEffect(() => {
-    releaseSound();
-  }, [trackIndex]);
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+    }).catch(() => {});
+
+    return () => {
+      unloadSound();
+    };
+  }, []);
+
+  useEffect(() => {
+    setCurrentTrackIndex(0);
+    unloadSound();
+  }, [selectedAlbumId]);
+
+  const loadTrack = async (trackIndex, shouldPlay = true) => {
+    const track = album?.tracks?.[trackIndex];
+
+    if (!track?.audioUrl) return;
+
+    setPlayerError("");
+    await unloadSound();
+
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: track.audioUrl },
+        {
+          shouldPlay,
+          progressUpdateIntervalMillis: 500,
+        },
+        (nextStatus) => {
+          if (!nextStatus.isLoaded) {
+            if (nextStatus.error) {
+              setPlayerError(nextStatus.error);
+            }
+            return;
+          }
+
+          setStatus({
+            isLoaded: true,
+            isPlaying: nextStatus.isPlaying,
+            positionMillis: nextStatus.positionMillis || 0,
+            durationMillis: nextStatus.durationMillis || 0,
+          });
+
+          if (nextStatus.didJustFinish && !nextStatus.isLooping) {
+            const nextIndex = trackIndex + 1;
+
+            if (nextIndex < (album?.tracks?.length || 0)) {
+              setCurrentTrackIndex(nextIndex);
+              loadTrack(nextIndex, true);
+            }
+          }
+        },
+      );
+
+      soundRef.current = sound;
+      setCurrentTrackIndex(trackIndex);
+    } catch (error) {
+      console.error("Error cargando pista:", error);
+      setPlayerError(error?.message || "No se pudo reproducir la pista.");
+    }
+  };
 
   const togglePlayback = async () => {
-    if (!hasAudio) return;
+    if (!currentTrack) return;
 
-    if (!sound) {
-      const result = await Audio.Sound.createAsync(
-        { uri: track.audioUrl },
-        { shouldPlay: true },
-      );
-      setSound(result.sound);
-      setIsPlaying(true);
+    if (!soundRef.current || !status.isLoaded) {
+      await loadTrack(currentTrackIndex, true);
       return;
     }
 
-    if (isPlaying) {
-      await sound.pauseAsync();
-      setIsPlaying(false);
+    if (status.isPlaying) {
+      await soundRef.current.pauseAsync();
     } else {
-      await sound.playAsync();
-      setIsPlaying(true);
+      await soundRef.current.playAsync();
     }
   };
 
-  const selectTrack = async (index) => {
-    await releaseSound();
-    setTrackIndex(index);
+  const playPrevious = async () => {
+    const previous = Math.max(0, currentTrackIndex - 1);
+    await loadTrack(previous, true);
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Reproductor de música</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+  const playNext = async () => {
+    const lastIndex = Math.max(0, (album?.tracks?.length || 1) - 1);
+    const next = Math.min(lastIndex, currentTrackIndex + 1);
+    await loadTrack(next, true);
+  };
 
-      <FlatList
-        data={playlist}
-        keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.content}
-        ListHeaderComponent={
-          <>
-            {track?.artworkUrl ? (
+  if (selectedAlbumId && album === undefined) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator />
+        <Text style={styles.loadingText}>Cargando álbum...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.screen}>
+      <AlbumSearchBar value={searchText} onChangeText={setSearchText} />
+
+      {!selectedAlbumId ? (
+        <FlatList
+          data={filteredAlbums}
+          keyExtractor={(item) => String(item._id)}
+          contentContainerStyle={styles.albumList}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="albums-outline" size={44} color="#94a3b8" />
+              <Text style={styles.emptyTitle}>No hay álbumes</Text>
+              <Text style={styles.emptyText}>
+                Prueba con otro título, artista o género.
+              </Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <Pressable
+              style={styles.albumCard}
+              onPress={() => setSelectedAlbumId(item._id)}
+            >
+              {item.coverUrl ? (
+                <Image
+                  source={{ uri: item.coverUrl }}
+                  style={styles.albumCover}
+                />
+              ) : (
+                <View style={[styles.albumCover, styles.coverPlaceholder]}>
+                  <Ionicons name="musical-notes" size={28} color="#64748b" />
+                </View>
+              )}
+
+              <View style={styles.flex}>
+                <Text style={styles.albumTitle}>{item.title}</Text>
+                <Text style={styles.albumArtist}>{item.artist}</Text>
+                <Text style={styles.albumMeta}>
+                  {item.trackCount} pistas
+                  {item.genre ? ` · ${item.genre}` : ""}
+                  {item.year ? ` · ${item.year}` : ""}
+                </Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
+            </Pressable>
+          )}
+        />
+      ) : (
+        <View style={styles.playerLayout}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => setSelectedAlbumId(null)}
+          >
+            <Ionicons name="arrow-back" size={20} color="#1d4ed8" />
+            <Text style={styles.backText}>Álbumes</Text>
+          </Pressable>
+
+          <View style={styles.albumHeader}>
+            {album?.coverUrl ? (
               <Image
-                source={{ uri: track.artworkUrl }}
-                style={styles.artwork}
+                source={{ uri: album.coverUrl }}
+                style={styles.largeCover}
               />
             ) : (
-              <View style={[styles.artwork, styles.artworkPlaceholder]}>
-                <Ionicons name="musical-notes" size={86} color="#FFFFFF" />
-                <Text style={styles.artworkPlaceholderText}>Shopp Music</Text>
+              <View style={[styles.largeCover, styles.coverPlaceholder]}>
+                <Ionicons name="musical-notes" size={42} color="#64748b" />
               </View>
             )}
-            <Text style={styles.title} numberOfLines={1}>
-              {track?.title || "Sin título"}
-            </Text>
-            <Text style={styles.artist} numberOfLines={1}>
-              {track?.artist || "Artista desconocido"}
-            </Text>
 
-            {!hasAudio && (
-              <Text style={styles.notice}>
-                Esta pista todavía no tiene una URL MP3 de Convex File Storage.
+            <View style={styles.flex}>
+              <Text style={styles.selectedTitle}>{album?.title}</Text>
+              <Text style={styles.selectedArtist}>{album?.artist}</Text>
+              <Text style={styles.albumMeta}>
+                {album?.tracks?.length || 0} pistas
               </Text>
-            )}
+            </View>
+          </View>
 
-            <View style={styles.controls}>
+          <FlatList
+            data={album?.tracks || []}
+            keyExtractor={(item) => String(item._id)}
+            style={styles.trackList}
+            contentContainerStyle={styles.trackListContent}
+            renderItem={({ item, index }) => {
+              const active = index === currentTrackIndex;
+
+              return (
+                <Pressable
+                  style={[styles.trackItem, active && styles.trackItemActive]}
+                  onPress={() => loadTrack(index, true)}
+                >
+                  <Text
+                    style={[
+                      styles.trackIndex,
+                      active && styles.trackTextActive,
+                    ]}
+                  >
+                    {String(item.trackNumber).padStart(2, "0")}
+                  </Text>
+
+                  <View style={styles.flex}>
+                    <Text
+                      style={[
+                        styles.trackTitle,
+                        active && styles.trackTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text style={styles.trackArtist} numberOfLines={1}>
+                      {item.artist || album?.artist}
+                    </Text>
+                  </View>
+
+                  {active && status.isPlaying ? (
+                    <Ionicons name="volume-high" size={19} color="#2563eb" />
+                  ) : (
+                    <Ionicons name="play-outline" size={19} color="#64748b" />
+                  )}
+                </Pressable>
+              );
+            }}
+          />
+
+          <View style={styles.controls}>
+            <View style={styles.nowPlaying}>
+              <Text style={styles.nowPlayingLabel}>Reproduciendo</Text>
+              <Text style={styles.nowPlayingTitle} numberOfLines={1}>
+                {currentTrack?.title || "Selecciona una pista"}
+              </Text>
+              <Text style={styles.timeText}>
+                {formatMillis(status.positionMillis)} /{" "}
+                {formatMillis(status.durationMillis)}
+              </Text>
+              {playerError ? (
+                <Text style={styles.errorText}>{playerError}</Text>
+              ) : null}
+            </View>
+
+            <View style={styles.buttonsRow}>
               <Pressable
-                onPress={() => selectTrack(Math.max(0, trackIndex - 1))}
-                hitSlop={10}
+                style={styles.controlButton}
+                onPress={playPrevious}
+                disabled={!currentTrack}
               >
-                <Ionicons name="play-skip-back" size={28} color={COLORS.text} />
+                <Ionicons name="play-skip-back" size={24} color="#0f172a" />
               </Pressable>
-              <Pressable onPress={togglePlayback} style={styles.playButton}>
+
+              <Pressable
+                style={styles.playButton}
+                onPress={togglePlayback}
+                disabled={!currentTrack}
+              >
                 <Ionicons
-                  name={isPlaying ? "pause" : "play"}
+                  name={status.isPlaying ? "pause" : "play"}
                   size={30}
-                  color="#FFFFFF"
+                  color="#ffffff"
                 />
               </Pressable>
-              <Pressable
-                onPress={() =>
-                  selectTrack(Math.min(playlist.length - 1, trackIndex + 1))
-                }
-                hitSlop={10}
-              >
-                <Ionicons
-                  name="play-skip-forward"
-                  size={28}
-                  color={COLORS.text}
-                />
-              </Pressable>
-            </View>
 
-            <Text style={styles.playlistTitle}>Playlist</Text>
-          </>
-        }
-        renderItem={({ item, index }) => (
-          <Pressable
-            onPress={() => selectTrack(index)}
-            style={[
-              styles.trackRow,
-              index === trackIndex && styles.trackRowActive,
-            ]}
-          >
-            <Text style={styles.trackNumber}>{index + 1}</Text>
-            <View style={styles.trackText}>
-              <Text style={styles.trackTitle} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={styles.trackArtist} numberOfLines={1}>
-                {item.artist || ""}
-              </Text>
+              <Pressable
+                style={styles.controlButton}
+                onPress={playNext}
+                disabled={!currentTrack}
+              >
+                <Ionicons name="play-skip-forward" size={24} color="#0f172a" />
+              </Pressable>
             </View>
-            {index === trackIndex && (
-              <Ionicons name="volume-medium" size={19} color={COLORS.primary} />
-            )}
-          </Pressable>
-        )}
-      />
-    </SafeAreaView>
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: COLORS.background },
-  header: {
-    height: 58,
-    paddingHorizontal: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  headerTitle: {
+  screen: {
     flex: 1,
-    textAlign: "center",
-    fontSize: 18,
-    fontWeight: "800",
-    color: COLORS.text,
+    backgroundColor: "#f1f5f9",
   },
-  headerSpacer: { width: 24 },
-  content: { padding: 20, paddingBottom: 40 },
-  artwork: {
-    width: "100%",
-    aspectRatio: 1,
-    maxWidth: 420,
-    alignSelf: "center",
-    borderRadius: 18,
-    backgroundColor: "#E5E7EB",
-  },
-  artworkPlaceholder: {
+  centered: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2563EB",
+    backgroundColor: "#f1f5f9",
   },
-  artworkPlaceholderText: {
+  loadingText: {
     marginTop: 10,
-    color: "#FFFFFF",
-    fontSize: 20,
+    color: "#64748b",
+  },
+  albumList: {
+    width: "100%",
+    maxWidth: 820,
+    alignSelf: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 32,
+  },
+  albumCard: {
+    minHeight: 92,
+    marginBottom: 10,
+    padding: 10,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  albumCover: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: "#e2e8f0",
+  },
+  coverPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  flex: {
+    flex: 1,
+  },
+  albumTitle: {
+    color: "#0f172a",
+    fontSize: 17,
     fontWeight: "800",
   },
-  title: {
-    marginTop: 18,
-    textAlign: "center",
-    fontSize: 22,
-    fontWeight: "800",
-    color: COLORS.text,
+  albumArtist: {
+    marginTop: 3,
+    color: "#475569",
+    fontSize: 15,
   },
-  artist: {
-    marginTop: 4,
-    textAlign: "center",
-    fontSize: 14,
-    color: COLORS.muted,
-  },
-  notice: {
-    marginTop: 14,
-    textAlign: "center",
+  albumMeta: {
+    marginTop: 5,
+    color: "#94a3b8",
     fontSize: 13,
-    lineHeight: 19,
-    color: COLORS.muted,
+  },
+  empty: {
+    paddingTop: 80,
+    alignItems: "center",
+  },
+  emptyTitle: {
+    marginTop: 12,
+    color: "#334155",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  emptyText: {
+    marginTop: 5,
+    color: "#64748b",
+  },
+  playerLayout: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 900,
+    alignSelf: "center",
+    paddingHorizontal: 16,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  backText: {
+    color: "#1d4ed8",
+    fontWeight: "800",
+  },
+  albumHeader: {
+    marginVertical: 10,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  largeCover: {
+    width: 110,
+    height: 110,
+    borderRadius: 12,
+    backgroundColor: "#e2e8f0",
+  },
+  selectedTitle: {
+    color: "#0f172a",
+    fontSize: 23,
+    fontWeight: "900",
+  },
+  selectedArtist: {
+    marginTop: 5,
+    color: "#475569",
+    fontSize: 17,
+  },
+  trackList: {
+    flex: 1,
+  },
+  trackListContent: {
+    paddingBottom: 12,
+  },
+  trackItem: {
+    minHeight: 58,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  trackItemActive: {
+    backgroundColor: "#eff6ff",
+  },
+  trackIndex: {
+    width: 28,
+    color: "#64748b",
+    fontWeight: "800",
+  },
+  trackTitle: {
+    color: "#0f172a",
+    fontWeight: "800",
+  },
+  trackArtist: {
+    marginTop: 3,
+    color: "#64748b",
+    fontSize: 12,
+  },
+  trackTextActive: {
+    color: "#1d4ed8",
   },
   controls: {
+    marginTop: 8,
+    marginBottom: 12,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  nowPlaying: {
+    alignItems: "center",
+  },
+  nowPlayingLabel: {
+    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  nowPlayingTitle: {
+    marginTop: 4,
+    color: "#0f172a",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  timeText: {
+    marginTop: 4,
+    color: "#64748b",
+    fontVariant: ["tabular-nums"],
+  },
+  errorText: {
+    marginTop: 5,
+    color: "#b91c1c",
+    fontSize: 12,
+  },
+  buttonsRow: {
+    marginTop: 10,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 28,
-    marginVertical: 22,
+    gap: 18,
+  },
+  controlButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
   },
   playButton: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: COLORS.primary,
   },
-  playlistTitle: {
-    marginTop: 8,
-    marginBottom: 10,
-    fontSize: 18,
-    fontWeight: "800",
-    color: COLORS.text,
-  },
-  trackRow: {
-    minHeight: 64,
-    paddingHorizontal: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  trackRowActive: { backgroundColor: "#EAF2FF" },
-  trackNumber: {
-    width: 28,
-    color: COLORS.muted,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  trackText: { flex: 1 },
-  trackTitle: { color: COLORS.text, fontSize: 15, fontWeight: "700" },
-  trackArtist: { marginTop: 3, color: COLORS.muted, fontSize: 12 },
 });

@@ -822,6 +822,10 @@ export default function MenuScreen({ navigation }) {
     navigation.navigate(ROUTES.ADMIN_USERS);
   };
 
+  const goToMusicLibrary = () => {
+    navigation.navigate(ROUTES.MUSIC_LIBRARY);
+  };
+
   const goToProductSearchEngines = () => {
     navigation.navigate(ROUTES.SEARCH_ENGINE_SETTINGS, {
       type: "product",
@@ -1188,6 +1192,17 @@ export default function MenuScreen({ navigation }) {
                 onPress={goToAdminUsers}
               />
             ) : null}
+
+            <SettingsCard
+              icon="musical-notes-outline"
+              title="Biblioteca musical"
+              subtitle={
+                isAdmin
+                  ? "Subir, reproducir y administrar música"
+                  : "Escuchar la música disponible"
+              }
+              onPress={goToMusicLibrary}
+            />
 
             <SettingsCard
               icon="log-out-outline"

@@ -9,6 +9,10 @@ import BarcodeSettingsScreen from "@/src/screens/settings/BarcodeSettingsScreen"
 import ProfileScreen from "@/src/screens/profile/ProfileScreen";
 import AdminUsersScreen from "@/src/screens/admin/AdminUsersScreen";
 
+import MusicLibraryScreen from "@/src/screens/music/MusicLibraryScreen";
+import MusicPlayerScreen from "@/src/screens/music/MusicPlayerScreen";
+import AdminAlbumUploadScreen from "@/src/screens/admin/AdminAlbumUploadScreen";
+
 const Stack = createNativeStackNavigator();
 
 export default function MenuStack() {
@@ -55,6 +59,24 @@ export default function MenuStack() {
         name={ROUTES.ADMIN_USERS}
         component={AdminUsersScreen}
         options={{ title: "Administrar usuarios" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.MUSIC_LIBRARY}
+        component={MusicLibraryScreen}
+        options={{ title: "Música" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.ADMIN_ALBUM_UPLOAD}
+        component={AdminAlbumUploadScreen}
+        options={{ title: "Nuevo álbum" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.MUSIC_PLAYER}
+        component={MusicPlayerScreen}
+        options={{ title: "Reproductor" }}
       />
     </Stack.Navigator>
   );

@@ -1,103 +1,292 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
-// 1. Generar URL para subir PNG o MP3
+async function requireAdmin(ctx) {
+  const userId = await getAuthUserId(ctx);
+
+  if (!userId) {
+    throw new Error("Usuario no autenticado.");
+  }
+
+  const user = await ctx.db.get(userId);
+
+  if (!user || (user.role !== "admin" && user.isAdmin !== true)) {
+    throw new Error("Acceso restringido a administradores.");
+  }
+
+  return userId;
+}
+
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireAdmin(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
 
-// 2. Crear álbum
-export const createAlbum = mutation({
+export const createAlbumDraft = mutation({
   args: {
     title: v.string(),
-    artist: v.string(),
+    composer: v.optional(v.string()),
+    artist: v.optional(v.string()),
+    genre: v.optional(v.string()),
+    year: v.optional(v.number()),
     description: v.optional(v.string()),
-    coverStorageId: v.optional(v.id("_storage")),
+    expectedTrackCount: v.number(),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAdmin(ctx);
+
+    if (!args.title.trim()) {
+      throw new Error("El título del álbum es obligatorio.");
+    }
+
+    const expectedTrackCount = Math.floor(args.expectedTrackCount);
+
+    if (expectedTrackCount < 1 || expectedTrackCount > 20) {
+      throw new Error("Selecciona entre 1 y 20 pistas.");
+    }
+
     const now = Date.now();
 
     return await ctx.db.insert("musicAlbums", {
-      title: args.title,
-      artist: args.artist,
-      description: args.description,
-      coverStorageId: args.coverStorageId,
-      isPublished: false,
+      title: args.title.trim(),
+      composer: args.composer?.trim() || undefined,
+      artist: args.artist?.trim() || undefined,
+      genre: args.genre?.trim() || undefined,
+      year: args.year,
+      description: args.description?.trim() || undefined,
+
+      expectedTrackCount,
+      trackCount: 0,
+      status: "draft",
+
+      createdBy: userId,
       createdAt: now,
       updatedAt: now,
     });
   },
 });
 
-// 3. Añadir canción
-export const addTrack = mutation({
+export const setAlbumCover = mutation({
+  args: {
+    albumId: v.id("musicAlbums"),
+    coverStorageId: v.id("_storage"),
+    coverFilename: v.string(),
+    coverMimeType: v.optional(v.string()),
+    coverSizeBytes: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const album = await ctx.db.get(args.albumId);
+
+    if (!album) {
+      throw new Error("Álbum no encontrado.");
+    }
+
+    const oldCoverStorageId = album.coverStorageId;
+
+    await ctx.db.patch(args.albumId, {
+      coverStorageId: args.coverStorageId,
+      coverFilename: args.coverFilename,
+      coverMimeType: args.coverMimeType,
+      coverSizeBytes: args.coverSizeBytes,
+      updatedAt: Date.now(),
+    });
+
+    if (oldCoverStorageId && oldCoverStorageId !== args.coverStorageId) {
+      await ctx.storage.delete(oldCoverStorageId);
+    }
+  },
+});
+
+export const saveTrack = mutation({
   args: {
     albumId: v.id("musicAlbums"),
     title: v.string(),
     artist: v.optional(v.string()),
     trackNumber: v.number(),
-    durationSeconds: v.optional(v.number()),
+
     audioStorageId: v.id("_storage"),
+    audioFilename: v.string(),
+    audioMimeType: v.optional(v.string()),
+    audioSizeBytes: v.optional(v.number()),
+    durationMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("musicTracks", {
+    await requireAdmin(ctx);
+
+    const album = await ctx.db.get(args.albumId);
+
+    if (!album) {
+      throw new Error("Álbum no encontrado.");
+    }
+
+    if (album.status === "published") {
+      throw new Error("No se pueden añadir pistas a un álbum publicado.");
+    }
+
+    const trackNumber = Math.floor(args.trackNumber);
+
+    const duplicate = await ctx.db
+      .query("musicTracks")
+      .withIndex("by_album_track", (q) =>
+        q.eq("albumId", args.albumId).eq("trackNumber", trackNumber),
+      )
+      .unique();
+
+    if (duplicate) {
+      throw new Error(`Ya existe la pista ${trackNumber}.`);
+    }
+
+    const now = Date.now();
+
+    const trackId = await ctx.db.insert("musicTracks", {
       albumId: args.albumId,
-      title: args.title,
-      artist: args.artist,
-      trackNumber: args.trackNumber,
-      durationSeconds: args.durationSeconds,
+      title: args.title.trim() || `Pista ${trackNumber}`,
+      artist: args.artist?.trim() || undefined,
+      trackNumber,
+
       audioStorageId: args.audioStorageId,
-      isPublished: false,
-      createdAt: Date.now(),
+      audioFilename: args.audioFilename,
+      audioMimeType: args.audioMimeType,
+      audioSizeBytes: args.audioSizeBytes,
+      durationMs: args.durationMs,
+
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const tracks = await ctx.db
+      .query("musicTracks")
+      .withIndex("by_album", (q) => q.eq("albumId", args.albumId))
+      .collect();
+
+    await ctx.db.patch(args.albumId, {
+      trackCount: tracks.length,
+      updatedAt: Date.now(),
+    });
+
+    return trackId;
+  },
+});
+
+export const publishAlbum = mutation({
+  args: {
+    albumId: v.id("musicAlbums"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const album = await ctx.db.get(args.albumId);
+
+    if (!album) {
+      throw new Error("Álbum no encontrado.");
+    }
+
+    if (!album.coverStorageId) {
+      throw new Error("Debes subir una carátula.");
+    }
+
+    const tracks = await ctx.db
+      .query("musicTracks")
+      .withIndex("by_album_track", (q) => q.eq("albumId", args.albumId))
+      .collect();
+
+    if (tracks.length !== album.expectedTrackCount) {
+      throw new Error(
+        `Se esperaban ${album.expectedTrackCount} pistas y hay ${tracks.length}.`,
+      );
+    }
+
+    await ctx.db.patch(args.albumId, {
+      trackCount: tracks.length,
+      status: "published",
+      updatedAt: Date.now(),
     });
   },
 });
 
-// 4. Consultar álbum y playlist
-export const getAlbumWithTracks = query({
+export const listAlbums = query({
+  args: {},
+  handler: async (ctx) => {
+    const albums = await ctx.db
+      .query("musicAlbums")
+      .withIndex("by_status", (q) => q.eq("status", "published"))
+      .collect();
+
+    return await Promise.all(
+      albums.map(async (album) => ({
+        ...album,
+        coverUrl: album.coverStorageId
+          ? await ctx.storage.getUrl(album.coverStorageId)
+          : null,
+      })),
+    );
+  },
+});
+
+export const getAlbum = query({
   args: {
     albumId: v.id("musicAlbums"),
   },
   handler: async (ctx, args) => {
     const album = await ctx.db.get(args.albumId);
 
-    if (!album || !album.isPublished) {
+    if (!album || album.status !== "published") {
       return null;
     }
 
     const tracks = await ctx.db
       .query("musicTracks")
-      .withIndex("by_album_order", (q) => q.eq("albumId", args.albumId))
+      .withIndex("by_album_track", (q) => q.eq("albumId", args.albumId))
       .collect();
 
-    const coverUrl = album.coverStorageId
-      ? await ctx.storage.getUrl(album.coverStorageId)
-      : null;
-
-    const playlist = await Promise.all(
-      tracks
-        .filter((track) => track.isPublished)
-        .map(async (track) => ({
-          id: track._id,
-          title: track.title,
-          artist: track.artist || album.artist,
-          trackNumber: track.trackNumber,
-          durationSeconds: track.durationSeconds,
-          audioUrl: await ctx.storage.getUrl(track.audioStorageId),
-          artworkUrl: coverUrl,
-        })),
-    );
-
     return {
-      id: album._id,
-      title: album.title,
-      artist: album.artist,
-      description: album.description,
-      artworkUrl: coverUrl,
-      playlist,
+      ...album,
+      coverUrl: album.coverStorageId
+        ? await ctx.storage.getUrl(album.coverStorageId)
+        : null,
+      tracks: await Promise.all(
+        tracks.map(async (track) => ({
+          ...track,
+          audioUrl: await ctx.storage.getUrl(track.audioStorageId),
+        })),
+      ),
     };
+  },
+});
+
+export const deleteAlbum = mutation({
+  args: {
+    albumId: v.id("musicAlbums"),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+
+    const album = await ctx.db.get(args.albumId);
+
+    if (!album) {
+      return;
+    }
+
+    const tracks = await ctx.db
+      .query("musicTracks")
+      .withIndex("by_album", (q) => q.eq("albumId", args.albumId))
+      .collect();
+
+    for (const track of tracks) {
+      await ctx.storage.delete(track.audioStorageId);
+      await ctx.db.delete(track._id);
+    }
+
+    if (album.coverStorageId) {
+      await ctx.storage.delete(album.coverStorageId);
+    }
+
+    await ctx.db.delete(args.albumId);
   },
 });

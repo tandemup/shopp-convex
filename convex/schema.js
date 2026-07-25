@@ -164,6 +164,8 @@ export default defineSchema({
     .index("by_userId_createdAt", ["userId", "createdAt"])
     .index("by_expiresAt", ["expiresAt"]),
 
+  // Biblioteca musical almacenada en Convex File Storage.
+
   // Adjuntos temporales para comunicaciones privadas con la administración.
   // Se eliminan del almacenamiento después de enviar el correo, incluso si
   // Resend devuelve un error.
@@ -809,35 +811,54 @@ export default defineSchema({
       "barcode",
       "status",
     ]),
+
   musicAlbums: defineTable({
     title: v.string(),
-    artist: v.string(),
+    composer: v.optional(v.string()),
+    artist: v.optional(v.string()),
+    genre: v.optional(v.string()),
+    year: v.optional(v.float64()),
     description: v.optional(v.string()),
 
-    // Referencia al PNG almacenado en Convex File Storage
     coverStorageId: v.optional(v.id("_storage")),
+    coverFilename: v.optional(v.string()),
+    coverMimeType: v.optional(v.string()),
+    coverSizeBytes: v.optional(v.float64()),
 
-    isPublished: v.boolean(),
-    createdAt: v.number(),
-    updatedAt: v.number(),
+    expectedTrackCount: v.float64(),
+    trackCount: v.float64(),
+
+    status: v.union(
+      v.literal("draft"),
+      v.literal("published"),
+      v.literal("hidden"),
+    ),
+
+    createdBy: v.id("users"),
+    createdAt: v.float64(),
+    updatedAt: v.float64(),
   })
-    .index("by_published", ["isPublished"])
-    .index("by_artist", ["artist"]),
+    .index("by_status", ["status"])
+    .index("by_title", ["title"])
+    .index("by_updatedAt", ["updatedAt"]),
 
   musicTracks: defineTable({
     albumId: v.id("musicAlbums"),
 
     title: v.string(),
     artist: v.optional(v.string()),
-    trackNumber: v.number(),
-    durationSeconds: v.optional(v.number()),
+    trackNumber: v.float64(),
 
-    // Referencia al fichero MP3
     audioStorageId: v.id("_storage"),
+    audioFilename: v.string(),
+    audioMimeType: v.optional(v.string()),
+    audioSizeBytes: v.optional(v.float64()),
+    durationMs: v.optional(v.float64()),
 
-    isPublished: v.boolean(),
-    createdAt: v.number(),
+    createdAt: v.float64(),
+    updatedAt: v.float64(),
   })
     .index("by_album", ["albumId"])
-    .index("by_album_order", ["albumId", "trackNumber"]),
+    .index("by_album_track", ["albumId", "trackNumber"])
+    .index("by_createdAt", ["createdAt"]),
 });
