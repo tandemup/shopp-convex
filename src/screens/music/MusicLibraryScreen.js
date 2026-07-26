@@ -66,10 +66,10 @@ export default function MusicLibraryScreen({ navigation }) {
       {isAdmin ? (
         <Pressable
           style={styles.newAlbumButton}
-          onPress={() => navigation.navigate(ROUTES.ADMIN_ALBUM_UPLOAD)}
+          onPress={() => navigation.navigate(ROUTES.ADMIN_ALBUMS)}
         >
           <Ionicons name="add" size={22} color="#ffffff" />
-          <Text style={styles.newAlbumButtonText}>Subir álbum</Text>
+          <Text style={styles.newAlbumButtonText}>Gestionar álbumes</Text>
         </Pressable>
       ) : null}
 

@@ -19,7 +19,9 @@ export async function requireUser(ctx) {
 export async function requireAdmin(ctx) {
   const user = await requireUser(ctx);
 
-  if (user.role !== "admin") {
+  const isAdmin = user.role === "admin" || user.isAdmin === true;
+
+  if (!isAdmin) {
     throw new Error("No tienes permisos de administrador.");
   }
 

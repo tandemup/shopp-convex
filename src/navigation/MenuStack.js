@@ -11,7 +11,10 @@ import AdminUsersScreen from "@/src/screens/admin/AdminUsersScreen";
 
 import MusicLibraryScreen from "@/src/screens/music/MusicLibraryScreen";
 import MusicPlayerScreen from "@/src/screens/music/MusicPlayerScreen";
+
+import AdminAlbumsScreen from "@/src/screens/admin/AdminAlbumsScreen";
 import AdminAlbumUploadScreen from "@/src/screens/admin/AdminAlbumUploadScreen";
+import AdminAlbumEditScreen from "@/src/screens/admin/AdminAlbumEditScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -65,6 +68,18 @@ export default function MenuStack() {
         name={ROUTES.MUSIC_LIBRARY}
         component={MusicLibraryScreen}
         options={{ title: "Música" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.ADMIN_ALBUMS}
+        component={AdminAlbumsScreen}
+        options={{ title: "Gestión de álbumes" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.ADMIN_ALBUM_EDIT}
+        component={AdminAlbumEditScreen}
+        options={{ title: "Editar álbum" }}
       />
 
       <Stack.Screen

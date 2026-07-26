@@ -181,6 +181,15 @@ export default function AdminAlbumUploadScreen({ navigation }) {
         "La carátula y todas las pistas se han guardado en Convex.",
       );
 
+      setTitle("");
+      setComposer("");
+      setArtist("");
+      setGenre("");
+      setYear("");
+      setDescription("");
+      setCover(null);
+      setTracks([]);
+
       navigation?.goBack?.();
     } catch (error) {
       console.error("[AdminAlbumUpload] error", error);

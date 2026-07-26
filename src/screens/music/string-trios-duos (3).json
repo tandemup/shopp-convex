@@ -1,0 +1,110 @@
+{
+  "album": {
+    "artist": "Grumiaux Trio",
+    "composer": "Mozart",
+    "description": "",
+    "genre": "Clasica",
+    "title": "String Trios & Duos",
+    "year": 1990
+  },
+  "albumId": "nx739wk8r7qddwg85g67a1h84h8b83bd",
+  "cover": {
+    "filename": "cover.png",
+    "mimeType": "image/png",
+    "sizeBytes": 549965,
+    "storageId": "kg2412bwsp6rjvrcxprn3np7gh8b8nr4"
+  },
+  "tracks": [
+    {
+      "artist": "Grumiaux Trio",
+      "audioFilename": "1-01 Divertimento (String Trio) in E.mp3",
+      "audioMimeType": "audio/mpeg",
+      "audioSizeBytes": 10659602,
+      "audioStorageId": "kg214xtp73qyeg4wp3tnbyde6s8b8h5t",
+      "cdTrackTitle": "",
+      "discNumber": 1,
+      "discTrackNumber": 1,
+      "operation": "update",
+      "sortOrder": 1,
+      "title": "1-01 Divertimento (String Trio) in E",
+      "trackId": "p17148p9fv58rcxf69brx3e9zn8b87s6",
+      "trackNumber": 1
+    },
+    {
+      "artist": "Grumiaux Trio",
+      "audioFilename": "1-02 Adagio.mp3",
+      "audioMimeType": "audio/mpeg",
+      "audioSizeBytes": 9925705,
+      "audioStorageId": "kg2d9qcpejday4n3nxteww9y4s8b8gyy",
+      "cdTrackTitle": "",
+      "discNumber": 1,
+      "discTrackNumber": 2,
+      "operation": "update",
+      "sortOrder": 2,
+      "title": "1-02 Adagio",
+      "trackId": "p17aa4evvmhvvm4573kmwbt6pd8b8eqn",
+      "trackNumber": 2
+    },
+    {
+      "artist": "Grumiaux Trio",
+      "audioFilename": "1-03 Divertimento (String Trio) in E.mp3",
+      "audioMimeType": "audio/mpeg",
+      "audioSizeBytes": 7014161,
+      "audioStorageId": "kg29vgham6djn1k7rfr9j2gtcd8b8ms5",
+      "cdTrackTitle": "",
+      "discNumber": 1,
+      "discTrackNumber": 3,
+      "operation": "update",
+      "sortOrder": 3,
+      "title": "1-03 Divertimento (String Trio) in E",
+      "trackId": "p173rgycqt1fgv4rnnxxk8ffts8b9w7b",
+      "trackNumber": 3
+    },
+    {
+      "artist": "Grumiaux Trio",
+      "audioFilename": "1-04 Andante.mp3",
+      "audioMimeType": "audio/mpeg",
+      "audioSizeBytes": 9039632,
+      "audioStorageId": "kg2fksj91dpnebzgnxqgqtc7s18b86ra",
+      "cdTrackTitle": "",
+      "discNumber": 1,
+      "discTrackNumber": 4,
+      "operation": "update",
+      "sortOrder": 4,
+      "title": "1-04 Andante",
+      "trackId": "p1718v50qhew9q680kaya8dshx8b9jnh",
+      "trackNumber": 4
+    },
+    {
+      "artist": "Grumiaux Trio",
+      "audioFilename": "1-05 Divertimento (String Trio) in E.mp3",
+      "audioMimeType": "audio/mpeg",
+      "audioSizeBytes": 6265496,
+      "audioStorageId": "kg2057a3de5sa0fsrd7dnt3rns8b813t",
+      "cdTrackTitle": "",
+      "discNumber": 1,
+      "discTrackNumber": 5,
+      "operation": "update",
+      "sortOrder": 5,
+      "title": "1-05 Divertimento (String Trio) in E",
+      "trackId": "p175qejr5f2vngbwgax145dezs8b8sa4",
+      "trackNumber": 5
+    },
+    {
+      "artist": "Grumiaux Trio",
+      "audioFilename": "1-06 Divertimento (String Trio) in E.mp3",
+      "audioMimeType": "audio/mpeg",
+      "audioSizeBytes": 7257083,
+      "audioStorageId": "kg223zdwtdpwa3bttp81svwxex8b93mn",
+      "cdTrackTitle": "",
+      "discNumber": 1,
+      "discTrackNumber": 6,
+      "operation": "update",
+      "sortOrder": 6,
+      "title": "1-06 Divertimento (String Trio) in E",
+      "trackId": "p17dgjqm0eq246bxk87z4vxdd58b989k",
+      "trackNumber": 6
+    }
+  ],
+  "version": 1
+}

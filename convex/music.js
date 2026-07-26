@@ -1,22 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { getAuthUserId } from "@convex-dev/auth/server";
-
-async function requireAdmin(ctx) {
-  const userId = await getAuthUserId(ctx);
-
-  if (!userId) {
-    throw new Error("Usuario no autenticado.");
-  }
-
-  const user = await ctx.db.get(userId);
-
-  if (!user || (user.role !== "admin" && user.isAdmin !== true)) {
-    throw new Error("Acceso restringido a administradores.");
-  }
-
-  return userId;
-}
+import { requireAdmin } from "./lib/auth";
 
 export const generateUploadUrl = mutation({
   args: {},
@@ -37,7 +21,8 @@ export const createAlbumDraft = mutation({
     expectedTrackCount: v.number(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAdmin(ctx);
+    const admin = await requireAdmin(ctx);
+    const userId = admin._id;
 
     if (!args.title.trim()) {
       throw new Error("El título del álbum es obligatorio.");
@@ -264,13 +249,14 @@ export const deleteAlbum = mutation({
   args: {
     albumId: v.id("musicAlbums"),
   },
+
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
 
     const album = await ctx.db.get(args.albumId);
 
     if (!album) {
-      return;
+      throw new Error("Álbum no encontrado.");
     }
 
     const tracks = await ctx.db
@@ -278,15 +264,24 @@ export const deleteAlbum = mutation({
       .withIndex("by_album", (q) => q.eq("albumId", args.albumId))
       .collect();
 
+    // 1. Eliminar todos los MP3 y documentos de pistas
     for (const track of tracks) {
       await ctx.storage.delete(track.audioStorageId);
+
       await ctx.db.delete(track._id);
     }
 
+    // 2. Eliminar la carátula
     if (album.coverStorageId) {
       await ctx.storage.delete(album.coverStorageId);
     }
 
+    // 3. Eliminar el álbum
     await ctx.db.delete(args.albumId);
+
+    return {
+      deletedAlbumId: args.albumId,
+      deletedTracks: tracks.length,
+    };
   },
 });

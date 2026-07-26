@@ -72,7 +72,9 @@ export const ROUTES = {
   // Musica
   MUSIC_LIBRARY: "Music Library",
   MUSIC_PLAYER: "Music Player",
+  ADMIN_ALBUMS: "Admin Albums",
   ADMIN_ALBUM_UPLOAD: "Admin Album Upload",
+  ADMIN_ALBUM_EDIT: "Admin Album Edit",
 
   // Debug
   PRODUCT_LEARNING_DEBUG: "Product Learning Debug",

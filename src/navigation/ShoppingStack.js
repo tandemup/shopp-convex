@@ -16,9 +16,13 @@ import EditScannedItemScreen from "@/src/screens/scanner/EditScannedItemScreen";
 import StoreMapScreen from "@/src/screens/stores/StoreMapScreen";
 import MenuScreen from "@/src/screens/settings/MenuScreen";
 import CarrefourTestScreen from "@/src/screens/CarrefourTestScreen";
+
 import MusicLibraryScreen from "@/src/screens/music/MusicLibraryScreen";
 import MusicPlayerScreen from "@/src/screens/music/MusicPlayerScreen";
+
+import AdminAlbumsScreen from "@/src/screens/admin/AdminAlbumsScreen";
 import AdminAlbumUploadScreen from "@/src/screens/admin/AdminAlbumUploadScreen";
+import AdminAlbumEditScreen from "@/src/screens/admin/AdminAlbumEditScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -70,6 +74,13 @@ export default function ShoppingStack() {
         component={CarrefourTestScreen}
         options={{ title: "Catálogo Carrefour" }}
       />
+
+      <Stack.Screen
+        name={ROUTES.ADMIN_ALBUMS}
+        component={AdminAlbumsScreen}
+        options={{ title: "Gestión de álbumes" }}
+      />
+
       <Stack.Screen
         name={ROUTES.MUSIC_LIBRARY}
         component={MusicLibraryScreen}
@@ -89,6 +100,12 @@ export default function ShoppingStack() {
         name={ROUTES.ADMIN_ALBUM_UPLOAD}
         component={AdminAlbumUploadScreen}
         options={{ title: "Nuevo álbum" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.ADMIN_ALBUM_EDIT}
+        component={AdminAlbumEditScreen}
+        options={{ title: "Editar álbum" }}
       />
     </Stack.Navigator>
   );

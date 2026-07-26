@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Audio } from "expo-av";
@@ -22,6 +23,10 @@ function formatMillis(value) {
 }
 
 export default function MusicPlayerScreen() {
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 900;
+  const isCompactMobile = width < 420;
+
   const albums = useQuery(api.musicAlbums.listPublished) || [];
 
   const [searchText, setSearchText] = useState("");
@@ -234,117 +239,219 @@ export default function MusicPlayerScreen() {
             <Text style={styles.backText}>Álbumes</Text>
           </Pressable>
 
-          <View style={styles.albumHeader}>
-            {album?.coverUrl ? (
-              <Image
-                source={{ uri: album.coverUrl }}
-                style={styles.largeCover}
-              />
-            ) : (
-              <View style={[styles.largeCover, styles.coverPlaceholder]}>
-                <Ionicons name="musical-notes" size={42} color="#64748b" />
-              </View>
-            )}
+          <View
+            style={[
+              styles.responsivePlayer,
+              !isDesktop && styles.responsivePlayerMobile,
+            ]}
+          >
+            <View
+              style={[
+                styles.playerSidebar,
+                !isDesktop && styles.playerSidebarMobile,
+              ]}
+            >
+              <View
+                style={[
+                  styles.albumHeader,
+                  !isDesktop && styles.albumHeaderMobile,
+                ]}
+              >
+                {album?.coverUrl ? (
+                  <Image
+                    source={{ uri: album.coverUrl }}
+                    style={[
+                      styles.largeCover,
+                      !isDesktop && styles.largeCoverMobile,
+                      isCompactMobile && styles.largeCoverCompact,
+                    ]}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.largeCover,
+                      styles.coverPlaceholder,
+                      !isDesktop && styles.largeCoverMobile,
+                      isCompactMobile && styles.largeCoverCompact,
+                    ]}
+                  >
+                    <Ionicons name="musical-notes" size={42} color="#64748b" />
+                  </View>
+                )}
 
-            <View style={styles.flex}>
-              <Text style={styles.selectedTitle}>{album?.title}</Text>
-              <Text style={styles.selectedArtist}>{album?.artist}</Text>
-              <Text style={styles.albumMeta}>
-                {album?.tracks?.length || 0} pistas
-              </Text>
-            </View>
-          </View>
-
-          <FlatList
-            data={album?.tracks || []}
-            keyExtractor={(item) => String(item._id)}
-            style={styles.trackList}
-            contentContainerStyle={styles.trackListContent}
-            renderItem={({ item, index }) => {
-              const active = index === currentTrackIndex;
-
-              return (
-                <Pressable
-                  style={[styles.trackItem, active && styles.trackItemActive]}
-                  onPress={() => loadTrack(index, true)}
+                <View
+                  style={[
+                    styles.albumInfo,
+                    !isDesktop && styles.albumInfoMobile,
+                  ]}
                 >
                   <Text
                     style={[
-                      styles.trackIndex,
-                      active && styles.trackTextActive,
+                      styles.selectedTitle,
+                      isCompactMobile && styles.selectedTitleCompact,
                     ]}
                   >
-                    {String(item.trackNumber).padStart(2, "0")}
+                    {album?.title}
                   </Text>
 
-                  <View style={styles.flex}>
-                    <Text
-                      style={[
-                        styles.trackTitle,
-                        active && styles.trackTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.title}
-                    </Text>
-                    <Text style={styles.trackArtist} numberOfLines={1}>
-                      {item.artist || album?.artist}
-                    </Text>
-                  </View>
+                  <Text style={styles.selectedArtist}>{album?.artist}</Text>
 
-                  {active && status.isPlaying ? (
-                    <Ionicons name="volume-high" size={19} color="#2563eb" />
-                  ) : (
-                    <Ionicons name="play-outline" size={19} color="#64748b" />
-                  )}
-                </Pressable>
-              );
-            }}
-          />
+                  <Text style={styles.albumMeta}>
+                    {album?.tracks?.length || 0} pistas
+                    {album?.genre ? ` · ${album.genre}` : ""}
+                    {album?.year ? ` · ${album.year}` : ""}
+                  </Text>
+                </View>
+              </View>
 
-          <View style={styles.controls}>
-            <View style={styles.nowPlaying}>
-              <Text style={styles.nowPlayingLabel}>Reproduciendo</Text>
-              <Text style={styles.nowPlayingTitle} numberOfLines={1}>
-                {currentTrack?.title || "Selecciona una pista"}
-              </Text>
-              <Text style={styles.timeText}>
-                {formatMillis(status.positionMillis)} /{" "}
-                {formatMillis(status.durationMillis)}
-              </Text>
-              {playerError ? (
-                <Text style={styles.errorText}>{playerError}</Text>
-              ) : null}
+              <View style={styles.controls}>
+                <View style={styles.nowPlaying}>
+                  <Text style={styles.nowPlayingLabel}>Reproduciendo</Text>
+
+                  <Text style={styles.nowPlayingTitle} numberOfLines={2}>
+                    {currentTrack?.cdTrackTitle ||
+                      currentTrack?.trackTitle ||
+                      currentTrack?.title ||
+                      "Selecciona una pista"}
+                  </Text>
+
+                  {currentTrack?.title &&
+                  currentTrack?.title !==
+                    (currentTrack?.cdTrackTitle || currentTrack?.trackTitle) ? (
+                    <Text style={styles.nowPlayingWork} numberOfLines={2}>
+                      {currentTrack.title}
+                    </Text>
+                  ) : null}
+
+                  <Text style={styles.timeText}>
+                    {formatMillis(status.positionMillis)} /{" "}
+                    {formatMillis(status.durationMillis)}
+                  </Text>
+
+                  {playerError ? (
+                    <Text style={styles.errorText}>{playerError}</Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.buttonsRow}>
+                  <Pressable
+                    style={[
+                      styles.controlButton,
+                      !currentTrack && styles.disabledButton,
+                    ]}
+                    onPress={playPrevious}
+                    disabled={!currentTrack}
+                  >
+                    <Ionicons name="play-skip-back" size={24} color="#0f172a" />
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.playButton,
+                      !currentTrack && styles.disabledButton,
+                    ]}
+                    onPress={togglePlayback}
+                    disabled={!currentTrack}
+                  >
+                    <Ionicons
+                      name={status.isPlaying ? "pause" : "play"}
+                      size={30}
+                      color="#ffffff"
+                    />
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.controlButton,
+                      !currentTrack && styles.disabledButton,
+                    ]}
+                    onPress={playNext}
+                    disabled={!currentTrack}
+                  >
+                    <Ionicons
+                      name="play-skip-forward"
+                      size={24}
+                      color="#0f172a"
+                    />
+                  </Pressable>
+                </View>
+              </View>
             </View>
 
-            <View style={styles.buttonsRow}>
-              <Pressable
-                style={styles.controlButton}
-                onPress={playPrevious}
-                disabled={!currentTrack}
-              >
-                <Ionicons name="play-skip-back" size={24} color="#0f172a" />
-              </Pressable>
+            <View
+              style={[styles.trackPanel, !isDesktop && styles.trackPanelMobile]}
+            >
+              <View style={styles.trackPanelHeader}>
+                <Text style={styles.trackPanelTitle}>Pistas</Text>
+                <Text style={styles.trackPanelCount}>
+                  {album?.tracks?.length || 0}
+                </Text>
+              </View>
 
-              <Pressable
-                style={styles.playButton}
-                onPress={togglePlayback}
-                disabled={!currentTrack}
-              >
-                <Ionicons
-                  name={status.isPlaying ? "pause" : "play"}
-                  size={30}
-                  color="#ffffff"
-                />
-              </Pressable>
+              <FlatList
+                data={album?.tracks || []}
+                keyExtractor={(item) => String(item._id)}
+                style={styles.trackList}
+                contentContainerStyle={styles.trackListContent}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item, index }) => {
+                  const active = index === currentTrackIndex;
 
-              <Pressable
-                style={styles.controlButton}
-                onPress={playNext}
-                disabled={!currentTrack}
-              >
-                <Ionicons name="play-skip-forward" size={24} color="#0f172a" />
-              </Pressable>
+                  return (
+                    <Pressable
+                      style={[
+                        styles.trackItem,
+                        active && styles.trackItemActive,
+                      ]}
+                      onPress={() => loadTrack(index, true)}
+                    >
+                      <Text
+                        style={[
+                          styles.trackIndex,
+                          active && styles.trackTextActive,
+                        ]}
+                      >
+                        {String(
+                          item.discTrackNumber || item.trackNumber || index + 1,
+                        ).padStart(2, "0")}
+                      </Text>
+
+                      <View style={styles.flex}>
+                        <Text
+                          style={[
+                            styles.trackTitle,
+                            active && styles.trackTextActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {item.cdTrackTitle || item.trackTitle || item.title}
+                        </Text>
+
+                        <Text style={styles.trackArtist} numberOfLines={1}>
+                          {item.title &&
+                          item.title !== (item.cdTrackTitle || item.trackTitle)
+                            ? item.title
+                            : album?.artist}
+                        </Text>
+                      </View>
+
+                      {active && status.isPlaying ? (
+                        <Ionicons
+                          name="volume-high"
+                          size={19}
+                          color="#2563eb"
+                        />
+                      ) : (
+                        <Ionicons
+                          name="play-outline"
+                          size={19}
+                          color="#64748b"
+                        />
+                      )}
+                    </Pressable>
+                  );
+                }}
+              />
             </View>
           </View>
         </View>
@@ -564,5 +671,96 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
+  },
+  responsivePlayer: {
+    flex: 1,
+    minHeight: 0,
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 18,
+    paddingBottom: 16,
+  },
+  responsivePlayerMobile: {
+    flexDirection: "column",
+    gap: 12,
+  },
+  playerSidebar: {
+    width: 340,
+    flexShrink: 0,
+  },
+  playerSidebarMobile: {
+    width: "100%",
+  },
+  albumHeaderMobile: {
+    flexDirection: "column",
+    textAlign: "center",
+  },
+  albumInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  albumInfoMobile: {
+    width: "100%",
+    alignItems: "center",
+  },
+  largeCoverMobile: {
+    width: 240,
+    height: 240,
+    maxWidth: "100%",
+  },
+  largeCoverCompact: {
+    width: 190,
+    height: 190,
+  },
+  selectedTitleCompact: {
+    fontSize: 20,
+  },
+  trackPanel: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
+  },
+  trackPanelMobile: {
+    minHeight: 340,
+    flex: 1,
+  },
+  trackPanelHeader: {
+    minHeight: 52,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  trackPanelTitle: {
+    color: "#0f172a",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  trackPanelCount: {
+    minWidth: 30,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#eff6ff",
+    color: "#1d4ed8",
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  nowPlayingWork: {
+    marginTop: 4,
+    color: "#64748b",
+    fontSize: 13,
+    textAlign: "center",
+  },
+  disabledButton: {
+    opacity: 0.45,
   },
 });

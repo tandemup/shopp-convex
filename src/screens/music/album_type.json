@@ -1,0 +1,31 @@
+{
+  "album": {
+    "artist": "",
+    "composer": "",
+    "description": "",
+    "genre": "",
+    "title": ""
+  },
+  "albumId": "",
+  "cover": {
+    "filename": "",
+    "coverId": ""
+  },
+  "tracks": [
+    {
+      "audioFilename": "",
+      "trackTitle": "",
+      "maintitle": "",
+      "trackId": "",
+      "trackNumber": 1
+    },
+    {
+      "audioFilename": "",
+      "trackTitle": "",
+      "maintitle": "",
+      "trackId": "",
+      "trackNumber": 1
+    }
+  ],
+  "version": 1
+}

@@ -1,22 +1,6 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
-
-async function requireAdmin(ctx) {
-  const userId = await getAuthUserId(ctx);
-
-  if (!userId) {
-    throw new Error("Debes iniciar sesión para importar items.");
-  }
-
-  const user = await ctx.db.get(userId);
-
-  if (user?.role !== "admin") {
-    throw new Error("Solo los administradores pueden importar items.");
-  }
-
-  return userId;
-}
+import { requireAdmin } from "./lib/auth";
 
 function cleanString(value) {
   const text = String(value ?? "").trim();
@@ -66,7 +50,8 @@ export const importItemsFromAsyncStorage = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAdmin(ctx);
+    const admin = await requireAdmin(ctx);
+    const userId = admin._id;
     const now = Date.now();
 
     let inserted = 0;

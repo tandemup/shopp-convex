@@ -846,7 +846,14 @@ export default defineSchema({
     albumId: v.id("musicAlbums"),
 
     title: v.string(),
+    cdTrackTitle: v.optional(v.string()),
     artist: v.optional(v.string()),
+
+    discNumber: v.optional(v.float64()),
+    discTrackNumber: v.optional(v.float64()),
+    sortOrder: v.optional(v.float64()),
+
+    // Se mantiene para compatibilidad con código existente.
     trackNumber: v.float64(),
 
     audioStorageId: v.id("_storage"),
@@ -860,5 +867,6 @@ export default defineSchema({
   })
     .index("by_album", ["albumId"])
     .index("by_album_track", ["albumId", "trackNumber"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_album_order", ["albumId", "sortOrder"])
+    .index("by_album_disc_track", ["albumId", "discNumber", "discTrackNumber"]),
 });
