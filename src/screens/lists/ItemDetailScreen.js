@@ -28,7 +28,8 @@ import { ROUTES } from "@/src/navigation/ROUTES";
 import { buildHeaderConfig } from "@/src/utils/layout/headerStyles";
 import { getSearchSettings } from "@/src/storage/settingsStorage";
 import { DEFAULT_CURRENCY } from "@/src/constants/currency";
-import { SEARCH_ENGINES } from "@/src/constants/searchEngines";
+// import { SEARCH_ENGINES } from "@/src/constants/SearchEngines";
+import SearchEngines from "@/src/screens/settings/SearchEngines";
 import { PRODUCT_CATEGORIES } from "@/src/constants/categories";
 
 import { useLists } from "@/src/context/ListsContext";

@@ -172,6 +172,168 @@ export default function MusicPlayerScreen() {
     await loadTrack(next, true);
   };
 
+  const renderTrackItem = ({ item, index }) => {
+    const active = index === currentTrackIndex;
+
+    return (
+      <Pressable
+        style={[styles.trackItem, active && styles.trackItemActive]}
+        onPress={() => loadTrack(index, true)}
+      >
+        <Text style={[styles.trackIndex, active && styles.trackTextActive]}>
+          {String(
+            item.discTrackNumber || item.trackNumber || index + 1,
+          ).padStart(2, "0")}
+        </Text>
+
+        <View style={styles.flex}>
+          <Text
+            style={[styles.trackTitle, active && styles.trackTextActive]}
+            numberOfLines={1}
+          >
+            {item.cdTrackTitle || item.trackTitle || item.title}
+          </Text>
+
+          <Text style={styles.trackArtist} numberOfLines={1}>
+            {item.title && item.title !== (item.cdTrackTitle || item.trackTitle)
+              ? item.title
+              : album?.artist}
+          </Text>
+        </View>
+
+        {active && status.isPlaying ? (
+          <Ionicons name="volume-high" size={19} color="#2563eb" />
+        ) : (
+          <Ionicons name="play-outline" size={19} color="#64748b" />
+        )}
+      </Pressable>
+    );
+  };
+
+  const renderBackButton = () => (
+    <Pressable
+      style={styles.backButton}
+      onPress={() => setSelectedAlbumId(null)}
+    >
+      <Ionicons name="arrow-back" size={20} color="#1d4ed8" />
+      <Text style={styles.backText}>Álbumes</Text>
+    </Pressable>
+  );
+
+  const renderAlbumHeader = () => (
+    <View style={[styles.albumHeader, !isDesktop && styles.albumHeaderMobile]}>
+      {album?.coverUrl ? (
+        <Image
+          source={{ uri: album.coverUrl }}
+          style={[
+            styles.largeCover,
+            !isDesktop && styles.largeCoverMobile,
+            isCompactMobile && styles.largeCoverCompact,
+          ]}
+        />
+      ) : (
+        <View
+          style={[
+            styles.largeCover,
+            styles.coverPlaceholder,
+            !isDesktop && styles.largeCoverMobile,
+            isCompactMobile && styles.largeCoverCompact,
+          ]}
+        >
+          <Ionicons name="musical-notes" size={42} color="#64748b" />
+        </View>
+      )}
+
+      <View style={[styles.albumInfo, !isDesktop && styles.albumInfoMobile]}>
+        <Text
+          style={[
+            styles.selectedTitle,
+            isCompactMobile && styles.selectedTitleCompact,
+          ]}
+        >
+          {album?.title}
+        </Text>
+
+        <Text style={styles.selectedArtist}>{album?.artist}</Text>
+
+        <Text style={styles.albumMeta}>
+          {album?.tracks?.length || 0} pistas
+          {album?.genre ? ` · ${album.genre}` : ""}
+          {album?.year ? ` · ${album.year}` : ""}
+        </Text>
+      </View>
+    </View>
+  );
+
+  const renderControls = () => (
+    <View style={styles.controls}>
+      <View style={styles.nowPlaying}>
+        <Text style={styles.nowPlayingLabel}>Reproduciendo</Text>
+
+        <Text style={styles.nowPlayingTitle} numberOfLines={2}>
+          {currentTrack?.cdTrackTitle ||
+            currentTrack?.trackTitle ||
+            currentTrack?.title ||
+            "Selecciona una pista"}
+        </Text>
+
+        {currentTrack?.title &&
+        currentTrack?.title !==
+          (currentTrack?.cdTrackTitle || currentTrack?.trackTitle) ? (
+          <Text style={styles.nowPlayingWork} numberOfLines={2}>
+            {currentTrack.title}
+          </Text>
+        ) : null}
+
+        <Text style={styles.timeText}>
+          {formatMillis(status.positionMillis)} /{" "}
+          {formatMillis(status.durationMillis)}
+        </Text>
+
+        {playerError ? (
+          <Text style={styles.errorText}>{playerError}</Text>
+        ) : null}
+      </View>
+
+      <View style={styles.buttonsRow}>
+        <Pressable
+          style={[styles.controlButton, !currentTrack && styles.disabledButton]}
+          onPress={playPrevious}
+          disabled={!currentTrack}
+        >
+          <Ionicons name="play-skip-back" size={24} color="#0f172a" />
+        </Pressable>
+
+        <Pressable
+          style={[styles.playButton, !currentTrack && styles.disabledButton]}
+          onPress={togglePlayback}
+          disabled={!currentTrack}
+        >
+          <Ionicons
+            name={status.isPlaying ? "pause" : "play"}
+            size={30}
+            color="#ffffff"
+          />
+        </Pressable>
+
+        <Pressable
+          style={[styles.controlButton, !currentTrack && styles.disabledButton]}
+          onPress={playNext}
+          disabled={!currentTrack}
+        >
+          <Ionicons name="play-skip-forward" size={24} color="#0f172a" />
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  const renderTrackPanelHeader = () => (
+    <View style={styles.trackPanelHeader}>
+      <Text style={styles.trackPanelTitle}>Pistas</Text>
+      <Text style={styles.trackPanelCount}>{album?.tracks?.length || 0}</Text>
+    </View>
+  );
+
   if (selectedAlbumId && album === undefined) {
     return (
       <View style={styles.centered}>
@@ -229,164 +391,18 @@ export default function MusicPlayerScreen() {
             </Pressable>
           )}
         />
-      ) : (
+      ) : isDesktop ? (
         <View style={styles.playerLayout}>
-          <Pressable
-            style={styles.backButton}
-            onPress={() => setSelectedAlbumId(null)}
-          >
-            <Ionicons name="arrow-back" size={20} color="#1d4ed8" />
-            <Text style={styles.backText}>Álbumes</Text>
-          </Pressable>
+          {renderBackButton()}
 
-          <View
-            style={[
-              styles.responsivePlayer,
-              !isDesktop && styles.responsivePlayerMobile,
-            ]}
-          >
-            <View
-              style={[
-                styles.playerSidebar,
-                !isDesktop && styles.playerSidebarMobile,
-              ]}
-            >
-              <View
-                style={[
-                  styles.albumHeader,
-                  !isDesktop && styles.albumHeaderMobile,
-                ]}
-              >
-                {album?.coverUrl ? (
-                  <Image
-                    source={{ uri: album.coverUrl }}
-                    style={[
-                      styles.largeCover,
-                      !isDesktop && styles.largeCoverMobile,
-                      isCompactMobile && styles.largeCoverCompact,
-                    ]}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.largeCover,
-                      styles.coverPlaceholder,
-                      !isDesktop && styles.largeCoverMobile,
-                      isCompactMobile && styles.largeCoverCompact,
-                    ]}
-                  >
-                    <Ionicons name="musical-notes" size={42} color="#64748b" />
-                  </View>
-                )}
-
-                <View
-                  style={[
-                    styles.albumInfo,
-                    !isDesktop && styles.albumInfoMobile,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.selectedTitle,
-                      isCompactMobile && styles.selectedTitleCompact,
-                    ]}
-                  >
-                    {album?.title}
-                  </Text>
-
-                  <Text style={styles.selectedArtist}>{album?.artist}</Text>
-
-                  <Text style={styles.albumMeta}>
-                    {album?.tracks?.length || 0} pistas
-                    {album?.genre ? ` · ${album.genre}` : ""}
-                    {album?.year ? ` · ${album.year}` : ""}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.controls}>
-                <View style={styles.nowPlaying}>
-                  <Text style={styles.nowPlayingLabel}>Reproduciendo</Text>
-
-                  <Text style={styles.nowPlayingTitle} numberOfLines={2}>
-                    {currentTrack?.cdTrackTitle ||
-                      currentTrack?.trackTitle ||
-                      currentTrack?.title ||
-                      "Selecciona una pista"}
-                  </Text>
-
-                  {currentTrack?.title &&
-                  currentTrack?.title !==
-                    (currentTrack?.cdTrackTitle || currentTrack?.trackTitle) ? (
-                    <Text style={styles.nowPlayingWork} numberOfLines={2}>
-                      {currentTrack.title}
-                    </Text>
-                  ) : null}
-
-                  <Text style={styles.timeText}>
-                    {formatMillis(status.positionMillis)} /{" "}
-                    {formatMillis(status.durationMillis)}
-                  </Text>
-
-                  {playerError ? (
-                    <Text style={styles.errorText}>{playerError}</Text>
-                  ) : null}
-                </View>
-
-                <View style={styles.buttonsRow}>
-                  <Pressable
-                    style={[
-                      styles.controlButton,
-                      !currentTrack && styles.disabledButton,
-                    ]}
-                    onPress={playPrevious}
-                    disabled={!currentTrack}
-                  >
-                    <Ionicons name="play-skip-back" size={24} color="#0f172a" />
-                  </Pressable>
-
-                  <Pressable
-                    style={[
-                      styles.playButton,
-                      !currentTrack && styles.disabledButton,
-                    ]}
-                    onPress={togglePlayback}
-                    disabled={!currentTrack}
-                  >
-                    <Ionicons
-                      name={status.isPlaying ? "pause" : "play"}
-                      size={30}
-                      color="#ffffff"
-                    />
-                  </Pressable>
-
-                  <Pressable
-                    style={[
-                      styles.controlButton,
-                      !currentTrack && styles.disabledButton,
-                    ]}
-                    onPress={playNext}
-                    disabled={!currentTrack}
-                  >
-                    <Ionicons
-                      name="play-skip-forward"
-                      size={24}
-                      color="#0f172a"
-                    />
-                  </Pressable>
-                </View>
-              </View>
+          <View style={styles.responsivePlayer}>
+            <View style={styles.playerSidebar}>
+              {renderAlbumHeader()}
+              {renderControls()}
             </View>
 
-            <View
-              style={[styles.trackPanel, !isDesktop && styles.trackPanelMobile]}
-            >
-              <View style={styles.trackPanelHeader}>
-                <Text style={styles.trackPanelTitle}>Pistas</Text>
-                <Text style={styles.trackPanelCount}>
-                  {album?.tracks?.length || 0}
-                </Text>
-              </View>
+            <View style={styles.trackPanel}>
+              {renderTrackPanelHeader()}
 
               <FlatList
                 data={album?.tracks || []}
@@ -394,67 +410,30 @@ export default function MusicPlayerScreen() {
                 style={styles.trackList}
                 contentContainerStyle={styles.trackListContent}
                 showsVerticalScrollIndicator={false}
-                renderItem={({ item, index }) => {
-                  const active = index === currentTrackIndex;
-
-                  return (
-                    <Pressable
-                      style={[
-                        styles.trackItem,
-                        active && styles.trackItemActive,
-                      ]}
-                      onPress={() => loadTrack(index, true)}
-                    >
-                      <Text
-                        style={[
-                          styles.trackIndex,
-                          active && styles.trackTextActive,
-                        ]}
-                      >
-                        {String(
-                          item.discTrackNumber || item.trackNumber || index + 1,
-                        ).padStart(2, "0")}
-                      </Text>
-
-                      <View style={styles.flex}>
-                        <Text
-                          style={[
-                            styles.trackTitle,
-                            active && styles.trackTextActive,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {item.cdTrackTitle || item.trackTitle || item.title}
-                        </Text>
-
-                        <Text style={styles.trackArtist} numberOfLines={1}>
-                          {item.title &&
-                          item.title !== (item.cdTrackTitle || item.trackTitle)
-                            ? item.title
-                            : album?.artist}
-                        </Text>
-                      </View>
-
-                      {active && status.isPlaying ? (
-                        <Ionicons
-                          name="volume-high"
-                          size={19}
-                          color="#2563eb"
-                        />
-                      ) : (
-                        <Ionicons
-                          name="play-outline"
-                          size={19}
-                          color="#64748b"
-                        />
-                      )}
-                    </Pressable>
-                  );
-                }}
+                renderItem={renderTrackItem}
               />
             </View>
           </View>
         </View>
+      ) : (
+        <FlatList
+          data={album?.tracks || []}
+          keyExtractor={(item) => String(item._id)}
+          style={styles.mobilePlayerList}
+          contentContainerStyle={styles.mobilePlayerListContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <View style={styles.mobilePlayerHeader}>
+              {renderBackButton()}
+              {renderAlbumHeader()}
+              {renderControls()}
+              <View style={styles.mobileTrackPanel}>
+                {renderTrackPanelHeader()}
+              </View>
+            </View>
+          }
+          renderItem={renderTrackItem}
+        />
       )}
     </View>
   );
@@ -463,6 +442,7 @@ export default function MusicPlayerScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    minHeight: 0,
     backgroundColor: "#f1f5f9",
   },
   centered: {
@@ -480,7 +460,7 @@ const styles = StyleSheet.create({
     maxWidth: 820,
     alignSelf: "center",
     paddingHorizontal: 16,
-    paddingBottom: 32,
+    paddingBottom: 120,
   },
   albumCard: {
     minHeight: 92,
@@ -538,6 +518,7 @@ const styles = StyleSheet.create({
   },
   playerLayout: {
     flex: 1,
+    minHeight: 0,
     width: "100%",
     maxWidth: 900,
     alignSelf: "center",
@@ -581,9 +562,10 @@ const styles = StyleSheet.create({
   },
   trackList: {
     flex: 1,
+    minHeight: 0,
   },
   trackListContent: {
-    paddingBottom: 12,
+    paddingBottom: 24,
   },
   trackItem: {
     minHeight: 58,
@@ -638,6 +620,7 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     fontSize: 16,
     fontWeight: "800",
+    textAlign: "center",
   },
   timeText: {
     marginTop: 4,
@@ -680,16 +663,9 @@ const styles = StyleSheet.create({
     gap: 18,
     paddingBottom: 16,
   },
-  responsivePlayerMobile: {
-    flexDirection: "column",
-    gap: 12,
-  },
   playerSidebar: {
     width: 340,
     flexShrink: 0,
-  },
-  playerSidebarMobile: {
-    width: "100%",
   },
   albumHeaderMobile: {
     flexDirection: "column",
@@ -725,15 +701,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     overflow: "hidden",
   },
-  trackPanelMobile: {
-    minHeight: 340,
-    flex: 1,
-  },
   trackPanelHeader: {
     minHeight: 52,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -762,5 +735,29 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.45,
+  },
+  mobilePlayerList: {
+    flex: 1,
+    width: "100%",
+  },
+  mobilePlayerListContent: {
+    width: "100%",
+    maxWidth: 900,
+    alignSelf: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 130,
+  },
+  mobilePlayerHeader: {
+    width: "100%",
+  },
+  mobileTrackPanel: {
+    marginTop: 4,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
   },
 });

@@ -27,7 +27,7 @@ import {
   openBingShoppingSearch,
   openGoogleAIMode,
   openGoogleShoppingSearch,
-} from "@/src/constants/searchEngines";
+} from "@/src/screens/settings/SearchEngines";
 
 import {
   getProductBrand,

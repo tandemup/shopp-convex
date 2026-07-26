@@ -1,16 +1,18 @@
-// components/controls/BarcodeLink.js
+// src/components/controls/BarcodeLink.js
 
 import React, { useCallback } from "react";
 import { Pressable, Text } from "react-native";
 
-import { openExternalUrl } from "@/src/utils/openExternalUrl";
 import * as Clipboard from "expo-clipboard";
 
-import { safeAlert } from "@/src/components/ui/alert/safeAlert";
+import { DEFAULT_ENGINE, SEARCH_ENGINES } from "../../constants/searchEngines";
+import { getSearchSettings } from "../../storage/settingsStorage";
+import { safeAlert, safeMenu } from "../ui/alert/safeAlert";
+import { openExternalUrl } from "../../utils/openExternalUrl";
 
-import { SEARCH_ENGINES, DEFAULT_ENGINE } from "@/src/constants/searchEngines";
-
-import { getSearchSettings } from "@/src/storage/settingsStorage";
+function getEngineLabel(engine, fallbackId) {
+  return engine?.label || engine?.name || fallbackId || "buscador";
+}
 
 export default function BarcodeLink({
   barcode,
@@ -29,12 +31,12 @@ export default function BarcodeLink({
       DEFAULT_ENGINE;
 
     const engine =
-      SEARCH_ENGINES[selectedEngineId] || SEARCH_ENGINES[DEFAULT_ENGINE];
+      SEARCH_ENGINES?.[selectedEngineId] || SEARCH_ENGINES?.[DEFAULT_ENGINE];
 
     return {
       id: selectedEngineId,
       engine,
-      label: engine?.label || selectedEngineId || "buscador",
+      label: getEngineLabel(engine, selectedEngineId),
     };
   };
 
@@ -55,22 +57,25 @@ export default function BarcodeLink({
   };
 
   const handlePress = useCallback(async () => {
-    if (!barcode) return;
+    if (!barcode) {
+      return;
+    }
 
-    safeAlert("Código de barras", barcode, [
+    const { label: engineLabel } = await getSelectedProductEngine();
+
+    safeMenu("Código de barras", barcode, [
       {
-        text: "Copiar barcode",
+        key: "copy",
+        text: "Copiar código",
         onPress: async () => {
           try {
             await Clipboard.setStringAsync(barcode);
-
             safeAlert(
               "Código copiado",
               `Se ha copiado ${barcode} al portapapeles.`,
             );
           } catch (error) {
             console.warn("Error copiando barcode:", error);
-
             safeAlert(
               "No se pudo copiar",
               "No se pudo copiar el código de barras al portapapeles.",
@@ -79,17 +84,21 @@ export default function BarcodeLink({
         },
       },
       {
-        text: "Open browser",
+        key: "search",
+        text: `Buscar en ${engineLabel}`,
         onPress: () => openSearch(barcode),
       },
       {
-        text: "Cancel",
+        key: "cancel",
+        text: "Cancelar",
         style: "cancel",
       },
     ]);
   }, [barcode]);
 
-  if (!barcode) return null;
+  if (!barcode) {
+    return null;
+  }
 
   return (
     <Pressable

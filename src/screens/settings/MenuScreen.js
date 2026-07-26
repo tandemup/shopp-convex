@@ -23,7 +23,7 @@ import {
   DEFAULT_SEARCH_SETTINGS,
 } from "@/src/storage/settingsStorage";
 
-import { SEARCH_ENGINES } from "@/src/constants/searchEngines";
+import { SEARCH_ENGINES } from "@/src/screens/settings/SearchEngines";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";

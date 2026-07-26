@@ -16,7 +16,7 @@ import {
   SEARCH_ENGINES,
   BOOK_ENGINES,
   PRODUCT_SEARCH_ENGINE_IDS,
-} from "@/src/constants/searchEngines";
+} from "@/src/screens/settings/SearchEngines";
 import { buildHeaderConfig } from "@/src/utils/layout/headerStyles";
 
 const CATEGORY_CONFIG = {
