@@ -164,7 +164,7 @@ function safeAlertWebFallback(title, message, buttons) {
   safeMenuWebFallback(title, message, buttons);
 }
 
-function ShowNativeFallback(title, message, buttons) {
+function showNativeFallback(title, message, buttons) {
   if (buttons.length === 0) {
     Alert.alert(title ?? "", message ?? "");
 
@@ -221,13 +221,13 @@ export function safeAlert(title, message, buttons = []) {
     return;
   }
 
-  ShowNativeFallback(title, message, normalizedButtons);
+  showNativeFallback(title, message, normalizedButtons);
 }
 
 /**
  * Muestra una confirmación.
  */
-export function SafeConfirm(title, message, onConfirm, options = {}) {
+export function safeConfirm(title, message, onConfirm, options = {}) {
   const {
     confirmText = "Aceptar",
     cancelText = "Cancelar",
@@ -285,5 +285,5 @@ export function safeMenu(title, message, buttons = []) {
     return;
   }
 
-  ShowNativeFallback(title, message, normalizedButtons);
+  showNativeFallback(title, message, normalizedButtons);
 }
