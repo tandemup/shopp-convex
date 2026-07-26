@@ -221,7 +221,14 @@ export const remove = mutation({
 
     await getEditableAlbum(ctx, track.albumId);
 
-    await ctx.storage.delete(track.audioStorageId);
+    const audioMetadata = await ctx.db.system.get(
+      "_storage",
+      track.audioStorageId,
+    );
+
+    if (audioMetadata) {
+      await ctx.storage.delete(track.audioStorageId);
+    }
     await ctx.db.delete(args.trackId);
 
     const remaining = await ctx.db

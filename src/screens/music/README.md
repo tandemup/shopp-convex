@@ -14,6 +14,7 @@ Paquete simplificado sin lyrics.
 
 - `AdminAlbumsScreen.js`: listado y administración.
 - `AdminAlbumUploadScreen.js`: subida de carátula y varios MP3.
+- `AdminAlbumJsonImportScreen.js`: importar un álbum definido en JSON y subir sus archivos.
 - `AdminAlbumEditScreen.js`: edición de álbum, portada y pistas.
 - `MusicAlbumsScreen.js`: buscador de álbumes.
 - `MusicPlayerScreen.js`: reproducción de las pistas.
@@ -43,4 +44,44 @@ File Storage guarda los archivos físicos. Las tablas guardan el título, nombre
 
 ## JSON
 
-`examples/album-manifest.json` es opcional. Se usa para importar o exportar álbumes, pero Convex Database sigue siendo el catálogo principal.
+`src/components/music/album-manifest.json` es la plantilla recomendada. El campo
+`tracks[].audio.filename` debe coincidir exactamente con el nombre del MP3 que se
+seleccione en la pantalla de importación.
+
+Ejemplo mínimo:
+
+```json
+{
+  "album": {
+    "title": "String Trios & Duos",
+    "composer": "Mozart",
+    "artist": "Grumiaux Trio",
+    "genre": "Clásica",
+    "year": 1990
+  },
+  "cover": { "filename": "cover.jpg" },
+  "tracks": [
+    {
+      "trackNumber": 1,
+      "title": "Divertimento in E",
+      "audio": { "filename": "01-divertimento.mp3" }
+    }
+  ]
+}
+```
+
+El JSON no debe contener `albumId`, `trackId` ni `storageId` cuando se usa
+`AdminAlbumJsonImportScreen`: esos identificadores los genera Convex al subir
+la carátula y los MP3. La mutación `musicImport.importAlbumFromJson` recibe el
+JSON ya enriquecido con esos identificadores y crea el álbum y sus pistas en
+una única operación de base de datos.
+
+Para añadir la pantalla al navegador administrativo, registra la ruta:
+
+```js
+<Stack.Screen
+  name="ADMIN_ALBUM_JSON_IMPORT"
+  component={AdminAlbumJsonImportScreen}
+  options={{ title: "Importar álbum JSON" }}
+/>
+```

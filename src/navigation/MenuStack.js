@@ -15,6 +15,7 @@ import MusicPlayerScreen from "@/src/screens/music/MusicPlayerScreen";
 import AdminAlbumsScreen from "@/src/screens/admin/AdminAlbumsScreen";
 import AdminAlbumUploadScreen from "@/src/screens/admin/AdminAlbumUploadScreen";
 import AdminAlbumEditScreen from "@/src/screens/admin/AdminAlbumEditScreen";
+import AdminAlbumJsonImportScreen from "@/src/screens/admin/AdminAlbumJsonImportScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -73,7 +74,7 @@ export default function MenuStack() {
       <Stack.Screen
         name={ROUTES.ADMIN_ALBUMS}
         component={AdminAlbumsScreen}
-        options={{ title: "Gestión de álbumes" }}
+        options={{ title: "Editor de álbumes" }}
       />
 
       <Stack.Screen
@@ -86,6 +87,11 @@ export default function MenuStack() {
         name={ROUTES.ADMIN_ALBUM_UPLOAD}
         component={AdminAlbumUploadScreen}
         options={{ title: "Nuevo álbum" }}
+      />
+      <Stack.Screen
+        name={ROUTES.ADMIN_ALBUM_JSON_IMPORT}
+        component={AdminAlbumJsonImportScreen}
+        options={{ title: "Importar álbum JSON" }}
       />
 
       <Stack.Screen

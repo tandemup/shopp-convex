@@ -75,6 +75,7 @@ export const ROUTES = {
   ADMIN_ALBUMS: "Admin Albums",
   ADMIN_ALBUM_UPLOAD: "Admin Album Upload",
   ADMIN_ALBUM_EDIT: "Admin Album Edit",
+  ADMIN_ALBUM_JSON_IMPORT: "Admin Album JSON Import",
 
   // Debug
   PRODUCT_LEARNING_DEBUG: "Product Learning Debug",

@@ -76,6 +76,14 @@ export default function AdminAlbumsScreen({ navigation }) {
         <Text style={styles.newButtonText}>Nuevo álbum</Text>
       </Pressable>
 
+      <Pressable
+        style={[styles.newButton, styles.importButton]}
+        onPress={() => navigation.navigate(ROUTES.ADMIN_ALBUM_JSON_IMPORT)}
+      >
+        <Ionicons name="document-text-outline" size={22} color="#ffffff" />
+        <Text style={styles.newButtonText}>Importar desde JSON</Text>
+      </Pressable>
+
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       <FlatList
@@ -204,6 +212,10 @@ const styles = StyleSheet.create({
   newButtonText: {
     color: "#ffffff",
     fontWeight: "900",
+  },
+  importButton: {
+    marginTop: 0,
+    backgroundColor: "#0f766e",
   },
   error: {
     marginHorizontal: 16,

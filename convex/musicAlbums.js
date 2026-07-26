@@ -162,12 +162,29 @@ export const remove = mutation({
       .collect();
 
     for (const track of tracks) {
-      await ctx.storage.delete(track.audioStorageId);
+      // El archivo puede haber sido eliminado previamente de File Storage.
+      // Convex lanza un error si se intenta borrar un storageId inexistente.
+      const audioMetadata = await ctx.db.system.get(
+        "_storage",
+        track.audioStorageId,
+      );
+
+      if (audioMetadata) {
+        await ctx.storage.delete(track.audioStorageId);
+      }
+
       await ctx.db.delete(track._id);
     }
 
     if (album.coverStorageId) {
-      await ctx.storage.delete(album.coverStorageId);
+      const coverMetadata = await ctx.db.system.get(
+        "_storage",
+        album.coverStorageId,
+      );
+
+      if (coverMetadata) {
+        await ctx.storage.delete(album.coverStorageId);
+      }
     }
 
     await ctx.db.delete(args.albumId);
