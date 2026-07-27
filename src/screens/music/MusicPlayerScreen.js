@@ -55,14 +55,12 @@ function normalizeLyrics(lyrics) {
     .sort((a, b) => a.timeMs - b.timeMs);
 }
 
-export default function MusicPlayerScreen() {
+export default function MusicPlayerScreen({ navigation, route }) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
   const isCompactMobile = width < 420;
 
-  const albums = useQuery(api.musicAlbums.listPublished) || [];
-
-  const [selectedAlbumId, setSelectedAlbumId] = useState(null);
+  const selectedAlbumId = route?.params?.albumId || null;
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [status, setStatus] = useState({
     isLoaded: false,
@@ -73,6 +71,9 @@ export default function MusicPlayerScreen() {
   const [playerError, setPlayerError] = useState("");
 
   const soundRef = useRef(null);
+  const lyricsScrollRef = useRef(null);
+  const lyricLineLayoutsRef = useRef({});
+  const lastScrolledLyricRef = useRef(-1);
   const loadingTrackRef = useRef(false);
   const loadRequestRef = useRef(0);
   const mountedRef = useRef(true);
@@ -94,6 +95,30 @@ export default function MusicPlayerScreen() {
     });
     return index;
   }, [currentLyrics, status.positionMillis]);
+
+  useEffect(() => {
+    lastScrolledLyricRef.current = -1;
+    lyricLineLayoutsRef.current = {};
+    lyricsScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [currentTrack?.audioStorageId]);
+
+  useEffect(() => {
+    if (
+      currentLyricIndex < 0 ||
+      currentLyricIndex === lastScrolledLyricRef.current
+    ) {
+      return;
+    }
+
+    const layout = lyricLineLayoutsRef.current[currentLyricIndex];
+    if (!layout) return;
+
+    lastScrolledLyricRef.current = currentLyricIndex;
+    lyricsScrollRef.current?.scrollTo({
+      y: Math.max(0, layout.y - 28),
+      animated: true,
+    });
+  }, [currentLyricIndex]);
 
   const unloadSound = async (invalidateRequest = true) => {
     if (invalidateRequest) {
@@ -268,10 +293,7 @@ export default function MusicPlayerScreen() {
   };
 
   const renderBackButton = () => (
-    <Pressable
-      style={styles.backButton}
-      onPress={() => setSelectedAlbumId(null)}
-    >
+    <Pressable style={styles.backButton} onPress={() => navigation?.goBack?.()}>
       <Ionicons name="arrow-back" size={20} color="#1d4ed8" />
       <Text style={styles.backText}>Álbumes</Text>
     </Pressable>
@@ -354,17 +376,38 @@ export default function MusicPlayerScreen() {
         <View style={styles.lyricsContainer}>
           <Text style={styles.lyricsTitle}>Letra</Text>
           {currentLyrics.length ? (
-            currentLyrics.map((line, index) => (
-              <Text
-                key={`${line.timeMs}-${index}`}
-                style={[
-                  styles.lyricLine,
-                  index === currentLyricIndex && styles.activeLyricLine,
-                ]}
-              >
-                {line.text}
-              </Text>
-            ))
+            <ScrollView
+              ref={lyricsScrollRef}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              contentContainerStyle={styles.lyricsContent}
+            >
+              {currentLyrics.map((line, index) => (
+                <Text
+                  key={`${line.timeMs}-${index}`}
+                  onLayout={(event) => {
+                    lyricLineLayoutsRef.current[index] =
+                      event.nativeEvent.layout;
+                    if (
+                      index === currentLyricIndex &&
+                      lastScrolledLyricRef.current < 0
+                    ) {
+                      lyricsScrollRef.current?.scrollTo({
+                        y: Math.max(0, event.nativeEvent.layout.y - 28),
+                        animated: false,
+                      });
+                      lastScrolledLyricRef.current = index;
+                    }
+                  }}
+                  style={[
+                    styles.lyricLine,
+                    index === currentLyricIndex && styles.activeLyricLine,
+                  ]}
+                >
+                  {line.text}
+                </Text>
+              ))}
+            </ScrollView>
           ) : (
             <Text style={styles.noLyricsText}>
               No hay letra disponible para esta pista.
@@ -412,7 +455,7 @@ export default function MusicPlayerScreen() {
     </View>
   );
 
-  if (selectedAlbumId && album === undefined) {
+  if (!selectedAlbumId || album === undefined) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator />
@@ -423,51 +466,7 @@ export default function MusicPlayerScreen() {
 
   return (
     <View style={styles.screen}>
-      {!selectedAlbumId ? (
-        <FlatList
-          data={albums}
-          keyExtractor={(item) => String(item._id)}
-          contentContainerStyle={styles.albumList}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Ionicons name="albums-outline" size={44} color="#94a3b8" />
-              <Text style={styles.emptyTitle}>No hay álbumes</Text>
-              <Text style={styles.emptyText}>
-                Prueba con otro título, artista o género.
-              </Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <Pressable
-              style={styles.albumCard}
-              onPress={() => setSelectedAlbumId(item._id)}
-            >
-              {item.coverUrl ? (
-                <Image
-                  source={{ uri: item.coverUrl }}
-                  style={styles.albumCover}
-                />
-              ) : (
-                <View style={[styles.albumCover, styles.coverPlaceholder]}>
-                  <Ionicons name="musical-notes" size={28} color="#64748b" />
-                </View>
-              )}
-
-              <View style={styles.flex}>
-                <Text style={styles.albumTitle}>{item.title}</Text>
-                <Text style={styles.albumArtist}>{item.artist}</Text>
-                <Text style={styles.albumMeta}>
-                  {item.trackCount} pistas
-                  {item.genre ? ` · ${item.genre}` : ""}
-                  {item.year ? ` · ${item.year}` : ""}
-                </Text>
-              </View>
-
-              <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-            </Pressable>
-          )}
-        />
-      ) : isDesktop ? (
+      {isDesktop ? (
         <ScrollView
           style={styles.desktopScroll}
           contentContainerStyle={styles.desktopScrollContent}
@@ -734,6 +733,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "center",
     textTransform: "uppercase",
+  },
+  lyricsContent: {
+    paddingVertical: 2,
   },
   lyricLine: {
     paddingVertical: 2,

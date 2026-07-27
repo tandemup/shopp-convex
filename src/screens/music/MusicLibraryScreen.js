@@ -119,6 +119,20 @@ export default function MusicLibraryScreen({ navigation }) {
               </Text>
             </View>
 
+            {isAdmin ? (
+              <Pressable
+                style={styles.lyricsButton}
+                onPress={(event) => {
+                  event.stopPropagation?.();
+                  navigation.navigate(ROUTES.ADMIN_ALBUM_LYRICS, {
+                    albumId: album._id,
+                  });
+                }}
+              >
+                <Ionicons name="text-outline" size={18} color="#1d4ed8" />
+              </Pressable>
+            ) : null}
+
             <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
           </Pressable>
         ))
@@ -189,6 +203,27 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 46,
     color: "#0f172a",
+    // El navegador muestra este contorno azul al recibir el foco.
+    outlineStyle: "none",
+    outlineWidth: 0,
+  },
+
+  searchBar1: {
+    minHeight: 48,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 12,
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  searchInput1: {
+    flex: 1,
+    minHeight: 46,
+    color: "#0f172a",
   },
   loader: {
     marginTop: 30,
@@ -236,5 +271,14 @@ const styles = StyleSheet.create({
     marginTop: 5,
     color: "#94a3b8",
     fontSize: 12,
+  },
+  lyricsButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#dbeafe",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 4,
   },
 });

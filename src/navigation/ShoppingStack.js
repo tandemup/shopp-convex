@@ -24,6 +24,7 @@ import AdminAlbumsScreen from "@/src/screens/admin/AdminAlbumsScreen";
 import AdminAlbumUploadScreen from "@/src/screens/admin/AdminAlbumUploadScreen";
 import AdminAlbumEditScreen from "@/src/screens/admin/AdminAlbumEditScreen";
 import AdminAlbumJsonImportScreen from "@/src/screens/admin/AdminAlbumJsonImportScreen";
+import AdminAlbumLyricsScreen from "@/src/screens/admin/AdminAlbumLyricsScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -106,6 +107,12 @@ export default function ShoppingStack() {
         name={ROUTES.ADMIN_ALBUM_JSON_IMPORT}
         component={AdminAlbumJsonImportScreen}
         options={{ title: "Importar álbum JSON" }}
+      />
+
+      <Stack.Screen
+        name={ROUTES.ADMIN_ALBUM_LYRICS}
+        component={AdminAlbumLyricsScreen}
+        options={{ title: "Gestionar letras" }}
       />
 
       <Stack.Screen

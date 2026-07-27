@@ -2,6 +2,38 @@ import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAdmin } from "./lib/auth";
 
+function parseLrc(lrcText) {
+  if (!lrcText || typeof lrcText !== "string") {
+    return undefined;
+  }
+
+  return lrcText
+    .split(/\r?\n/)
+    .map((line) => {
+      const match = line.match(/^\[(\d+):(\d{2})(?:[.:](\d{1,3}))?\](.*)$/);
+
+      if (!match) return null;
+
+      const minutes = Number(match[1]);
+      const seconds = Number(match[2]);
+      const fraction = match[3] || "0";
+
+      const milliseconds =
+        fraction.length === 1
+          ? Number(fraction) * 100
+          : fraction.length === 2
+            ? Number(fraction) * 10
+            : Number(fraction);
+
+      return {
+        timeMs: minutes * 60 * 1000 + seconds * 1000 + milliseconds,
+        text: match[4].trim(),
+      };
+    })
+    .filter((line) => line && line.text)
+    .sort((a, b) => a.timeMs - b.timeMs);
+}
+
 export const importAlbumFromJson = mutation({
   args: {
     album: v.object({
@@ -39,6 +71,7 @@ export const importAlbumFromJson = mutation({
             }),
           ),
         ),
+        lyricsLrc: v.optional(v.string()),
       }),
     ),
   },
@@ -143,7 +176,8 @@ export const importAlbumFromJson = mutation({
         audioMimeType: track.audioMimeType,
         audioSizeBytes: track.audioSizeBytes,
         durationMs: track.durationMs,
-        lyrics: track.lyrics,
+
+        lyrics: track.lyrics || parseLrc(track.lyricsLrc),
 
         createdAt: now,
         updatedAt: now,

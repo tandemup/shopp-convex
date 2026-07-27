@@ -274,3 +274,25 @@ export const remove = mutation({
     });
   },
 });
+
+export const updateLyrics = mutation({
+  args: {
+    trackId: v.id("musicTracks"),
+    lyrics: v.optional(
+      v.array(
+        v.object({
+          timeMs: v.float64(),
+          text: v.string(),
+        }),
+      ),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.trackId, {
+      lyrics: args.lyrics,
+      updatedAt: Date.now(),
+    });
+
+    return args.trackId;
+  },
+});

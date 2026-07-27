@@ -46,6 +46,35 @@ async function uploadAsset(asset, generateUploadUrl, fallbackType) {
   return result.storageId;
 }
 
+function parseLrc(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => {
+      const match = line.match(
+        /^\s*\[(\d+):(\d{1,2})(?:[.:](\d{1,3}))?\]\s*(.*)$/,
+      );
+      if (!match) return null;
+
+      const minutes = Number(match[1]);
+      const seconds = Number(match[2]);
+      const fraction = String(match[3] || "0");
+      const milliseconds =
+        fraction.length === 1
+          ? Number(fraction) * 100
+          : fraction.length === 2
+            ? Number(fraction) * 10
+            : Number(fraction.slice(0, 3));
+      const text = match[4].trim();
+
+      return {
+        timeMs: (minutes * 60 + seconds) * 1000 + milliseconds,
+        text,
+      };
+    })
+    .filter((line) => line && line.text)
+    .sort((a, b) => a.timeMs - b.timeMs);
+}
+
 export default function AdminAlbumEditScreen({ route }) {
   const albumId = route?.params?.albumId;
 
@@ -82,6 +111,8 @@ export default function AdminAlbumEditScreen({ route }) {
   const [editingTrackTitle, setEditingTrackTitle] = useState("");
   const [selectedJson, setSelectedJson] = useState(null);
   const [selectedJsonName, setSelectedJsonName] = useState("");
+  const [editingLyricsTrackId, setEditingLyricsTrackId] = useState(null);
+  const [lyricsText, setLyricsText] = useState("");
 
   useEffect(() => {
     if (album && !form) {
@@ -302,6 +333,7 @@ export default function AdminAlbumEditScreen({ route }) {
               : undefined,
           durationMs:
             typeof track.durationMs === "number" ? track.durationMs : undefined,
+          lyrics: Array.isArray(track.lyrics) ? track.lyrics : undefined,
         };
 
         if (operation === "update") {
@@ -463,6 +495,77 @@ export default function AdminAlbumEditScreen({ route }) {
   const openTrackTitleEditor = (track) => {
     setEditingTrackId(String(track._id));
     setEditingTrackTitle(trackTitles[String(track._id)] || track.title || "");
+  };
+
+  const openLyricsEditor = (track) => {
+    const lrc = (track.lyrics || [])
+      .map((line) => {
+        const totalSeconds = Math.max(0, Number(line.timeMs || 0)) / 1000;
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = (totalSeconds % 60).toFixed(2).padStart(5, "0");
+        return `[${String(minutes).padStart(2, "0")}:${seconds}]${line.text || ""}`;
+      })
+      .join("\n");
+
+    setEditingLyricsTrackId(String(track._id));
+    setLyricsText(lrc);
+  };
+
+  const closeLyricsEditor = () => {
+    if (busyAction.startsWith("lyrics:")) return;
+    setEditingLyricsTrackId(null);
+    setLyricsText("");
+  };
+
+  const pickLyricsFile = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["text/plain", "text/*", "application/octet-stream"],
+      multiple: false,
+      copyToCacheDirectory: true,
+    });
+
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const response = await fetch(result.assets[0].uri);
+    setLyricsText(await response.text());
+  };
+
+  const saveEditedLyrics = async () => {
+    const track = localTracks.find(
+      (item) => String(item._id) === String(editingLyricsTrackId),
+    );
+
+    if (!track) return;
+
+    try {
+      clearNotices();
+      setBusyAction(`lyrics:${track._id}`);
+      const lyrics = parseLrc(lyricsText);
+
+      if (lyricsText.trim() && !lyrics.length) {
+        throw new Error("No se encontraron líneas LRC válidas.");
+      }
+
+      await makeEditable();
+      await updateTrack({
+        trackId: track._id,
+        title: track.title,
+        artist: track.artist || undefined,
+        lyrics: lyrics.length ? lyrics : undefined,
+      });
+
+      setMessage(
+        lyrics.length
+          ? `Letra guardada: ${lyrics.length} líneas.`
+          : "Letra eliminada de la pista.",
+      );
+      setEditingLyricsTrackId(null);
+      setLyricsText("");
+    } catch (e) {
+      setError(e?.message || "No se pudo guardar la letra.");
+    } finally {
+      setBusyAction("");
+    }
   };
 
   const closeTrackTitleEditor = () => {
@@ -782,6 +885,16 @@ export default function AdminAlbumEditScreen({ route }) {
                   </Pressable>
 
                   <Pressable
+                    style={[styles.small, isBusy && styles.disabled]}
+                    onPress={() => openLyricsEditor(track)}
+                    disabled={isBusy}
+                  >
+                    <Text style={styles.smallText}>
+                      {track.lyrics?.length ? "Editar lyrics" : "Añadir lyrics"}
+                    </Text>
+                  </Pressable>
+
+                  <Pressable
                     style={[styles.orderButton, index === 0 && styles.disabled]}
                     onPress={() => moveTrack(index, -1)}
                     disabled={isBusy || index === 0}
@@ -896,6 +1009,58 @@ export default function AdminAlbumEditScreen({ route }) {
                   <ActivityIndicator color="#ffffff" />
                 ) : (
                   <Text style={styles.primaryText}>Guardar</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={editingLyricsTrackId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeLyricsEditor}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Lyrics sincronizados</Text>
+            <Text style={styles.modalHelp}>
+              Pega el contenido .lrc. Ejemplo: [00:12.50]Texto de la línea
+            </Text>
+            <TextInput
+              value={lyricsText}
+              onChangeText={setLyricsText}
+              placeholder="[00:00.00]Primera línea"
+              multiline
+              style={[styles.input, styles.lyricsInput]}
+              editable={!isBusy}
+              textAlignVertical="top"
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.secondary}
+                onPress={pickLyricsFile}
+                disabled={isBusy}
+              >
+                <Text style={styles.secondaryText}>Cargar .lrc</Text>
+              </Pressable>
+              <Pressable
+                style={styles.secondary}
+                onPress={closeLyricsEditor}
+                disabled={isBusy}
+              >
+                <Text style={styles.secondaryText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.primary, isBusy && styles.disabled]}
+                onPress={saveEditedLyrics}
+                disabled={isBusy}
+              >
+                {busyAction.startsWith("lyrics:") ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.primaryText}>Guardar lyrics</Text>
                 )}
               </Pressable>
             </View>
@@ -1126,6 +1291,17 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     fontSize: 18,
     fontWeight: "900",
+  },
+  modalHelp: {
+    marginBottom: 10,
+    color: "#64748b",
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  lyricsInput: {
+    minHeight: 220,
+    paddingTop: 12,
+    fontFamily: "monospace",
   },
   modalActions: {
     marginTop: 14,
