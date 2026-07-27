@@ -31,6 +31,14 @@ export const importAlbumFromJson = mutation({
         audioMimeType: v.optional(v.string()),
         audioSizeBytes: v.optional(v.number()),
         durationMs: v.optional(v.number()),
+        lyrics: v.optional(
+          v.array(
+            v.object({
+              timeMs: v.number(),
+              text: v.string(),
+            }),
+          ),
+        ),
       }),
     ),
   },
@@ -135,6 +143,7 @@ export const importAlbumFromJson = mutation({
         audioMimeType: track.audioMimeType,
         audioSizeBytes: track.audioSizeBytes,
         durationMs: track.durationMs,
+        lyrics: track.lyrics,
 
         createdAt: now,
         updatedAt: now,

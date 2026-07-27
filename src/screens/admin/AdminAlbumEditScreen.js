@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -78,6 +79,7 @@ export default function AdminAlbumEditScreen({ route }) {
   const [localTracks, setLocalTracks] = useState([]);
   const [trackTitles, setTrackTitles] = useState({});
   const [editingTrackId, setEditingTrackId] = useState(null);
+  const [editingTrackTitle, setEditingTrackTitle] = useState("");
   const [selectedJson, setSelectedJson] = useState(null);
   const [selectedJsonName, setSelectedJsonName] = useState("");
 
@@ -423,8 +425,10 @@ export default function AdminAlbumEditScreen({ route }) {
     }
   };
 
-  const saveTrackTitle = async (track) => {
-    const cleanTitle = String(trackTitles[String(track._id)] || "").trim();
+  const saveTrackTitle = async (track, titleOverride) => {
+    const cleanTitle = String(
+      titleOverride ?? trackTitles[String(track._id)] ?? "",
+    ).trim();
 
     if (!cleanTitle) {
       setError("El título de la pista es obligatorio.");
@@ -454,6 +458,39 @@ export default function AdminAlbumEditScreen({ route }) {
     } finally {
       setBusyAction("");
     }
+  };
+
+  const openTrackTitleEditor = (track) => {
+    setEditingTrackId(String(track._id));
+    setEditingTrackTitle(trackTitles[String(track._id)] || track.title || "");
+  };
+
+  const closeTrackTitleEditor = () => {
+    if (busyAction.startsWith("title:")) return;
+    setEditingTrackId(null);
+    setEditingTrackTitle("");
+  };
+
+  const saveEditedTrackTitle = async () => {
+    const track = localTracks.find(
+      (item) => String(item._id) === String(editingTrackId),
+    );
+    const cleanTitle = editingTrackTitle.trim();
+
+    if (!track) return;
+    if (!cleanTitle) {
+      setError("El título de la pista es obligatorio.");
+      return;
+    }
+
+    setTrackTitles((current) => ({
+      ...current,
+      [String(track._id)]: cleanTitle,
+    }));
+    await saveTrackTitle(track, cleanTitle);
+
+    setEditingTrackId(null);
+    setEditingTrackTitle("");
   };
 
   const moveTrack = async (index, direction) => {
@@ -738,7 +775,7 @@ export default function AdminAlbumEditScreen({ route }) {
                 <View style={styles.trackEditActions}>
                   <Pressable
                     style={[styles.small, isBusy && styles.disabled]}
-                    onPress={() => saveTrackTitle(track)}
+                    onPress={() => openTrackTitleEditor(track)}
                     disabled={isBusy}
                   >
                     <Text style={styles.smallText}>Editar nombre</Text>
@@ -822,6 +859,49 @@ export default function AdminAlbumEditScreen({ route }) {
       {message ? <Text style={styles.success}>{message}</Text> : null}
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+
+      <Modal
+        visible={editingTrackId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeTrackTitleEditor}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Cambiar nombre del track</Text>
+            <TextInput
+              autoFocus
+              value={editingTrackTitle}
+              onChangeText={setEditingTrackTitle}
+              placeholder="Nombre de la pista"
+              style={styles.input}
+              editable={!isBusy}
+              selectTextOnFocus
+              onSubmitEditing={saveEditedTrackTitle}
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.secondary}
+                onPress={closeTrackTitleEditor}
+                disabled={isBusy}
+              >
+                <Text style={styles.secondaryText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.primary, isBusy && styles.disabled]}
+                onPress={saveEditedTrackTitle}
+                disabled={isBusy}
+              >
+                {busyAction.startsWith("title:") ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.primaryText}>Guardar</Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -1022,5 +1102,33 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     color: "#b91c1c",
     fontWeight: "800",
+  },
+  modalBackdrop: {
+    flex: 1,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 480,
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    shadowColor: "#000000",
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  modalTitle: {
+    marginBottom: 14,
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  modalActions: {
+    marginTop: 14,
+    gap: 10,
   },
 });

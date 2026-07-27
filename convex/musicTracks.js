@@ -27,6 +27,14 @@ export const add = mutation({
     audioMimeType: v.optional(v.string()),
     audioSizeBytes: v.optional(v.number()),
     durationMs: v.optional(v.number()),
+    lyrics: v.optional(
+      v.array(
+        v.object({
+          timeMs: v.number(),
+          text: v.string(),
+        }),
+      ),
+    ),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -62,6 +70,7 @@ export const add = mutation({
       audioMimeType: args.audioMimeType,
       audioSizeBytes: args.audioSizeBytes,
       durationMs: args.durationMs,
+      lyrics: args.lyrics,
       createdAt: now,
       updatedAt: now,
     });
@@ -85,6 +94,14 @@ export const update = mutation({
     trackId: v.id("musicTracks"),
     title: v.string(),
     artist: v.optional(v.string()),
+    lyrics: v.optional(
+      v.array(
+        v.object({
+          timeMs: v.number(),
+          text: v.string(),
+        }),
+      ),
+    ),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -106,6 +123,7 @@ export const update = mutation({
     await ctx.db.patch(args.trackId, {
       title,
       artist: args.artist?.trim() || track.artist,
+      lyrics: args.lyrics,
       updatedAt: Date.now(),
     });
   },

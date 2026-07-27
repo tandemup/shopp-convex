@@ -100,6 +100,14 @@ export const saveTrack = mutation({
     audioMimeType: v.optional(v.string()),
     audioSizeBytes: v.optional(v.number()),
     durationMs: v.optional(v.number()),
+    lyrics: v.optional(
+      v.array(
+        v.object({
+          timeMs: v.number(),
+          text: v.string(),
+        }),
+      ),
+    ),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -140,6 +148,7 @@ export const saveTrack = mutation({
       audioMimeType: args.audioMimeType,
       audioSizeBytes: args.audioSizeBytes,
       durationMs: args.durationMs,
+      lyrics: args.lyrics,
 
       createdAt: now,
       updatedAt: now,

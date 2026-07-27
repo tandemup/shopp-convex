@@ -862,6 +862,15 @@ export default defineSchema({
     audioSizeBytes: v.optional(v.float64()),
     durationMs: v.optional(v.float64()),
 
+    lyrics: v.optional(
+      v.array(
+        v.object({
+          timeMs: v.float64(),
+          text: v.string(),
+        }),
+      ),
+    ),
+
     createdAt: v.float64(),
     updatedAt: v.float64(),
   })

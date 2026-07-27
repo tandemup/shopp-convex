@@ -403,6 +403,7 @@ export const exportJson = query({
         audioMimeType: track.audioMimeType || "",
         audioSizeBytes: track.audioSizeBytes,
         durationMs: track.durationMs,
+        lyrics: track.lyrics || undefined,
       })),
     };
   },
@@ -447,6 +448,14 @@ export const importAlbumJson = mutation({
         audioMimeType: v.optional(v.string()),
         audioSizeBytes: v.optional(v.number()),
         durationMs: v.optional(v.number()),
+        lyrics: v.optional(
+          v.array(
+            v.object({
+              timeMs: v.number(),
+              text: v.string(),
+            }),
+          ),
+        ),
       }),
     ),
   },
@@ -626,6 +635,7 @@ export const importAlbumJson = mutation({
 
         // Compatibilidad con las pantallas existentes.
         trackNumber: Math.floor(track.sortOrder),
+        lyrics: track.lyrics || undefined,
 
         updatedAt: now,
       };

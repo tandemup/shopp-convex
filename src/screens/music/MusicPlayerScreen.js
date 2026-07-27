@@ -4,6 +4,7 @@ import {
   FlatList,
   Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -13,13 +14,45 @@ import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import AlbumSearchBar from "../../components/music/AlbumSearchBar";
 
 function formatMillis(value) {
   const totalSeconds = Math.max(0, Math.floor((value || 0) / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function normalizeLyrics(lyrics) {
+  if (Array.isArray(lyrics)) {
+    return lyrics
+      .filter((line) => line && typeof line.text === "string")
+      .map((line) => ({
+        timeMs: Number(line.timeMs) || 0,
+        text: line.text.trim(),
+      }))
+      .filter((line) => line.text)
+      .sort((a, b) => a.timeMs - b.timeMs);
+  }
+
+  if (typeof lyrics !== "string") return [];
+
+  return lyrics
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const match = line.match(/^\[(\d+):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)$/);
+      if (!match || !match[4].trim()) return [];
+
+      const fraction = (match[3] || "0").padEnd(3, "0");
+      return [
+        {
+          timeMs:
+            (Number(match[1]) * 60 + Number(match[2])) * 1000 +
+            Number(fraction),
+          text: match[4].trim(),
+        },
+      ];
+    })
+    .sort((a, b) => a.timeMs - b.timeMs);
 }
 
 export default function MusicPlayerScreen() {
@@ -29,7 +62,6 @@ export default function MusicPlayerScreen() {
 
   const albums = useQuery(api.musicAlbums.listPublished) || [];
 
-  const [searchText, setSearchText] = useState("");
   const [selectedAlbumId, setSelectedAlbumId] = useState(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [status, setStatus] = useState({
@@ -41,30 +73,33 @@ export default function MusicPlayerScreen() {
   const [playerError, setPlayerError] = useState("");
 
   const soundRef = useRef(null);
+  const loadingTrackRef = useRef(false);
+  const loadRequestRef = useRef(0);
+  const mountedRef = useRef(true);
 
   const album = useQuery(
     api.musicAlbums.getPublishedWithTracks,
     selectedAlbumId ? { albumId: selectedAlbumId } : "skip",
   );
 
-  const filteredAlbums = useMemo(() => {
-    const search = searchText.trim().toLocaleLowerCase("es");
-
-    if (!search) return albums;
-
-    return albums.filter((item) => {
-      const searchable =
-        `${item.title} ${item.artist} ${item.genre || ""}`.toLocaleLowerCase(
-          "es",
-        );
-
-      return searchable.includes(search);
-    });
-  }, [albums, searchText]);
-
   const currentTrack = album?.tracks?.[currentTrackIndex] || null;
+  const currentLyrics = useMemo(
+    () => normalizeLyrics(currentTrack?.lyrics),
+    [currentTrack?.lyrics],
+  );
+  const currentLyricIndex = useMemo(() => {
+    let index = -1;
+    currentLyrics.forEach((line, lineIndex) => {
+      if (line.timeMs <= (status.positionMillis || 0)) index = lineIndex;
+    });
+    return index;
+  }, [currentLyrics, status.positionMillis]);
 
-  const unloadSound = async () => {
+  const unloadSound = async (invalidateRequest = true) => {
+    if (invalidateRequest) {
+      loadRequestRef.current += 1;
+    }
+
     const sound = soundRef.current;
     soundRef.current = null;
 
@@ -88,6 +123,7 @@ export default function MusicPlayerScreen() {
     }).catch(() => {});
 
     return () => {
+      mountedRef.current = false;
       unloadSound();
     };
   }, []);
@@ -100,12 +136,18 @@ export default function MusicPlayerScreen() {
   const loadTrack = async (trackIndex, shouldPlay = true) => {
     const track = album?.tracks?.[trackIndex];
 
-    if (!track?.audioUrl) return;
+    if (!track?.audioUrl || loadingTrackRef.current) return;
 
+    loadingTrackRef.current = true;
+    const requestId = ++loadRequestRef.current;
     setPlayerError("");
-    await unloadSound();
 
     try {
+      // Detener y liberar completamente la pista anterior antes de crear otra.
+      await unloadSound(false);
+
+      if (!mountedRef.current || requestId !== loadRequestRef.current) return;
+
       const { sound } = await Audio.Sound.createAsync(
         { uri: track.audioUrl },
         {
@@ -113,6 +155,11 @@ export default function MusicPlayerScreen() {
           progressUpdateIntervalMillis: 500,
         },
         (nextStatus) => {
+          // Un callback de una carga anterior puede llegar después de unloadAsync.
+          if (!mountedRef.current || requestId !== loadRequestRef.current) {
+            return;
+          }
+
           if (!nextStatus.isLoaded) {
             if (nextStatus.error) {
               setPlayerError(nextStatus.error);
@@ -131,18 +178,28 @@ export default function MusicPlayerScreen() {
             const nextIndex = trackIndex + 1;
 
             if (nextIndex < (album?.tracks?.length || 0)) {
-              setCurrentTrackIndex(nextIndex);
+              // El bloqueo evita que el callback de finalización se solape
+              // con un cambio manual de pista.
               loadTrack(nextIndex, true);
             }
           }
         },
       );
 
+      if (!mountedRef.current || requestId !== loadRequestRef.current) {
+        await sound.unloadAsync().catch(() => {});
+        return;
+      }
+
       soundRef.current = sound;
       setCurrentTrackIndex(trackIndex);
     } catch (error) {
       console.error("Error cargando pista:", error);
-      setPlayerError(error?.message || "No se pudo reproducir la pista.");
+      if (mountedRef.current && requestId === loadRequestRef.current) {
+        setPlayerError(error?.message || "No se pudo reproducir la pista.");
+      }
+    } finally {
+      loadingTrackRef.current = false;
     }
   };
 
@@ -293,6 +350,27 @@ export default function MusicPlayerScreen() {
         {playerError ? (
           <Text style={styles.errorText}>{playerError}</Text>
         ) : null}
+
+        <View style={styles.lyricsContainer}>
+          <Text style={styles.lyricsTitle}>Letra</Text>
+          {currentLyrics.length ? (
+            currentLyrics.map((line, index) => (
+              <Text
+                key={`${line.timeMs}-${index}`}
+                style={[
+                  styles.lyricLine,
+                  index === currentLyricIndex && styles.activeLyricLine,
+                ]}
+              >
+                {line.text}
+              </Text>
+            ))
+          ) : (
+            <Text style={styles.noLyricsText}>
+              No hay letra disponible para esta pista.
+            </Text>
+          )}
+        </View>
       </View>
 
       <View style={styles.buttonsRow}>
@@ -345,11 +423,9 @@ export default function MusicPlayerScreen() {
 
   return (
     <View style={styles.screen}>
-      <AlbumSearchBar value={searchText} onChangeText={setSearchText} />
-
       {!selectedAlbumId ? (
         <FlatList
-          data={filteredAlbums}
+          data={albums}
           keyExtractor={(item) => String(item._id)}
           contentContainerStyle={styles.albumList}
           ListEmptyComponent={
@@ -392,29 +468,36 @@ export default function MusicPlayerScreen() {
           )}
         />
       ) : isDesktop ? (
-        <View style={styles.playerLayout}>
-          {renderBackButton()}
+        <ScrollView
+          style={styles.desktopScroll}
+          contentContainerStyle={styles.desktopScrollContent}
+          showsVerticalScrollIndicator
+          nestedScrollEnabled
+        >
+          <View style={styles.playerLayout}>
+            {renderBackButton()}
 
-          <View style={styles.responsivePlayer}>
-            <View style={styles.playerSidebar}>
-              {renderAlbumHeader()}
-              {renderControls()}
-            </View>
+            <View style={styles.responsivePlayer}>
+              <View style={styles.playerSidebar}>
+                {renderAlbumHeader()}
+                {renderControls()}
+              </View>
 
-            <View style={styles.trackPanel}>
-              {renderTrackPanelHeader()}
+              <View style={styles.trackPanel}>
+                {renderTrackPanelHeader()}
 
-              <FlatList
-                data={album?.tracks || []}
-                keyExtractor={(item) => String(item._id)}
-                style={styles.trackList}
-                contentContainerStyle={styles.trackListContent}
-                showsVerticalScrollIndicator={false}
-                renderItem={renderTrackItem}
-              />
+                <FlatList
+                  data={album?.tracks || []}
+                  keyExtractor={(item) => String(item._id)}
+                  style={styles.trackList}
+                  contentContainerStyle={styles.trackListContent}
+                  showsVerticalScrollIndicator={false}
+                  renderItem={renderTrackItem}
+                />
+              </View>
             </View>
           </View>
-        </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={album?.tracks || []}
@@ -517,12 +600,19 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   playerLayout: {
-    flex: 1,
-    minHeight: 0,
     width: "100%",
-    maxWidth: 900,
+    maxWidth: 820,
     alignSelf: "center",
     paddingHorizontal: 16,
+    paddingBottom: 140,
+  },
+  desktopScroll: {
+    flex: 1,
+    width: "100%",
+  },
+  desktopScrollContent: {
+    flexGrow: 1,
+    width: "100%",
   },
   backButton: {
     alignSelf: "flex-start",
@@ -536,29 +626,29 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   albumHeader: {
-    marginVertical: 10,
-    padding: 14,
+    marginVertical: 6,
+    padding: 10,
     borderRadius: 16,
     backgroundColor: "#ffffff",
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 10,
   },
   largeCover: {
-    width: 110,
-    height: 110,
+    width: 90,
+    height: 90,
     borderRadius: 12,
     backgroundColor: "#e2e8f0",
   },
   selectedTitle: {
     color: "#0f172a",
-    fontSize: 23,
+    fontSize: 20,
     fontWeight: "900",
   },
   selectedArtist: {
-    marginTop: 5,
+    marginTop: 3,
     color: "#475569",
-    fontSize: 17,
+    fontSize: 15,
   },
   trackList: {
     flex: 1,
@@ -598,11 +688,11 @@ const styles = StyleSheet.create({
     color: "#1d4ed8",
   },
   controls: {
-    marginTop: 8,
-    marginBottom: 12,
-    padding: 14,
+    marginTop: 4,
+    marginBottom: 6,
+    padding: 10,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     borderColor: "#e2e8f0",
     backgroundColor: "#ffffff",
   },
@@ -632,40 +722,82 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
     fontSize: 12,
   },
+  lyricsContainer: {
+    width: "100%",
+    maxHeight: 125,
+    marginTop: 8,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: "#f8fafc",
+  },
+  lyricsTitle: {
+    marginBottom: 6,
+    color: "#334155",
+    fontSize: 12,
+    fontWeight: "900",
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+  lyricLine: {
+    paddingVertical: 2,
+    color: "#94a3b8",
+    fontSize: 14,
+    lineHeight: 17,
+    textAlign: "center",
+  },
+  activeLyricLine: {
+    color: "#2563eb",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  noLyricsText: {
+    paddingVertical: 10,
+    color: "#64748b",
+    fontSize: 13,
+    textAlign: "center",
+  },
   buttonsRow: {
-    marginTop: 10,
+    marginTop: 6,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 18,
+    gap: 12,
   },
   controlButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
   },
   playButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: "#2563eb",
     alignItems: "center",
     justifyContent: "center",
   },
   responsivePlayer: {
-    flex: 1,
-    minHeight: 0,
+    height: 400,
+    flexGrow: 0,
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "stretch",
+    justifyContent: "center",
+    alignSelf: "center",
     gap: 18,
-    paddingBottom: 16,
+    paddingBottom: 8,
   },
   playerSidebar: {
     width: 340,
+    height: 400,
     flexShrink: 0,
+    padding: 0,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
   },
   albumHeaderMobile: {
     flexDirection: "column",
@@ -680,21 +812,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   largeCoverMobile: {
-    width: 240,
-    height: 240,
+    width: 200,
+    height: 200,
     maxWidth: "100%",
   },
   largeCoverCompact: {
-    width: 190,
-    height: 190,
+    width: 160,
+    height: 160,
   },
   selectedTitleCompact: {
     fontSize: 20,
   },
   trackPanel: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 0,
+    width: 280,
+    height: 400,
+    flexGrow: 0,
+    flexShrink: 1,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: "#e2e8f0",
