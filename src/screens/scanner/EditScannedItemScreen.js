@@ -983,7 +983,7 @@ export default function EditScannedItemScreen({ route, navigation }) {
               <View style={styles.cardHeader}>
                 <View>
                   <Text style={styles.cardEyebrow}>ACCIONES</Text>
-                  <Text style={styles.cardTitle}>Gestionar producto</Text>
+                  <Text style={styles.cardTitle}>Producto</Text>
                 </View>
               </View>
 

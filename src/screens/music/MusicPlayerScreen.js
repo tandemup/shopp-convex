@@ -691,9 +691,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 6,
     padding: 10,
-    borderRadius: 16,
-    borderWidth: 0,
-    borderColor: "#e2e8f0",
     backgroundColor: "#ffffff",
   },
   nowPlaying: {

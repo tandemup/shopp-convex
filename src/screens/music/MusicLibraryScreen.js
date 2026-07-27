@@ -69,7 +69,7 @@ export default function MusicLibraryScreen({ navigation }) {
           onPress={() => navigation.navigate(ROUTES.ADMIN_ALBUMS)}
         >
           <Ionicons name="add" size={22} color="#ffffff" />
-          <Text style={styles.newAlbumButtonText}>Gestionar álbumes</Text>
+          <Text style={styles.newAlbumButtonText}>Albums</Text>
         </Pressable>
       ) : null}
 
