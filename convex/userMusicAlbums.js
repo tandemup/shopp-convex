@@ -25,9 +25,7 @@ export const listMine = query({
       }),
     );
 
-    return albums
-      .filter(Boolean)
-      .sort((a, b) => b.addedAt - a.addedAt);
+    return albums.filter(Boolean).sort((a, b) => b.addedAt - a.addedAt);
   },
 });
 

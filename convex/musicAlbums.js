@@ -209,8 +209,13 @@ export const listPublished = query({
     );
 
     return result.sort((a, b) => {
-      const artistCompare = a.artist.localeCompare(b.artist);
-      return artistCompare || a.title.localeCompare(b.title);
+      const artistA = String(a.artist || a.composer || "");
+      const artistB = String(b.artist || b.composer || "");
+      const artistCompare = artistA.localeCompare(artistB);
+      return (
+        artistCompare ||
+        String(a.title || "").localeCompare(String(b.title || ""))
+      );
     });
   },
 });

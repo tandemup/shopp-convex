@@ -102,7 +102,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
     const loading = isPlaylist ? playlist === undefined : album === undefined;
     if ((!selectedAlbumId && !selectedPlaylistId) || !loading) return undefined;
 
-    const timer = setTimeout(() => setAlbumLoadTimedOut(true), 10000);
+    const timer = setTimeout(() => setMediaLoadTimedOut(true), 10000);
     return () => clearTimeout(timer);
   }, [selectedAlbumId, selectedPlaylistId, album, playlist, isPlaylist]);
 
