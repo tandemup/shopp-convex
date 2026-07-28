@@ -38,6 +38,7 @@ import type * as scanHistory from "../scanHistory.js";
 import type * as shoppingImport from "../shoppingImport.js";
 import type * as storeFavorites from "../storeFavorites.js";
 import type * as stores from "../stores.js";
+import type * as userMusicAlbums from "../userMusicAlbums.js";
 import type * as userScanHistory from "../userScanHistory.js";
 import type * as users from "../users.js";
 
@@ -78,6 +79,7 @@ declare const fullApi: ApiFromModules<{
   shoppingImport: typeof shoppingImport;
   storeFavorites: typeof storeFavorites;
   stores: typeof stores;
+  userMusicAlbums: typeof userMusicAlbums;
   userScanHistory: typeof userScanHistory;
   users: typeof users;
 }>;

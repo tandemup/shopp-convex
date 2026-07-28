@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ROUTES } from "../../navigation/ROUTES";
 
@@ -22,7 +22,10 @@ const normalize = (value) =>
 
 export default function MusicLibraryScreen({ navigation }) {
   const albums = useQuery(api.musicAlbums.listPublished);
+  const myAlbums = useQuery(api.userMusicAlbums.listMine);
   const playlists = useQuery(api.musicPlaylists.listMine);
+  const addAlbum = useMutation(api.userMusicAlbums.add);
+  const removeAlbum = useMutation(api.userMusicAlbums.remove);
   const [searchText, setSearchText] = useState("");
   const filteredAlbums = useMemo(() => {
     const search = normalize(searchText.trim());
@@ -35,6 +38,77 @@ export default function MusicLibraryScreen({ navigation }) {
       ).includes(search),
     );
   }, [albums, searchText]);
+  const myAlbumIds = useMemo(
+    () => new Set((myAlbums || []).map((album) => String(album._id))),
+    [myAlbums],
+  );
+  const myLibraryAlbums = useMemo(() => {
+    const search = normalize(searchText.trim());
+    return (myAlbums || []).filter((album) => {
+      if (!search) return true;
+      return normalize(
+        [album.title, album.artist, album.composer, album.genre, album.year]
+          .filter(Boolean)
+          .join(" "),
+      ).includes(search);
+    });
+  }, [myAlbums, searchText]);
+  const toggleLibrary = async (album) => {
+    if (myAlbumIds.has(String(album._id))) {
+      await removeAlbum({ albumId: album._id });
+    } else {
+      await addAlbum({ albumId: album._id });
+    }
+  };
+  const renderAlbumCard = (album, showLibraryAction = false) => (
+    <Pressable
+      key={album._id}
+      style={styles.albumCard}
+      onPress={() =>
+        navigation.navigate(ROUTES.MUSIC_PLAYER, { albumId: album._id })
+      }
+    >
+      {album.coverUrl ? (
+        <Image source={{ uri: album.coverUrl }} style={styles.cover} />
+      ) : (
+        <View style={[styles.cover, styles.placeholder]}>
+          <Ionicons name="musical-notes" size={28} color="#64748b" />
+        </View>
+      )}
+      <View style={styles.albumInfo}>
+        <Text style={styles.albumTitle}>{album.title}</Text>
+        <Text style={styles.albumArtist}>
+          {album.artist || album.composer || "Sin artista"}
+        </Text>
+        <Text style={styles.albumMeta}>
+          {album.trackCount || 0} pistas
+          {album.genre ? ` · ${album.genre}` : ""}
+          {album.year ? ` · ${album.year}` : ""}
+        </Text>
+      </View>
+      {showLibraryAction ? (
+        <Pressable
+          hitSlop={10}
+          onPress={(event) => {
+            event.stopPropagation();
+            toggleLibrary(album);
+          }}
+        >
+          <Ionicons
+            name={
+              myAlbumIds.has(String(album._id))
+                ? "checkmark-circle"
+                : "add-circle-outline"
+            }
+            size={25}
+            color="#2563eb"
+          />
+        </Pressable>
+      ) : (
+        <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
+      )}
+    </Pressable>
+  );
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
@@ -131,40 +205,27 @@ export default function MusicLibraryScreen({ navigation }) {
           placeholderTextColor="#94a3b8"
         />
       </View>
+      <Text style={styles.libraryHint}>
+        Guarda álbumes en tu biblioteca para encontrarlos rápidamente. Los
+        archivos no se duplican.
+      </Text>
+      {myAlbums === undefined ? (
+        <ActivityIndicator style={styles.loader} />
+      ) : myLibraryAlbums.length > 0 ? (
+        <>
+          <Text style={styles.subsectionTitle}>Mi biblioteca</Text>
+          {myLibraryAlbums.map((album) => renderAlbumCard(album, true))}
+          <Text style={styles.subsectionTitle}>Álbumes disponibles</Text>
+        </>
+      ) : null}
       {albums === undefined ? (
         <ActivityIndicator style={styles.loader} />
       ) : filteredAlbums.length === 0 ? (
         <Text style={styles.emptyText}>No hay álbumes publicados.</Text>
       ) : (
-        filteredAlbums.map((album) => (
-          <Pressable
-            key={album._id}
-            style={styles.albumCard}
-            onPress={() =>
-              navigation.navigate(ROUTES.MUSIC_PLAYER, { albumId: album._id })
-            }
-          >
-            {album.coverUrl ? (
-              <Image source={{ uri: album.coverUrl }} style={styles.cover} />
-            ) : (
-              <View style={[styles.cover, styles.placeholder]}>
-                <Ionicons name="musical-notes" size={28} color="#64748b" />
-              </View>
-            )}
-            <View style={styles.albumInfo}>
-              <Text style={styles.albumTitle}>{album.title}</Text>
-              <Text style={styles.albumArtist}>
-                {album.artist || album.composer || "Sin artista"}
-              </Text>
-              <Text style={styles.albumMeta}>
-                {album.trackCount || 0} pistas
-                {album.genre ? ` · ${album.genre}` : ""}
-                {album.year ? ` · ${album.year}` : ""}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-          </Pressable>
-        ))
+        filteredAlbums
+          .filter((album) => !myAlbumIds.has(String(album._id)))
+          .map((album) => renderAlbumCard(album, true))
       )}
     </ScrollView>
   );
@@ -256,6 +317,14 @@ const styles = StyleSheet.create({
   },
   loader: { marginTop: 30 },
   emptyText: { padding: 28, color: "#64748b", textAlign: "center" },
+  libraryHint: { marginBottom: 12, color: "#64748b", fontSize: 13 },
+  subsectionTitle: {
+    marginTop: 8,
+    marginBottom: 10,
+    color: "#334155",
+    fontSize: 15,
+    fontWeight: "800",
+  },
   albumCard: {
     minHeight: 94,
     marginBottom: 12,

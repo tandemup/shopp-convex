@@ -887,6 +887,15 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_track", ["userId", "trackId"]),
 
+  userMusicAlbums: defineTable({
+    userId: v.id("users"),
+    albumId: v.id("musicAlbums"),
+    addedAt: v.float64(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_album", ["userId", "albumId"])
+    .index("by_album", ["albumId"]),
+
   musicPlaylists: defineTable({
     userId: v.id("users"),
     name: v.string(),
