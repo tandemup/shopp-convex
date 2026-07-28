@@ -24,7 +24,6 @@ export default function MusicLibraryScreen({ navigation }) {
   const albums = useQuery(api.musicAlbums.listPublished);
   const playlists = useQuery(api.musicPlaylists.listMine);
   const [searchText, setSearchText] = useState("");
-  const [favoriteAlbums, setFavoriteAlbums] = useState(() => new Set());
   const filteredAlbums = useMemo(() => {
     const search = normalize(searchText.trim());
     if (!search) return albums || [];
@@ -36,12 +35,6 @@ export default function MusicLibraryScreen({ navigation }) {
       ).includes(search),
     );
   }, [albums, searchText]);
-  const toggleFavorite = (id) =>
-    setFavoriteAlbums((previous) => {
-      const next = new Set(previous);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.hero}>
@@ -143,53 +136,35 @@ export default function MusicLibraryScreen({ navigation }) {
       ) : filteredAlbums.length === 0 ? (
         <Text style={styles.emptyText}>No hay álbumes publicados.</Text>
       ) : (
-        filteredAlbums.map((album) => {
-          const favorite = favoriteAlbums.has(album._id);
-          return (
-            <Pressable
-              key={album._id}
-              style={styles.albumCard}
-              onPress={() =>
-                navigation.navigate(ROUTES.MUSIC_PLAYER, { albumId: album._id })
-              }
-            >
-              {album.coverUrl ? (
-                <Image source={{ uri: album.coverUrl }} style={styles.cover} />
-              ) : (
-                <View style={[styles.cover, styles.placeholder]}>
-                  <Ionicons name="musical-notes" size={28} color="#64748b" />
-                </View>
-              )}
-              <View style={styles.albumInfo}>
-                <Text style={styles.albumTitle}>{album.title}</Text>
-                <Text style={styles.albumArtist}>
-                  {album.artist || album.composer || "Sin artista"}
-                </Text>
-                <Text style={styles.albumMeta}>
-                  {album.trackCount || 0} pistas
-                  {album.genre ? ` · ${album.genre}` : ""}
-                  {album.year ? ` · ${album.year}` : ""}
-                </Text>
+        filteredAlbums.map((album) => (
+          <Pressable
+            key={album._id}
+            style={styles.albumCard}
+            onPress={() =>
+              navigation.navigate(ROUTES.MUSIC_PLAYER, { albumId: album._id })
+            }
+          >
+            {album.coverUrl ? (
+              <Image source={{ uri: album.coverUrl }} style={styles.cover} />
+            ) : (
+              <View style={[styles.cover, styles.placeholder]}>
+                <Ionicons name="musical-notes" size={28} color="#64748b" />
               </View>
-              <View style={styles.albumActions}>
-                <Pressable
-                  hitSlop={10}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    toggleFavorite(album._id);
-                  }}
-                >
-                  <Ionicons
-                    name={favorite ? "star" : "star-outline"}
-                    size={24}
-                    color={favorite ? "#f59e0b" : "#94a3b8"}
-                  />
-                </Pressable>
-                <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-              </View>
-            </Pressable>
-          );
-        })
+            )}
+            <View style={styles.albumInfo}>
+              <Text style={styles.albumTitle}>{album.title}</Text>
+              <Text style={styles.albumArtist}>
+                {album.artist || album.composer || "Sin artista"}
+              </Text>
+              <Text style={styles.albumMeta}>
+                {album.trackCount || 0} pistas
+                {album.genre ? ` · ${album.genre}` : ""}
+                {album.year ? ` · ${album.year}` : ""}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
+          </Pressable>
+        ))
       )}
     </ScrollView>
   );
@@ -301,5 +276,4 @@ const styles = StyleSheet.create({
   albumTitle: { color: "#0f172a", fontSize: 16, fontWeight: "800" },
   albumArtist: { marginTop: 4, color: "#475569" },
   albumMeta: { marginTop: 5, color: "#94a3b8", fontSize: 12 },
-  albumActions: { alignItems: "center", gap: 12 },
 });
