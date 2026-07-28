@@ -878,4 +878,34 @@ export default defineSchema({
     .index("by_album_track", ["albumId", "trackNumber"])
     .index("by_album_order", ["albumId", "sortOrder"])
     .index("by_album_disc_track", ["albumId", "discNumber", "discTrackNumber"]),
+
+  musicFavorites: defineTable({
+    userId: v.id("users"),
+    trackId: v.id("musicTracks"),
+    createdAt: v.float64(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_track", ["userId", "trackId"]),
+
+  musicPlaylists: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    isPublic: v.boolean(),
+    shareToken: v.string(),
+    createdAt: v.float64(),
+    updatedAt: v.float64(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_updated", ["userId", "updatedAt"])
+    .index("by_shareToken", ["shareToken"]),
+
+  musicPlaylistTracks: defineTable({
+    playlistId: v.id("musicPlaylists"),
+    trackId: v.id("musicTracks"),
+    position: v.float64(),
+    addedAt: v.float64(),
+  })
+    .index("by_playlist", ["playlistId"])
+    .index("by_playlist_track", ["playlistId", "trackId"]),
 });

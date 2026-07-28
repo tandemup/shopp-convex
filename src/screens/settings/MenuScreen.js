@@ -826,6 +826,14 @@ export default function MenuScreen({ navigation }) {
     navigation.navigate(ROUTES.MUSIC_LIBRARY);
   };
 
+  const goToMusicPlaylists = () => {
+    navigation.navigate(ROUTES.MUSIC_PLAYLISTS);
+  };
+
+  const goToAdminAlbums = () => {
+    navigation.navigate(ROUTES.ADMIN_ALBUMS);
+  };
+
   const goToProductSearchEngines = () => {
     navigation.navigate(ROUTES.SEARCH_ENGINE_SETTINGS, {
       type: "product",
@@ -1203,6 +1211,23 @@ export default function MenuScreen({ navigation }) {
               }
               onPress={goToMusicLibrary}
             />
+
+            <SettingsCard
+              icon="list-outline"
+              title="Mis playlists"
+              subtitle="Crear y compartir selecciones musicales"
+              onPress={goToMusicPlaylists}
+            />
+
+            {isAdmin ? (
+              <SettingsCard
+                icon="create-outline"
+                title="Editar álbumes"
+                subtitle="Modificar datos, carátulas, pistas y letras"
+                badge="ADMIN"
+                onPress={goToAdminAlbums}
+              />
+            ) : null}
 
             <SettingsCard
               icon="log-out-outline"

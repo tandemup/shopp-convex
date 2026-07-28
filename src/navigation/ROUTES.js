@@ -71,6 +71,8 @@ export const ROUTES = {
 
   // Musica
   MUSIC_LIBRARY: "Music Library",
+  MUSIC_PLAYLISTS: "Music Playlists",
+  MUSIC_PLAYLIST_DETAIL: "Music Playlist Detail",
   MUSIC_PLAYER: "Music Player",
   ADMIN_ALBUMS: "Admin Albums",
   ADMIN_ALBUM_UPLOAD: "Admin Album Upload",

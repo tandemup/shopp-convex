@@ -63,7 +63,6 @@ export default function MusicPlayerScreen({ navigation, route }) {
   // Acepta ambos nombres para evitar una pantalla de carga infinita si la
   // pantalla anterior navega pasando `id` en lugar de `albumId`.
   const selectedAlbumId = route?.params?.albumId || route?.params?.id || null;
-  const selectedPlaylistId = route?.params?.playlistId || null;
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [status, setStatus] = useState({
     isLoaded: false,
@@ -74,7 +73,8 @@ export default function MusicPlayerScreen({ navigation, route }) {
   const [playerError, setPlayerError] = useState("");
   const [showTrackList, setShowTrackList] = useState(true);
   const [showLyrics, setShowLyrics] = useState(true);
-  const [mediaLoadTimedOut, setMediaLoadTimedOut] = useState(false);
+  const [favoriteTracks, setFavoriteTracks] = useState(() => new Set());
+  const [albumLoadTimedOut, setAlbumLoadTimedOut] = useState(false);
 
   const soundRef = useRef(null);
   const lyricsScrollRef = useRef(null);
@@ -88,25 +88,26 @@ export default function MusicPlayerScreen({ navigation, route }) {
     api.musicAlbums.getPublishedWithTracks,
     selectedAlbumId ? { albumId: selectedAlbumId } : "skip",
   );
-  const playlist = useQuery(
-    api.musicPlaylists.get,
-    selectedPlaylistId ? { playlistId: selectedPlaylistId } : "skip",
-  );
-  const media = selectedPlaylistId ? playlist : album;
-  const tracks = media?.tracks || [];
-  const isPlaylist = Boolean(selectedPlaylistId);
+  const favoriteTrackIds = useQuery(api.musicFavorites.listMyFavoriteTrackIds);
+  const addFavorite = useMutation(api.musicFavorites.add);
+  const removeFavorite = useMutation(api.musicFavorites.remove);
+
+  useEffect(() => {
+    if (Array.isArray(favoriteTrackIds)) {
+      setFavoriteTracks(new Set(favoriteTrackIds));
+    }
+  }, [favoriteTrackIds]);
 
   // Evita dejar la pantalla bloqueada indefinidamente si Convex no responde.
   useEffect(() => {
-    setMediaLoadTimedOut(false);
-    const loading = isPlaylist ? playlist === undefined : album === undefined;
-    if ((!selectedAlbumId && !selectedPlaylistId) || !loading) return undefined;
+    setAlbumLoadTimedOut(false);
+    if (!selectedAlbumId || album !== undefined) return undefined;
 
     const timer = setTimeout(() => setAlbumLoadTimedOut(true), 10000);
     return () => clearTimeout(timer);
-  }, [selectedAlbumId, selectedPlaylistId, album, playlist, isPlaylist]);
+  }, [selectedAlbumId, album]);
 
-  const currentTrack = tracks[currentTrackIndex] || null;
+  const currentTrack = album?.tracks?.[currentTrackIndex] || null;
   const progressPercent = useMemo(() => {
     const duration = Number(status.durationMillis) || 0;
     const position = Number(status.positionMillis) || 0;
@@ -186,19 +187,19 @@ export default function MusicPlayerScreen({ navigation, route }) {
   useEffect(() => {
     setCurrentTrackIndex(0);
     unloadSound();
-  }, [selectedAlbumId, selectedPlaylistId]);
+  }, [selectedAlbumId]);
 
   useEffect(() => {
     const requestedTrackId = route?.params?.trackId;
-    if (!requestedTrackId || !tracks.length) return;
-    const requestedIndex = tracks.findIndex(
+    if (!requestedTrackId || !album?.tracks?.length) return;
+    const requestedIndex = album.tracks.findIndex(
       (track) => String(track._id) === String(requestedTrackId),
     );
     if (requestedIndex >= 0) setCurrentTrackIndex(requestedIndex);
-  }, [tracks, route?.params?.trackId]);
+  }, [album?.tracks, route?.params?.trackId]);
 
   const loadTrack = async (trackIndex, shouldPlay = true) => {
-    const track = tracks[trackIndex];
+    const track = album?.tracks?.[trackIndex];
 
     if (!track?.audioUrl || loadingTrackRef.current) return;
 
@@ -241,7 +242,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
           if (nextStatus.didJustFinish && !nextStatus.isLooping) {
             const nextIndex = trackIndex + 1;
 
-            if (nextIndex < tracks.length) {
+            if (nextIndex < (album?.tracks?.length || 0)) {
               // El bloqueo evita que el callback de finalización se solape
               // con un cambio manual de pista.
               loadingTrackRef.current = false;
@@ -301,8 +302,30 @@ export default function MusicPlayerScreen({ navigation, route }) {
     await loadTrack(index, true);
   };
 
-  const addTrackToPlaylistScreen = (trackId) =>
-    navigation.navigate("Music Playlists", { addTrackId: trackId });
+  const toggleTrackFavorite = async (trackId) => {
+    if (!trackId) return;
+
+    const wasFavorite = favoriteTracks.has(trackId);
+    setFavoriteTracks((previous) => {
+      const next = new Set(previous);
+      if (next.has(trackId)) {
+        next.delete(trackId);
+      } else {
+        next.add(trackId);
+      }
+      return next;
+    });
+    try {
+      if (wasFavorite) await removeFavorite({ trackId });
+      else await addFavorite({ trackId });
+    } catch (error) {
+      setFavoriteTracks((previous) => {
+        const next = new Set(previous);
+        wasFavorite ? next.add(trackId) : next.delete(trackId);
+        return next;
+      });
+    }
+  };
 
   const playPrevious = async () => {
     const previous = Math.max(0, currentTrackIndex - 1);
@@ -310,7 +333,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
   };
 
   const playNext = async () => {
-    const lastIndex = Math.max(0, (tracks.length || 1) - 1);
+    const lastIndex = Math.max(0, (album?.tracks?.length || 1) - 1);
     const next = Math.min(lastIndex, currentTrackIndex + 1);
     await loadTrack(next, true);
   };
@@ -340,7 +363,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
           <Text style={styles.trackArtist} numberOfLines={1}>
             {item.title && item.title !== (item.cdTrackTitle || item.trackTitle)
               ? item.title
-              : media?.artist || media?.albumArtist || media?.composer || ""}
+              : album?.artist}
           </Text>
         </View>
 
@@ -349,12 +372,20 @@ export default function MusicPlayerScreen({ navigation, route }) {
           hitSlop={10}
           onPress={(event) => {
             event.stopPropagation();
-            addTrackToPlaylistScreen(item._id);
+            toggleTrackFavorite(item._id);
           }}
           accessibilityRole="button"
-          accessibilityLabel="Añadir canción a una playlist"
+          accessibilityLabel={
+            favoriteTracks.has(item._id)
+              ? "Quitar canción de favoritos"
+              : "Añadir canción a favoritos"
+          }
         >
-          <Ionicons name="list-outline" size={21} color="#2563eb" />
+          <Ionicons
+            name={favoriteTracks.has(item._id) ? "star" : "star-outline"}
+            size={21}
+            color={favoriteTracks.has(item._id) ? "#f59e0b" : "#94a3b8"}
+          />
         </Pressable>
 
         {active && status.isPlaying ? (
@@ -375,9 +406,9 @@ export default function MusicPlayerScreen({ navigation, route }) {
 
   const renderAlbumHeader = () => (
     <View style={[styles.albumHeader, !isDesktop && styles.albumHeaderMobile]}>
-      {media?.coverUrl ? (
+      {album?.coverUrl ? (
         <Image
-          source={{ uri: media.coverUrl }}
+          source={{ uri: album.coverUrl }}
           style={[
             styles.largeCover,
             !isDesktop && styles.largeCoverMobile,
@@ -404,17 +435,15 @@ export default function MusicPlayerScreen({ navigation, route }) {
             isCompactMobile && styles.selectedTitleCompact,
           ]}
         >
-          {media?.name || media?.title}
+          {album?.title}
         </Text>
 
-        <Text style={styles.selectedArtist}>
-          {media?.artist || media?.albumArtist || media?.composer || ""}
-        </Text>
+        <Text style={styles.selectedArtist}>{album?.artist}</Text>
 
         <Text style={styles.albumMeta}>
-          {tracks.length} pistas
-          {!isPlaylist && media?.genre ? ` · ${media.genre}` : ""}
-          {!isPlaylist && media?.year ? ` · ${media.year}` : ""}
+          {album?.tracks?.length || 0} pistas
+          {album?.genre ? ` · ${album.genre}` : ""}
+          {album?.year ? ` · ${album.year}` : ""}
         </Text>
       </View>
     </View>
@@ -575,17 +604,15 @@ export default function MusicPlayerScreen({ navigation, route }) {
   const renderTrackPanelHeader = () => (
     <View style={styles.trackPanelHeader}>
       <Text style={styles.trackPanelTitle}>Pistas</Text>
-      <Text style={styles.trackPanelCount}>{tracks.length}</Text>
+      <Text style={styles.trackPanelCount}>{album?.tracks?.length || 0}</Text>
     </View>
   );
 
-  if (!selectedAlbumId && !selectedPlaylistId) {
+  if (!selectedAlbumId) {
     return (
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={42} color="#64748b" />
-        <Text style={styles.loadingText}>
-          No se ha indicado ningún álbum o playlist.
-        </Text>
+        <Text style={styles.loadingText}>No se ha indicado ningún álbum.</Text>
         <Pressable
           style={styles.backButton}
           onPress={() => navigation?.goBack?.()}
@@ -596,28 +623,23 @@ export default function MusicPlayerScreen({ navigation, route }) {
     );
   }
 
-  const loadingMedia = isPlaylist
-    ? playlist === undefined
-    : album === undefined;
-  if (loadingMedia && !mediaLoadTimedOut) {
+  if (album === undefined && !albumLoadTimedOut) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator />
-        <Text style={styles.loadingText}>
-          {isPlaylist ? "Cargando playlist..." : "Cargando álbum..."}
-        </Text>
+        <Text style={styles.loadingText}>Cargando álbum...</Text>
       </View>
     );
   }
 
-  if ((isPlaylist ? playlist === null : album === null) || mediaLoadTimedOut) {
+  if (album === null || albumLoadTimedOut) {
     return (
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={42} color="#64748b" />
         <Text style={styles.loadingText}>
-          {mediaLoadTimedOut
-            ? `No se pudo cargar la ${isPlaylist ? "playlist" : "álbum"}.`
-            : `El ${isPlaylist ? "playlist" : "álbum"} no existe o no está disponible.`}
+          {albumLoadTimedOut
+            ? "No se pudo cargar el álbum."
+            : "El álbum no existe o no está publicado."}
         </Text>
         <Pressable
           style={styles.backButton}
@@ -652,7 +674,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
                   {renderTrackPanelHeader()}
 
                   <FlatList
-                    data={tracks}
+                    data={album?.tracks || []}
                     keyExtractor={(item) => String(item._id)}
                     style={styles.trackList}
                     contentContainerStyle={styles.trackListContent}
@@ -666,7 +688,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
         </ScrollView>
       ) : (
         <FlatList
-          data={showTrackList ? tracks : []}
+          data={showTrackList ? album?.tracks || [] : []}
           keyExtractor={(item) => String(item._id)}
           style={styles.mobilePlayerList}
           contentContainerStyle={styles.mobilePlayerListContent}
