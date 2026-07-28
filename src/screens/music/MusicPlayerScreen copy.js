@@ -60,9 +60,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
   const isDesktop = width >= 900;
   const isCompactMobile = width < 420;
 
-  // Acepta ambos nombres para evitar una pantalla de carga infinita si la
-  // pantalla anterior navega pasando `id` en lugar de `albumId`.
-  const selectedAlbumId = route?.params?.albumId || route?.params?.id || null;
+  const selectedAlbumId = route?.params?.albumId || null;
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [status, setStatus] = useState({
     isLoaded: false,
@@ -71,9 +69,6 @@ export default function MusicPlayerScreen({ navigation, route }) {
     durationMillis: 0,
   });
   const [playerError, setPlayerError] = useState("");
-  const [showTrackList, setShowTrackList] = useState(true);
-  const [showLyrics, setShowLyrics] = useState(true);
-  const [albumLoadTimedOut, setAlbumLoadTimedOut] = useState(false);
 
   const soundRef = useRef(null);
   const lyricsScrollRef = useRef(null);
@@ -88,23 +83,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
     selectedAlbumId ? { albumId: selectedAlbumId } : "skip",
   );
 
-  // Evita dejar la pantalla bloqueada indefinidamente si Convex no responde.
-  useEffect(() => {
-    setAlbumLoadTimedOut(false);
-    if (!selectedAlbumId || album !== undefined) return undefined;
-
-    const timer = setTimeout(() => setAlbumLoadTimedOut(true), 10000);
-    return () => clearTimeout(timer);
-  }, [selectedAlbumId, album]);
-
   const currentTrack = album?.tracks?.[currentTrackIndex] || null;
-  const progressPercent = useMemo(() => {
-    const duration = Number(status.durationMillis) || 0;
-    const position = Number(status.positionMillis) || 0;
-
-    if (duration <= 0) return 0;
-    return Math.min(100, Math.max(0, (position / duration) * 100));
-  }, [status.positionMillis, status.durationMillis]);
   const currentLyrics = useMemo(
     () => normalizeLyrics(currentTrack?.lyrics),
     [currentTrack?.lyrics],
@@ -259,27 +238,9 @@ export default function MusicPlayerScreen({ navigation, route }) {
 
     if (status.isPlaying) {
       await soundRef.current.pauseAsync();
-      if (mountedRef.current) {
-        setStatus((previous) => ({ ...previous, isPlaying: false }));
-      }
     } else {
       await soundRef.current.playAsync();
-      if (mountedRef.current) {
-        setStatus((previous) => ({ ...previous, isPlaying: true }));
-      }
     }
-  };
-
-  // Pulsar la pista activa alterna play/stop; una pista diferente se carga
-  // y comienza desde el principio. Así el icono de cada fila coincide con
-  // el estado real del reproductor.
-  const handleTrackPress = async (index) => {
-    if (index === currentTrackIndex) {
-      await togglePlayback();
-      return;
-    }
-
-    await loadTrack(index, true);
   };
 
   const playPrevious = async () => {
@@ -299,7 +260,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
     return (
       <Pressable
         style={[styles.trackItem, active && styles.trackItemActive]}
-        onPress={() => handleTrackPress(index)}
+        onPress={() => loadTrack(index, true)}
       >
         <Text style={[styles.trackIndex, active && styles.trackTextActive]}>
           {String(
@@ -408,85 +369,54 @@ export default function MusicPlayerScreen({ navigation, route }) {
           {formatMillis(status.durationMillis)}
         </Text>
 
-        <View
-          style={styles.progressTrack}
-          accessibilityRole="progressbar"
-          accessibilityValue={{
-            min: 0,
-            max: 100,
-            now: Math.round(progressPercent),
-          }}
-        >
-          <View
-            style={[styles.progressFill, { width: `${progressPercent}%` }]}
-          />
-        </View>
-
         {playerError ? (
           <Text style={styles.errorText}>{playerError}</Text>
         ) : null}
 
-        {showLyrics ? (
-          <View style={styles.lyricsContainer}>
-            <Text style={styles.lyricsTitle}>Letra</Text>
-            {currentLyrics.length ? (
-              <ScrollView
-                ref={lyricsScrollRef}
-                nestedScrollEnabled
-                showsVerticalScrollIndicator
-                contentContainerStyle={styles.lyricsContent}
-              >
-                {currentLyrics.map((line, index) => (
-                  <Text
-                    key={`${line.timeMs}-${index}`}
-                    onLayout={(event) => {
-                      lyricLineLayoutsRef.current[index] =
-                        event.nativeEvent.layout;
-                      if (
-                        index === currentLyricIndex &&
-                        lastScrolledLyricRef.current < 0
-                      ) {
-                        lyricsScrollRef.current?.scrollTo({
-                          y: Math.max(0, event.nativeEvent.layout.y - 28),
-                          animated: false,
-                        });
-                        lastScrolledLyricRef.current = index;
-                      }
-                    }}
-                    style={[
-                      styles.lyricLine,
-                      index === currentLyricIndex && styles.activeLyricLine,
-                    ]}
-                  >
-                    {line.text}
-                  </Text>
-                ))}
-              </ScrollView>
-            ) : (
-              <Text style={styles.noLyricsText}>
-                No hay letra disponible para esta pista.
-              </Text>
-            )}
-          </View>
-        ) : null}
+        <View style={styles.lyricsContainer}>
+          <Text style={styles.lyricsTitle}>Letra</Text>
+          {currentLyrics.length ? (
+            <ScrollView
+              ref={lyricsScrollRef}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              contentContainerStyle={styles.lyricsContent}
+            >
+              {currentLyrics.map((line, index) => (
+                <Text
+                  key={`${line.timeMs}-${index}`}
+                  onLayout={(event) => {
+                    lyricLineLayoutsRef.current[index] =
+                      event.nativeEvent.layout;
+                    if (
+                      index === currentLyricIndex &&
+                      lastScrolledLyricRef.current < 0
+                    ) {
+                      lyricsScrollRef.current?.scrollTo({
+                        y: Math.max(0, event.nativeEvent.layout.y - 28),
+                        animated: false,
+                      });
+                      lastScrolledLyricRef.current = index;
+                    }
+                  }}
+                  style={[
+                    styles.lyricLine,
+                    index === currentLyricIndex && styles.activeLyricLine,
+                  ]}
+                >
+                  {line.text}
+                </Text>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.noLyricsText}>
+              No hay letra disponible para esta pista.
+            </Text>
+          )}
+        </View>
       </View>
 
       <View style={styles.buttonsRow}>
-        <Pressable
-          style={styles.playerToggle}
-          onPress={() => setShowLyrics((visible) => !visible)}
-          accessibilityRole="button"
-          accessibilityLabel={showLyrics ? "Ocultar letra" : "Mostrar letra"}
-        >
-          <Ionicons
-            name={
-              showLyrics ? "chatbubble-ellipses" : "chatbubble-ellipses-outline"
-            }
-            size={21}
-            color="#1d4ed8"
-          />
-        </Pressable>
-
         <Pressable
           style={[styles.controlButton, !currentTrack && styles.disabledButton]}
           onPress={playPrevious}
@@ -514,23 +444,6 @@ export default function MusicPlayerScreen({ navigation, route }) {
         >
           <Ionicons name="play-skip-forward" size={24} color="#0f172a" />
         </Pressable>
-
-        <Pressable
-          style={styles.playerToggle}
-          onPress={() => setShowTrackList((visible) => !visible)}
-          accessibilityRole="button"
-          accessibilityLabel={
-            showTrackList
-              ? "Ocultar lista de canciones"
-              : "Mostrar lista de canciones"
-          }
-        >
-          <Ionicons
-            name={showTrackList ? "list" : "list-outline"}
-            size={22}
-            color="#1d4ed8"
-          />
-        </Pressable>
       </View>
     </View>
   );
@@ -542,45 +455,11 @@ export default function MusicPlayerScreen({ navigation, route }) {
     </View>
   );
 
-  if (!selectedAlbumId) {
-    return (
-      <View style={styles.centered}>
-        <Ionicons name="alert-circle-outline" size={42} color="#64748b" />
-        <Text style={styles.loadingText}>No se ha indicado ningún álbum.</Text>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => navigation?.goBack?.()}
-        >
-          <Text style={styles.backText}>Volver a la biblioteca</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (album === undefined && !albumLoadTimedOut) {
+  if (!selectedAlbumId || album === undefined) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator />
         <Text style={styles.loadingText}>Cargando álbum...</Text>
-      </View>
-    );
-  }
-
-  if (album === null || albumLoadTimedOut) {
-    return (
-      <View style={styles.centered}>
-        <Ionicons name="alert-circle-outline" size={42} color="#64748b" />
-        <Text style={styles.loadingText}>
-          {albumLoadTimedOut
-            ? "No se pudo cargar el álbum."
-            : "El álbum no existe o no está publicado."}
-        </Text>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => navigation?.goBack?.()}
-        >
-          <Text style={styles.backText}>Volver a la biblioteca</Text>
-        </Pressable>
       </View>
     );
   }
@@ -603,26 +482,24 @@ export default function MusicPlayerScreen({ navigation, route }) {
                 {renderControls()}
               </View>
 
-              {showTrackList ? (
-                <View style={styles.trackPanel}>
-                  {renderTrackPanelHeader()}
+              <View style={styles.trackPanel}>
+                {renderTrackPanelHeader()}
 
-                  <FlatList
-                    data={album?.tracks || []}
-                    keyExtractor={(item) => String(item._id)}
-                    style={styles.trackList}
-                    contentContainerStyle={styles.trackListContent}
-                    showsVerticalScrollIndicator={false}
-                    renderItem={renderTrackItem}
-                  />
-                </View>
-              ) : null}
+                <FlatList
+                  data={album?.tracks || []}
+                  keyExtractor={(item) => String(item._id)}
+                  style={styles.trackList}
+                  contentContainerStyle={styles.trackListContent}
+                  showsVerticalScrollIndicator={false}
+                  renderItem={renderTrackItem}
+                />
+              </View>
             </View>
           </View>
         </ScrollView>
       ) : (
         <FlatList
-          data={showTrackList ? album?.tracks || [] : []}
+          data={album?.tracks || []}
           keyExtractor={(item) => String(item._id)}
           style={styles.mobilePlayerList}
           contentContainerStyle={styles.mobilePlayerListContent}
@@ -632,11 +509,9 @@ export default function MusicPlayerScreen({ navigation, route }) {
               {renderBackButton()}
               {renderAlbumHeader()}
               {renderControls()}
-              {showTrackList ? (
-                <View style={styles.mobileTrackPanel}>
-                  {renderTrackPanelHeader()}
-                </View>
-              ) : null}
+              <View style={styles.mobileTrackPanel}>
+                {renderTrackPanelHeader()}
+              </View>
             </View>
           }
           renderItem={renderTrackItem}
@@ -812,7 +687,6 @@ const styles = StyleSheet.create({
     color: "#1d4ed8",
   },
   controls: {
-    position: "relative",
     marginTop: 4,
     marginBottom: 6,
     padding: 10,
@@ -838,19 +712,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     color: "#64748b",
     fontVariant: ["tabular-nums"],
-  },
-  progressTrack: {
-    width: "100%",
-    height: 3,
-    marginTop: 7,
-    borderRadius: 2,
-    overflow: "hidden",
-    backgroundColor: "#e2e8f0",
-  },
-  progressFill: {
-    height: "100%",
-    borderRadius: 2,
-    backgroundColor: "#2563eb",
   },
   errorText: {
     marginTop: 5,
@@ -899,16 +760,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
-  },
-  playerToggle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#eff6ff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 2,
+    gap: 12,
   },
   controlButton: {
     width: 38,
@@ -927,9 +779,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   responsivePlayer: {
-    // Altura suficiente para mostrar album, letra, progreso y controles
-    // sin que el reproductor recorte la parte inferior.
-    height: 540,
+    height: 400,
     flexGrow: 0,
     flexShrink: 0,
     flexDirection: "row",
@@ -941,7 +791,7 @@ const styles = StyleSheet.create({
   },
   playerSidebar: {
     width: 340,
-    height: 540,
+    height: 400,
     flexShrink: 0,
     padding: 0,
     borderRadius: 16,
@@ -974,7 +824,7 @@ const styles = StyleSheet.create({
   },
   trackPanel: {
     width: 280,
-    height: 540,
+    height: 400,
     flexGrow: 0,
     flexShrink: 1,
     borderRadius: 16,
