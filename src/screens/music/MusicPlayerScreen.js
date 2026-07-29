@@ -14,6 +14,7 @@ import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { getPlayableTrackUri } from "../../services/musicCache";
 
 function formatMillis(value) {
   const totalSeconds = Math.max(0, Math.floor((value || 0) / 1000));
@@ -212,8 +213,12 @@ export default function MusicPlayerScreen({ navigation, route }) {
 
       if (!mountedRef.current || requestId !== loadRequestRef.current) return;
 
+      const playableUri = await getPlayableTrackUri(track._id, track.audioUrl);
+
+      if (!mountedRef.current || requestId !== loadRequestRef.current) return;
+
       const { sound } = await Audio.Sound.createAsync(
-        { uri: track.audioUrl },
+        { uri: playableUri },
         {
           shouldPlay,
           progressUpdateIntervalMillis: 500,
