@@ -1,0 +1,30 @@
+{
+  "album": {
+    "title": "The Turn of a Friendly Card",
+    "artist": "Alan Parsons Project",
+    "composer": "Alan Parsons Project",
+    "genre": "Rock Progresivo"
+  },
+  "cover": {
+    "filename": "cover.png",
+    "coverUrl": "https://drive.google.com/uc?export=download&id=1PKyLAJs5yhYAdD8-HaSPqbESQcvzqFII"
+  },
+  "tracks": [
+    {
+      "title": "May Be a Price to Pay",
+      "filename": "5-01.mp3",
+      "trackNumber": 1,
+      "audioUrl": "https://drive.google.com/uc?export=download&id=15VrWYd8TJEIrAc9bh5knzs0y7LfkoPC9"
+    },
+    {
+      "title": "Games people play",
+      "filename": "5-02.mp3",
+      "trackNumber": 2,
+      "audioUrl": "https://drive.google.com/uc?export=download&id=1fG5YK8hCaYvA4vnO--KLvERwN7G9Kbth"
+    }
+  ],
+  "version": 1
+}
+// https://drive.google.com/file/d/1j8Ns-bimzizDGfRHJ9yxdQkkPQUHDFoF/view?usp=sharing
+
+// https://drive.google.com/uc?export=download&id=1j8Ns-bimzizDGfRHJ9yxdQkkPQUHDFoF

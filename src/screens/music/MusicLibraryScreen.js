@@ -118,6 +118,14 @@ export default function MusicLibraryScreen({ navigation }) {
           <Text style={styles.subtitle}>Álbumes y playlists</Text>
         </View>
       </View>
+      <Pressable
+        style={styles.sharedMusicButton}
+        onPress={() => navigation.navigate(ROUTES.SHARED_MUSIC)}
+      >
+        <Ionicons name="cloud-download-outline" size={20} color="#2563eb" />
+        <Text style={styles.sharedMusicText}>Descargar música compartida</Text>
+        <Ionicons name="chevron-forward" size={18} color="#2563eb" />
+      </Pressable>
 
       <View style={styles.sectionHeader}>
         <View style={styles.sectionTitleRow}>
@@ -247,6 +255,18 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   heroText: { flex: 1 },
+  sharedMusicButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 13,
+    marginBottom: 20,
+    borderRadius: 12,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  sharedMusicText: { flex: 1, color: "#1d4ed8", fontWeight: "700" },
   title: { color: "#0f172a", fontSize: 24, fontWeight: "800" },
   subtitle: { marginTop: 3, color: "#64748b", fontSize: 14 },
   sectionHeader: {

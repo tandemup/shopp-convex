@@ -19,6 +19,7 @@ import CarrefourTestScreen from "@/src/screens/CarrefourTestScreen";
 
 import MusicLibraryScreen from "@/src/screens/music/MusicLibraryScreen";
 import MusicPlayerScreen from "@/src/screens/music/MusicPlayerScreen";
+import SharedMusicScreen from "@/src/screens/music/SharedMusicScreen";
 import PlaylistsScreen from "@/src/screens/music/PlaylistsScreen";
 import PlaylistDetailScreen from "@/src/screens/music/PlaylistDetailScreen";
 
@@ -98,6 +99,11 @@ export default function ShoppingStack() {
         options={{
           title: "Reproductor",
         }}
+      />
+      <Stack.Screen
+        name={ROUTES.SHARED_MUSIC}
+        component={SharedMusicScreen}
+        options={{ title: "Música compartida" }}
       />
       <Stack.Screen
         name={ROUTES.MUSIC_PLAYLISTS}

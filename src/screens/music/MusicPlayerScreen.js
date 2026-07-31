@@ -65,6 +65,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
   // pantalla anterior navega pasando `id` en lugar de `albumId`.
   const selectedAlbumId = route?.params?.albumId || route?.params?.id || null;
   const selectedPlaylistId = route?.params?.playlistId || null;
+  const sharedAlbum = route?.params?.sharedAlbum || null;
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [status, setStatus] = useState({
     isLoaded: false,
@@ -87,25 +88,37 @@ export default function MusicPlayerScreen({ navigation, route }) {
 
   const album = useQuery(
     api.musicAlbums.getPublishedWithTracks,
-    selectedAlbumId ? { albumId: selectedAlbumId } : "skip",
+    selectedAlbumId && !sharedAlbum ? { albumId: selectedAlbumId } : "skip",
   );
   const playlist = useQuery(
     api.musicPlaylists.get,
     selectedPlaylistId ? { playlistId: selectedPlaylistId } : "skip",
   );
   const media = selectedPlaylistId ? playlist : album;
-  const tracks = media?.tracks || [];
+  const activeMedia = sharedAlbum || media;
+  const tracks = activeMedia?.tracks || [];
   const isPlaylist = Boolean(selectedPlaylistId);
 
   // Evita dejar la pantalla bloqueada indefinidamente si Convex no responde.
   useEffect(() => {
     setMediaLoadTimedOut(false);
-    const loading = isPlaylist ? playlist === undefined : album === undefined;
+    const loading = sharedAlbum
+      ? false
+      : isPlaylist
+        ? playlist === undefined
+        : album === undefined;
     if ((!selectedAlbumId && !selectedPlaylistId) || !loading) return undefined;
 
     const timer = setTimeout(() => setMediaLoadTimedOut(true), 10000);
     return () => clearTimeout(timer);
-  }, [selectedAlbumId, selectedPlaylistId, album, playlist, isPlaylist]);
+  }, [
+    selectedAlbumId,
+    selectedPlaylistId,
+    album,
+    playlist,
+    isPlaylist,
+    sharedAlbum,
+  ]);
 
   const currentTrack = tracks[currentTrackIndex] || null;
   const progressPercent = useMemo(() => {
@@ -409,17 +422,20 @@ export default function MusicPlayerScreen({ navigation, route }) {
             isCompactMobile && styles.selectedTitleCompact,
           ]}
         >
-          {media?.name || media?.title}
+          {activeMedia?.name || activeMedia?.title}
         </Text>
 
         <Text style={styles.selectedArtist}>
-          {media?.artist || media?.albumArtist || media?.composer || ""}
+          {activeMedia?.artist ||
+            activeMedia?.albumArtist ||
+            activeMedia?.composer ||
+            ""}
         </Text>
 
         <Text style={styles.albumMeta}>
           {tracks.length} pistas
-          {!isPlaylist && media?.genre ? ` · ${media.genre}` : ""}
-          {!isPlaylist && media?.year ? ` · ${media.year}` : ""}
+          {!isPlaylist && activeMedia?.genre ? ` · ${activeMedia.genre}` : ""}
+          {!isPlaylist && activeMedia?.year ? ` · ${activeMedia.year}` : ""}
         </Text>
       </View>
     </View>
@@ -584,7 +600,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
     </View>
   );
 
-  if (!selectedAlbumId && !selectedPlaylistId) {
+  if (!selectedAlbumId && !selectedPlaylistId && !sharedAlbum) {
     return (
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={42} color="#64748b" />
@@ -601,9 +617,11 @@ export default function MusicPlayerScreen({ navigation, route }) {
     );
   }
 
-  const loadingMedia = isPlaylist
-    ? playlist === undefined
-    : album === undefined;
+  const loadingMedia = sharedAlbum
+    ? false
+    : isPlaylist
+      ? playlist === undefined
+      : album === undefined;
   if (loadingMedia && !mediaLoadTimedOut) {
     return (
       <View style={styles.centered}>
@@ -615,7 +633,10 @@ export default function MusicPlayerScreen({ navigation, route }) {
     );
   }
 
-  if ((isPlaylist ? playlist === null : album === null) || mediaLoadTimedOut) {
+  if (
+    !sharedAlbum &&
+    ((isPlaylist ? playlist === null : album === null) || mediaLoadTimedOut)
+  ) {
     return (
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={42} color="#64748b" />

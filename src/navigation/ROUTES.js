@@ -71,6 +71,7 @@ export const ROUTES = {
 
   // Musica
   MUSIC_LIBRARY: "Music Library",
+  SHARED_MUSIC: "Shared Music",
   MUSIC_PLAYLISTS: "Music Playlists",
   MUSIC_PLAYLIST_DETAIL: "Music Playlist Detail",
   MUSIC_PLAYER: "Music Player",
