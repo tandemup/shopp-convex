@@ -87,8 +87,9 @@ export default function SharedMusicScreen({ navigation }) {
         style={styles.input}
       />
       <Text style={styles.hint}>
-        No uses el enlace de la carpeta. Abre album.json en Drive, pulsa
-        Compartir → Copiar enlace y asegúrate de que tenga acceso público.
+        Comparte un archivo `album.json` alojado en GitHub Pages o en Google
+        Drive. En Drive usa Compartir → Acceso general → Cualquier persona con
+        el enlace → Lector. No uses el enlace de una carpeta.
       </Text>
       <Pressable
         style={styles.primary}
@@ -104,6 +105,13 @@ export default function SharedMusicScreen({ navigation }) {
         </View>
       ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.infoBox}>
+        <Ionicons name="information-circle-outline" size={18} color="#2563eb" />
+        <Text style={styles.infoText}>
+          Cada persona conserva sus archivos en su propio Drive. Shopp solo
+          guarda el enlace y los metadatos del álbum en este dispositivo.
+        </Text>
+      </View>
       {album ? (
         <View style={styles.preview}>
           {album.coverUrl ? (
@@ -198,6 +206,16 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   error: { color: "#b91c1c", marginTop: 12 },
+  infoBox: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    backgroundColor: "#eff6ff",
+    borderRadius: 10,
+    padding: 11,
+    marginTop: 14,
+  },
+  infoText: { flex: 1, color: "#1e40af", fontSize: 12, lineHeight: 17 },
   preview: {
     flexDirection: "row",
     alignItems: "center",

@@ -1,157 +1,118 @@
-import { Platform } from "react-native";
-import * as FileSystem from "expo-file-system";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+const SHARED_ALBUMS_KEY = "shopp.sharedMusic.albums.v2";
 
-const META_KEY = "shopp_shared_music_albums_v1";
-const CACHE_NAME = "shopp-shared-music-v1";
-const NATIVE_DIR = `${FileSystem.documentDirectory || ""}shared-music/`;
-
-const readMeta = async () => {
-  try {
-    const raw =
-      Platform.OS === "web"
-        ? globalThis.localStorage?.getItem(META_KEY)
-        : await AsyncStorage.getItem(META_KEY);
-    return JSON.parse(raw || "{}");
-  } catch {
-    return {};
+function driveFileId(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(text)) return text;
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]+)/,
+    /[?&]id=([a-zA-Z0-9_-]+)/,
+    /\/d\/([a-zA-Z0-9_-]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) return match[1];
   }
-};
-
-const writeMeta = async (value) => {
-  try {
-    if (Platform.OS === "web")
-      globalThis.localStorage?.setItem(META_KEY, JSON.stringify(value));
-    else await AsyncStorage.setItem(META_KEY, JSON.stringify(value));
-  } catch {}
-};
-
-export function normalizeDriveDownloadUrl(url) {
-  const value = String(url || "").trim();
-  const match = value.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
-  if (match)
-    return `https://drive.google.com/uc?export=download&id=${match[1]}`;
-  return value;
+  return null;
 }
 
-function isDriveFolderUrl(url) {
-  return /drive\.google\.com\/drive\/folders\//i.test(String(url || ""));
+export function normalizePublicUrl(value, kind = "file") {
+  const text = String(value || "").trim();
+  const id = driveFileId(text);
+  if (id && /drive\.google\.com/i.test(text)) {
+    return kind === "json"
+      ? `https://drive.google.com/uc?export=download&id=${id}`
+      : `https://drive.google.com/uc?export=download&id=${id}`;
+  }
+  return text;
 }
 
-function resolveUrl(baseUrl, filename) {
-  const value = String(filename || "").trim();
-  if (/^https?:\/\//i.test(value)) return value;
-  if (/drive\.google\.com\/uc\?/i.test(baseUrl)) {
-    throw new Error(
-      "En Google Drive, album.json debe incluir audioUrl y coverUrl directas para cada archivo.",
-    );
+function validateAlbum(album) {
+  if (!album || typeof album !== "object") {
+    throw new Error("El enlace no contiene un objeto JSON válido.");
   }
-  return new URL(value, baseUrl).toString();
-}
-
-export async function readSharedAlbum(albumJsonUrl) {
-  if (isDriveFolderUrl(albumJsonUrl)) {
-    throw new Error(
-      "Has pegado un enlace de carpeta de Google Drive. Pega el enlace directo al archivo album.json; por ejemplo: drive.google.com/file/d/ID/view.",
-    );
+  if (!album.title || !Array.isArray(album.tracks)) {
+    throw new Error("El JSON debe contener title y un array tracks.");
   }
-  const jsonUrl = normalizeDriveDownloadUrl(albumJsonUrl);
-  if (!jsonUrl) throw new Error("Introduce el enlace de album.json.");
-  let response;
-  try {
-    response = await fetch(jsonUrl);
-  } catch {
-    throw new Error(
-      "No se pudo acceder a album.json. Comprueba que el archivo sea público y que el enlace sea directo al archivo, no a la carpeta.",
-    );
-  }
-  if (!response.ok)
-    throw new Error(`No se pudo leer album.json (${response.status}).`);
-  let source;
-  try {
-    source = await response.json();
-  } catch {
-    throw new Error(
-      "El enlace no devuelve un JSON válido. En Google Drive, comparte album.json como «Cualquier persona con el enlace» y pega el enlace del archivo.",
-    );
-  }
-  if (
-    !source?.title ||
-    !Array.isArray(source.tracks) ||
-    !source.tracks.length
-  ) {
-    throw new Error("album.json debe incluir title y una lista tracks.");
-  }
-  const baseUrl = jsonUrl.slice(0, jsonUrl.lastIndexOf("/") + 1);
-  const id = `shared-${encodeURIComponent(jsonUrl)}`;
   return {
-    _id: id,
-    source: "google-drive",
-    sourceUrl: jsonUrl,
-    title: source.title,
-    artist: source.artist || source.composer || "",
-    coverUrl:
-      source.coverUrl ||
-      (source.cover ? resolveUrl(baseUrl, source.cover) : null),
-    tracks: source.tracks.map((track, index) => ({
-      _id: `${id}-track-${index + 1}`,
-      trackNumber: Number(track.trackNumber) || index + 1,
-      trackTitle: track.trackTitle || track.title || track.audioFilename,
-      title: track.title || "",
-      audioUrl: resolveUrl(baseUrl, track.audioUrl || track.audioFilename),
+    ...album,
+    artist: album.artist || "Artista desconocido",
+    tracks: album.tracks.map((track, index) => ({
+      ...track,
+      title: track.title || `Pista ${index + 1}`,
+      trackNumber: track.trackNumber || index + 1,
+      audioUrl: normalizePublicUrl(track.audioUrl || track.url),
     })),
+    coverUrl: album.coverUrl ? normalizePublicUrl(album.coverUrl) : null,
   };
 }
 
-async function getWebUri(url) {
-  if (!globalThis.caches) return url;
-  const cache = await caches.open(CACHE_NAME);
-  const cached = await cache.match(url);
-  if (cached) return URL.createObjectURL(await cached.blob());
-  const response = await fetch(url);
-  if (!response.ok)
-    throw new Error("No se pudo descargar un archivo de música.");
-  await cache.put(url, response.clone());
-  return URL.createObjectURL(await response.blob());
+export async function readSharedAlbum(input) {
+  const sourceUrl = normalizePublicUrl(input, "json");
+  if (!sourceUrl) throw new Error("Introduce el enlace de album.json.");
+  if (/\/folders?\//i.test(sourceUrl)) {
+    throw new Error(
+      "Has introducido una carpeta. Necesitas el enlace del archivo album.json.",
+    );
+  }
+  const response = await fetch(sourceUrl, {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) {
+    throw new Error(
+      `No se pudo leer album.json (HTTP ${response.status}). Comprueba que sea público.`,
+    );
+  }
+  const contentType = response.headers.get("content-type") || "";
+  const text = await response.text();
+  if (contentType.includes("text/html") || /^\s*</.test(text)) {
+    throw new Error(
+      "El enlace devuelve una página web, no el JSON. Usa el enlace directo al archivo.",
+    );
+  }
+  let album;
+  try {
+    album = JSON.parse(text);
+  } catch {
+    throw new Error("album.json no contiene JSON válido.");
+  }
+  return { ...validateAlbum(album), sourceUrl };
 }
 
-async function getNativeUri(track) {
-  if (!FileSystem.documentDirectory) return track.audioUrl;
-  const directoryInfo = await FileSystem.getInfoAsync(NATIVE_DIR);
-  if (!directoryInfo.exists)
-    await FileSystem.makeDirectoryAsync(NATIVE_DIR, { intermediates: true });
-  const localUri = `${NATIVE_DIR}${encodeURIComponent(track._id)}.mp3`;
-  const info = await FileSystem.getInfoAsync(localUri);
-  if (!info.exists || !info.size)
-    await FileSystem.downloadAsync(track.audioUrl, localUri);
-  return localUri;
+export async function listSharedAlbums() {
+  try {
+    const raw = globalThis.localStorage?.getItem(SHARED_ALBUMS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveAlbums(albums) {
+  globalThis.localStorage?.setItem(SHARED_ALBUMS_KEY, JSON.stringify(albums));
 }
 
 export async function downloadSharedAlbum(album, onProgress) {
   const tracks = [];
   for (let index = 0; index < album.tracks.length; index += 1) {
     const track = album.tracks[index];
-    const audioUrl =
-      Platform.OS === "web"
-        ? await getWebUri(track.audioUrl)
-        : await getNativeUri(track);
-    tracks.push({ ...track, audioUrl });
+    if (!track.audioUrl)
+      throw new Error(`La pista “${track.title}” no tiene audioUrl.`);
+    tracks.push(track);
     onProgress?.(index + 1, album.tracks.length);
   }
-  const coverUrl = album.coverUrl
-    ? Platform.OS === "web"
-      ? await getWebUri(album.coverUrl)
-      : album.coverUrl
-    : null;
-  const saved = { ...album, coverUrl, tracks, downloadedAt: Date.now() };
-  const all = await readMeta();
-  all[album._id] = saved;
-  await writeMeta(all);
+  const saved = {
+    ...album,
+    tracks,
+    _id: album._id || `shared-${Date.now()}`,
+    downloadedAt: Date.now(),
+  };
+  const current = await listSharedAlbums();
+  await saveAlbums([
+    saved,
+    ...current.filter(
+      (item) => item._id !== saved._id && item.sourceUrl !== saved.sourceUrl,
+    ),
+  ]);
   return saved;
-}
-
-export async function listSharedAlbums() {
-  return Object.values(await readMeta()).sort(
-    (a, b) => (b.downloadedAt || 0) - (a.downloadedAt || 0),
-  );
 }
