@@ -1,144 +1,261 @@
-import React from "react";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  downloadSharedAlbum,
+  listSharedAlbums,
+  readSharedAlbum,
+} from "../../services/sharedMusicStorage";
+import { ROUTES } from "../../navigation/ROUTES";
 
-import { ROUTES } from "@/src/navigation/ROUTES.js";
-import ShoppingListsScreen from "@/src/screens/lists/ShoppingListsScreen";
-import ShoppingListScreen from "@/src/screens/lists/ShoppingListScreen";
-import ItemDetailScreen from "@/src/screens/lists/ItemDetailScreen";
-import StoreSelectScreen from "@/src/screens/stores/StoreSelectScreen";
-import ArchivedListsScreen from "@/src/screens/lists/ArchivedListsScreen";
-import StoresScreen from "@/src/screens/stores/StoresBrowseScreen";
-import PurchaseHistoryScreen from "@/src/screens/history/PurchaseHistoryScreen";
-import PurchaseDetailScreen from "@/src/screens/history/PurchaseDetailScreen";
-import ScannedHistoryScreen from "@/src/screens/scanner/ScannedHistoryScreen";
-import EditScannedItemScreen from "@/src/screens/scanner/EditScannedItemScreen";
-import StoreMapScreen from "@/src/screens/stores/StoreMapScreen";
-import MenuScreen from "@/src/screens/settings/MenuScreen";
-import CarrefourTestScreen from "@/src/screens/CarrefourTestScreen";
+export default function SharedMusicScreen({ navigation }) {
+  const [url, setUrl] = useState("");
+  const [albums, setAlbums] = useState([]);
+  const [album, setAlbum] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [error, setError] = useState("");
 
-import MusicLibraryScreen from "@/src/screens/music/MusicLibraryScreen";
-import MusicPlayerScreen from "@/src/screens/music/MusicPlayerScreen";
-// Esta pantalla se importa con una ruta relativa para evitar que una
-// resolución incompleta del alias "@" la convierta en undefined en Web.
-import SharedMusicScreen from "@/src/screens/music/SharedMusicScreen";
-import PlaylistsScreen from "@/src/screens/music/PlaylistsScreen";
-import PlaylistDetailScreen from "@/src/screens/music/PlaylistDetailScreen";
+  useEffect(() => {
+    listSharedAlbums()
+      .then(setAlbums)
+      .catch(() => {});
+  }, []);
 
-import AdminAlbumsScreen from "@/src/screens/admin/AdminAlbumsScreen";
-import AdminAlbumUploadScreen from "@/src/screens/admin/AdminAlbumUploadScreen";
-import AdminAlbumEditScreen from "@/src/screens/admin/AdminAlbumEditScreen";
-import AdminAlbumJsonImportScreen from "@/src/screens/admin/AdminAlbumJsonImportScreen";
-import AdminAlbumLyricsScreen from "@/src/screens/admin/AdminAlbumLyricsScreen";
-
-const Stack = createNativeStackNavigator();
-
-export default function ShoppingStack() {
+  const importAlbum = async () => {
+    setBusy(true);
+    setError("");
+    setProgress("Leyendo album.json...");
+    try {
+      setAlbum(await readSharedAlbum(url));
+    } catch (e) {
+      setError(e.message || "No se pudo leer el álbum.");
+    } finally {
+      setBusy(false);
+      setProgress("");
+    }
+  };
+  const download = async () => {
+    if (!album) return;
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await downloadSharedAlbum(album, (done, total) =>
+        setProgress(`Descargando ${done}/${total} pistas...`),
+      );
+      setAlbums((previous) => [
+        saved,
+        ...previous.filter((item) => item._id !== saved._id),
+      ]);
+      setAlbum(saved);
+    } catch (e) {
+      setError(e.message || "No se pudo descargar el álbum.");
+    } finally {
+      setBusy(false);
+      setProgress("");
+    }
+  };
+  const open = (item) =>
+    navigation.navigate(ROUTES.MUSIC_PLAYER, { sharedAlbum: item });
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerStyle: { backgroundColor: "papayawhip" },
-        headerTitleAlign: "center",
-        headerTitleStyle: { fontSize: 20, fontWeight: "700" },
-        headerBackButtonDisplayMode: "minimal",
-      }}
-    >
-      <Stack.Screen
-        name={ROUTES.SHOPPING_LISTS}
-        component={ShoppingListsScreen}
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <View style={styles.heading}>
+        <Ionicons name="cloud-download-outline" size={28} color="#2563eb" />
+        <View>
+          <Text style={styles.title}>Música compartida</Text>
+          <Text style={styles.subtitle}>
+            Descarga álbumes desde un enlace público
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.label}>Enlace directo a album.json</Text>
+      <TextInput
+        value={url}
+        onChangeText={setUrl}
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder="https://drive.google.com/file/d/ID/view"
+        style={styles.input}
       />
-      <Stack.Screen
-        name={ROUTES.SHOPPING_LIST}
-        component={ShoppingListScreen}
-      />
-      <Stack.Screen name={ROUTES.ITEM_DETAIL} component={ItemDetailScreen} />
-      <Stack.Screen name={ROUTES.STORES_HOME} component={StoresScreen} />
-      <Stack.Screen name={ROUTES.STORE_SELECT} component={StoreSelectScreen} />
-      <Stack.Screen name={ROUTES.STORE_MAP} component={StoreMapScreen} />
-      <Stack.Screen
-        name={ROUTES.ARCHIVED_LISTS}
-        component={ArchivedListsScreen}
-      />
-      <Stack.Screen
-        name={ROUTES.PURCHASE_HISTORY}
-        component={PurchaseHistoryScreen}
-      />
-      <Stack.Screen
-        name={ROUTES.PURCHASE_DETAIL}
-        component={PurchaseDetailScreen}
-      />
-      <Stack.Screen
-        name={ROUTES.SCANNED_HISTORY}
-        component={ScannedHistoryScreen}
-      />
-      <Stack.Screen
-        name={ROUTES.EDIT_SCANNED_ITEM}
-        component={EditScannedItemScreen}
-      />
-      <Stack.Screen name={ROUTES.MENU} component={MenuScreen} />
-      <Stack.Screen
-        name={ROUTES.CARREFOUR_TEST}
-        component={CarrefourTestScreen}
-        options={{ title: "Catálogo Carrefour" }}
-      />
-
-      <Stack.Screen
-        name={ROUTES.ADMIN_ALBUMS}
-        component={AdminAlbumsScreen}
-        options={{ title: "Edtor de álbumes" }}
-      />
-
-      <Stack.Screen
-        name={ROUTES.MUSIC_LIBRARY}
-        component={MusicLibraryScreen}
-        options={{
-          title: "Música",
-        }}
-      />
-      <Stack.Screen
-        name={ROUTES.MUSIC_PLAYER}
-        component={MusicPlayerScreen}
-        options={{
-          title: "Reproductor",
-        }}
-      />
-      <Stack.Screen
-        name={ROUTES.SHARED_MUSIC}
-        component={SharedMusicScreen}
-        options={{ title: "Música compartida" }}
-      />
-      <Stack.Screen
-        name={ROUTES.MUSIC_PLAYLISTS}
-        component={PlaylistsScreen}
-        options={{ title: "Mis playlists" }}
-      />
-      <Stack.Screen
-        name={ROUTES.MUSIC_PLAYLIST_DETAIL}
-        component={PlaylistDetailScreen}
-        options={{ title: "Playlist" }}
-      />
-
-      <Stack.Screen
-        name={ROUTES.ADMIN_ALBUM_UPLOAD}
-        component={AdminAlbumUploadScreen}
-        options={{ title: "Nuevo álbum" }}
-      />
-      <Stack.Screen
-        name={ROUTES.ADMIN_ALBUM_JSON_IMPORT}
-        component={AdminAlbumJsonImportScreen}
-        options={{ title: "Importar álbum JSON" }}
-      />
-
-      <Stack.Screen
-        name={ROUTES.ADMIN_ALBUM_LYRICS}
-        component={AdminAlbumLyricsScreen}
-        options={{ title: "Gestionar letras" }}
-      />
-
-      <Stack.Screen
-        name={ROUTES.ADMIN_ALBUM_EDIT}
-        component={AdminAlbumEditScreen}
-        options={{ title: "Editar álbum" }}
-      />
-    </Stack.Navigator>
+      <Text style={styles.hint}>
+        Comparte un archivo `album.json` alojado en GitHub Pages o en Google
+        Drive. En Drive usa Compartir → Acceso general → Cualquier persona con
+        el enlace → Lector. No uses el enlace de una carpeta.
+      </Text>
+      <Pressable
+        style={styles.primary}
+        onPress={importAlbum}
+        disabled={busy || !url.trim()}
+      >
+        <Text style={styles.primaryText}>Leer álbum</Text>
+      </Pressable>
+      {progress ? (
+        <View style={styles.status}>
+          <ActivityIndicator />
+          <Text>{progress}</Text>
+        </View>
+      ) : null}
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.infoBox}>
+        <Ionicons name="information-circle-outline" size={18} color="#2563eb" />
+        <Text style={styles.infoText}>
+          Cada persona conserva sus archivos en su propio Drive. Shopp solo
+          guarda el enlace y los metadatos del álbum en este dispositivo.
+        </Text>
+      </View>
+      {album ? (
+        <View style={styles.preview}>
+          {album.coverUrl ? (
+            <Image source={{ uri: album.coverUrl }} style={styles.cover} />
+          ) : (
+            <View style={[styles.cover, styles.placeholder]}>
+              <Ionicons name="musical-notes" size={28} color="#64748b" />
+            </View>
+          )}
+          <View style={styles.flex}>
+            <Text style={styles.albumTitle}>{album.title}</Text>
+            <Text style={styles.artist}>{album.artist}</Text>
+            <Text style={styles.meta}>{album.tracks.length} pistas</Text>
+          </View>
+          <Pressable style={styles.download} onPress={download} disabled={busy}>
+            <Ionicons name="download-outline" size={23} color="#fff" />
+          </Pressable>
+        </View>
+      ) : null}
+      <Text style={styles.section}>Álbumes descargados</Text>
+      {albums.length === 0 ? (
+        <Text style={styles.empty}>
+          Todavía no has descargado álbumes compartidos.
+        </Text>
+      ) : (
+        albums.map((item) => (
+          <Pressable
+            key={item._id}
+            style={styles.row}
+            onPress={() => open(item)}
+          >
+            {item.coverUrl ? (
+              <Image source={{ uri: item.coverUrl }} style={styles.thumb} />
+            ) : (
+              <View style={[styles.thumb, styles.placeholder]}>
+                <Ionicons name="musical-notes" size={20} color="#64748b" />
+              </View>
+            )}
+            <View style={styles.flex}>
+              <Text style={styles.albumTitle}>{item.title}</Text>
+              <Text style={styles.artist}>{item.artist}</Text>
+              <Text style={styles.meta}>
+                {item.tracks.length} pistas · Disponible sin conexión
+              </Text>
+            </View>
+            <Ionicons name="play-circle-outline" size={27} color="#2563eb" />
+          </Pressable>
+        ))
+      )}
+    </ScrollView>
   );
 }
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: "#f8fafc" },
+  content: {
+    maxWidth: 760,
+    width: "100%",
+    alignSelf: "center",
+    padding: 18,
+    paddingBottom: 48,
+  },
+  heading: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  title: { fontSize: 24, fontWeight: "800", color: "#0f172a" },
+  subtitle: { color: "#64748b", marginTop: 3 },
+  label: { fontWeight: "700", color: "#334155", marginBottom: 7 },
+  input: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 14,
+  },
+  hint: { color: "#64748b", fontSize: 12, lineHeight: 17, marginTop: 7 },
+  primary: {
+    backgroundColor: "#2563eb",
+    borderRadius: 10,
+    padding: 13,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  primaryText: { color: "#fff", fontWeight: "800" },
+  status: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    marginTop: 15,
+  },
+  error: { color: "#b91c1c", marginTop: 12 },
+  infoBox: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    backgroundColor: "#eff6ff",
+    borderRadius: 10,
+    padding: 11,
+    marginTop: 14,
+  },
+  infoText: { flex: 1, color: "#1e40af", fontSize: 12, lineHeight: 17 },
+  preview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 14,
+    marginTop: 18,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  cover: { width: 68, height: 68, borderRadius: 8 },
+  thumb: { width: 58, height: 58, borderRadius: 7 },
+  placeholder: {
+    backgroundColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  flex: { flex: 1 },
+  albumTitle: { fontWeight: "800", fontSize: 16, color: "#0f172a" },
+  artist: { color: "#475569", marginTop: 3 },
+  meta: { color: "#94a3b8", fontSize: 12, marginTop: 4 },
+  download: { backgroundColor: "#2563eb", borderRadius: 22, padding: 10 },
+  section: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginTop: 30,
+    marginBottom: 10,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#fff",
+    padding: 10,
+    borderRadius: 13,
+    marginBottom: 9,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  empty: { color: "#64748b" },
+});

@@ -19,14 +19,16 @@ function driveFileId(value) {
 export function normalizePublicUrl(value, kind = "file") {
   const text = String(value || "").trim();
   const id = driveFileId(text);
-  if (id && /drive\.google\.com/i.test(text)) {
-    return (
-      "https://drive.usercontent.google.com/download?id=" +
-      id +
-      "&export=download&confirm=t"
-    );
+  if (id) {
+    return `https://drive.google.com/uc?export=download&id=${id}`;
   }
   return text;
+}
+
+// Convierte un identificador de Google Drive o un enlace compartido en
+// una URL utilizable por la aplicación. Se exporta para la importación JSON.
+export function driveDownloadUrl(value) {
+  return normalizePublicUrl(value);
 }
 
 function validateAlbum(album) {
@@ -48,12 +50,24 @@ function validateAlbum(album) {
     ...album,
     ...metadata,
     artist: metadata.artist || "Artista desconocido",
-    coverUrl: normalizePublicUrl(cover.coverUrl || cover.url) || null,
+    coverUrl:
+      normalizePublicUrl(
+        // Admite cover.coverId como formato preferente.
+        cover.coverId || cover.coverUrl || cover.url,
+      ) || null,
     tracks: tracks.map((track, index) => ({
       ...track,
+      // Algunos manifiestos agrupan los datos en track.audio.
+      ...(track.audio && typeof track.audio === "object" ? track.audio : {}),
       title: track.title || `Pista ${index + 1}`,
       trackNumber: track.trackNumber || index + 1,
-      audioUrl: normalizePublicUrl(track.audioUrl || track.url),
+      audioUrl: normalizePublicUrl(
+        track.audioId ||
+          track.audioUrl ||
+          track.audio?.audioId ||
+          track.audio?.audioUrl ||
+          track.url,
+      ),
     })),
   };
 }

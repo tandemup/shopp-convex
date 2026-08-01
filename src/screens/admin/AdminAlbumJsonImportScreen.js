@@ -45,12 +45,13 @@ function normaliseManifest(json) {
       // Admitimos URLs, IDs de Google Drive y el formato antiguo con storageId.
       coverUrl:
         driveDownloadUrl(
-          cover.coverUrl ||
-            cover.coverId ||
-            album.coverUrl ||
+          // Formato recomendado: cover.coverId.
+          cover.coverId ||
+            cover.coverUrl ||
             album.coverId ||
-            json.coverUrl ||
-            json.coverId,
+            album.coverUrl ||
+            json.coverId ||
+            json.coverUrl,
         ) || undefined,
       filename: cover.filename || json.coverFilename || "cover",
     },
@@ -65,7 +66,13 @@ function normaliseManifest(json) {
         audio: {
           ...audio,
           audioUrl:
-            driveDownloadUrl(audio.audioUrl || audio.audioId) || undefined,
+            driveDownloadUrl(
+              // Formato recomendado: tracks[].audioId.
+              audio.audioId ||
+                audio.audioUrl ||
+                track.audioId ||
+                track.audioUrl,
+            ) || undefined,
         },
       };
     }),

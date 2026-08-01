@@ -25,7 +25,9 @@ export async function getPlayableTrackUri(trackId, remoteUri) {
 
   const directoryInfo = await FileSystem.getInfoAsync(CACHE_DIRECTORY);
   if (!directoryInfo.exists) {
-    await FileSystem.makeDirectoryAsync(CACHE_DIRECTORY, { intermediates: true });
+    await FileSystem.makeDirectoryAsync(CACHE_DIRECTORY, {
+      intermediates: true,
+    });
   }
 
   const safeTrackId = encodeURIComponent(String(trackId));
