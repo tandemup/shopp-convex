@@ -12,6 +12,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import { uploadFileToConvex } from "@/src/utils/music/uploadFile";
+import { driveDownloadUrl } from "@/src/services/sharedMusicStorage";
 
 function readAssetJson(asset) {
   return fetch(asset.uri)
@@ -39,7 +40,20 @@ function normaliseManifest(json) {
           : Number(album.year),
       description: album.description || undefined,
     },
-    cover,
+    cover: {
+      ...cover,
+      // Admitimos URLs, IDs de Google Drive y el formato antiguo con storageId.
+      coverUrl:
+        driveDownloadUrl(
+          cover.coverUrl ||
+            cover.coverId ||
+            album.coverUrl ||
+            album.coverId ||
+            json.coverUrl ||
+            json.coverId,
+        ) || undefined,
+      filename: cover.filename || json.coverFilename || "cover",
+    },
     tracks: tracks.map((track, index) => {
       const audio = track.audio || track;
       return {
@@ -48,7 +62,11 @@ function normaliseManifest(json) {
           track.title || track.trackTitle || track.maintitle || "",
         ).trim(),
         artist: track.artist || undefined,
-        audio,
+        audio: {
+          ...audio,
+          audioUrl:
+            driveDownloadUrl(audio.audioUrl || audio.audioId) || undefined,
+        },
       };
     }),
   };
@@ -100,10 +118,20 @@ export default function AdminAlbumJsonImportScreen({ navigation }) {
   };
 
   const importAlbum = async () => {
-    if (!manifest || !cover || audioFiles.length !== manifest.tracks.length) {
+    const hasRemoteCover = Boolean(manifest?.cover?.coverUrl);
+    const remoteTracks =
+      manifest?.tracks?.filter((track) => Boolean(track.audio?.audioUrl))
+        .length || 0;
+    const allTracksRemote = remoteTracks === (manifest?.tracks?.length || 0);
+
+    if (
+      !manifest ||
+      (!hasRemoteCover && !cover) ||
+      (!allTracksRemote && audioFiles.length !== manifest.tracks.length)
+    ) {
       safeAlert(
         "Faltan archivos",
-        `Selecciona la carátula y exactamente ${manifest?.tracks.length || 0} MP3.`,
+        `Usa URLs en el JSON o selecciona la carátula y exactamente ${manifest?.tracks.length || 0} MP3.`,
       );
       return;
     }
@@ -111,6 +139,7 @@ export default function AdminAlbumJsonImportScreen({ navigation }) {
     if (
       manifest.tracks.some(
         (track) =>
+          !track.audio?.audioUrl &&
           !byName.has(track.audio.filename || track.audio.audioFilename),
       )
     ) {
@@ -122,28 +151,39 @@ export default function AdminAlbumJsonImportScreen({ navigation }) {
     }
     try {
       setBusy(true);
-      const coverStorageId = await uploadFileToConvex({
-        asset: cover,
-        generateUploadUrl,
-        fallbackMimeType: cover.mimeType || "image/jpeg",
-      });
+      const coverStorageId = hasRemoteCover
+        ? undefined
+        : await uploadFileToConvex({
+            asset: cover,
+            generateUploadUrl,
+            fallbackMimeType: cover.mimeType || "image/jpeg",
+          });
       const tracks = [];
       for (const track of manifest.tracks) {
         const audio = track.audio;
-        const file = byName.get(audio.filename || audio.audioFilename);
-        const audioStorageId = await uploadFileToConvex({
-          asset: file,
-          generateUploadUrl,
-          fallbackMimeType: "audio/mpeg",
-        });
+        const file = audio.audioUrl
+          ? null
+          : byName.get(audio.filename || audio.audioFilename);
+        const audioStorageId = audio.audioUrl
+          ? undefined
+          : await uploadFileToConvex({
+              asset: file,
+              generateUploadUrl,
+              fallbackMimeType: "audio/mpeg",
+            });
         tracks.push({
           trackNumber: track.trackNumber,
           title: track.title,
           artist: track.artist,
           audioStorageId,
-          audioFilename: file.name,
-          audioMimeType: file.mimeType || "audio/mpeg",
-          audioSizeBytes: file.size,
+          audioUrl: audio.audioUrl || undefined,
+          audioFilename:
+            file?.name ||
+            audio.filename ||
+            audio.audioFilename ||
+            `track-${track.trackNumber}.mp3`,
+          audioMimeType: file?.mimeType || "audio/mpeg",
+          audioSizeBytes: file?.size,
           durationMs: audio.durationMs,
         });
       }
@@ -151,9 +191,10 @@ export default function AdminAlbumJsonImportScreen({ navigation }) {
         album: manifest.album,
         cover: {
           storageId: coverStorageId,
-          filename: cover.name,
-          mimeType: cover.mimeType,
-          sizeBytes: cover.size,
+          coverUrl: manifest.cover.coverUrl || undefined,
+          filename: cover?.name || "cover",
+          mimeType: cover?.mimeType,
+          sizeBytes: cover?.size,
         },
         tracks,
       });
@@ -176,8 +217,8 @@ export default function AdminAlbumJsonImportScreen({ navigation }) {
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.title}>Importar álbum desde JSON</Text>
       <Text style={styles.help}>
-        El JSON define los títulos y nombres de archivo. Después selecciona la
-        carátula y los MP3 correspondientes.
+        El JSON puede contener enlaces públicos de Google Drive. Si no los
+        contiene, selecciona la carátula y los MP3 correspondientes.
       </Text>
       <Pressable style={styles.button} onPress={pickJson}>
         <Text style={styles.buttonText}>
@@ -191,14 +232,20 @@ export default function AdminAlbumJsonImportScreen({ navigation }) {
       )}
       <Pressable style={styles.button} onPress={pickCover}>
         <Text style={styles.buttonText}>
-          {cover ? `Carátula: ${cover.name}` : "Seleccionar carátula"}
+          {manifest?.cover?.coverUrl
+            ? "Carátula: enlace de Google Drive"
+            : cover
+              ? `Carátula: ${cover.name}`
+              : "Seleccionar carátula"}
         </Text>
       </Pressable>
       <Pressable style={styles.button} onPress={pickAudio}>
         <Text style={styles.buttonText}>
           {audioFiles.length
             ? `${audioFiles.length} MP3 seleccionados`
-            : "Seleccionar MP3"}
+            : manifest?.tracks?.every((track) => track.audio?.audioUrl)
+              ? "MP3: enlaces de Google Drive"
+              : "Seleccionar MP3"}
         </Text>
       </Pressable>
       <Pressable

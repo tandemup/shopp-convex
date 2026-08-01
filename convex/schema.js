@@ -821,6 +821,8 @@ export default defineSchema({
     description: v.optional(v.string()),
 
     coverStorageId: v.optional(v.id("_storage")),
+    // Nueva ruta de almacenamiento: la carátula vive fuera de Convex.
+    coverUrl: v.optional(v.string()),
     coverFilename: v.optional(v.string()),
     coverMimeType: v.optional(v.string()),
     coverSizeBytes: v.optional(v.float64()),
@@ -857,7 +859,10 @@ export default defineSchema({
     // Se mantiene para compatibilidad con código existente.
     trackNumber: v.float64(),
 
-    audioStorageId: v.id("_storage"),
+    // Compatibilidad con álbumes antiguos almacenados en Convex.
+    audioStorageId: v.optional(v.id("_storage")),
+    // Nueva ruta de almacenamiento: el audio vive en Google Drive u otro CDN.
+    audioUrl: v.optional(v.string()),
     audioFilename: v.string(),
     audioMimeType: v.optional(v.string()),
     audioSizeBytes: v.optional(v.float64()),

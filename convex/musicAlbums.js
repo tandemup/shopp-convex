@@ -18,6 +18,20 @@ function cleanText(value, fieldName) {
   return result;
 }
 
+async function resolveCoverUrl(ctx, album) {
+  if (album.coverUrl) return album.coverUrl;
+  return album.coverStorageId
+    ? await ctx.storage.getUrl(album.coverStorageId)
+    : null;
+}
+
+async function resolveAudioUrl(ctx, track) {
+  if (track.audioUrl) return track.audioUrl;
+  return track.audioStorageId
+    ? await ctx.storage.getUrl(track.audioStorageId)
+    : null;
+}
+
 export const createDraft = mutation({
   args: {
     title: v.string(),
@@ -86,6 +100,37 @@ export const setCover = mutation({
   },
 });
 
+export const setCoverUrl = mutation({
+  args: {
+    albumId: v.id("musicAlbums"),
+    coverUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const album = await ctx.db.get(args.albumId);
+    if (!album) throw new Error("Álbum no encontrado.");
+    const coverUrl = args.coverUrl.trim();
+    if (!coverUrl) throw new Error("La URL de la carátula es obligatoria.");
+
+    if (album.coverStorageId) {
+      const metadata = await ctx.db.system.get(
+        "_storage",
+        album.coverStorageId,
+      );
+      if (metadata) await ctx.storage.delete(album.coverStorageId);
+    }
+
+    await ctx.db.patch(args.albumId, {
+      coverUrl,
+      coverStorageId: undefined,
+      coverFilename: undefined,
+      coverMimeType: undefined,
+      coverSizeBytes: undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const publish = mutation({
   args: {
     albumId: v.id("musicAlbums"),
@@ -104,7 +149,7 @@ export const publish = mutation({
       .withIndex("by_album_track", (q) => q.eq("albumId", args.albumId))
       .collect();
 
-    if (!album.coverStorageId) {
+    if (!album.coverStorageId && !album.coverUrl) {
       throw new Error("Debes subir la portada antes de publicar.");
     }
 
@@ -164,10 +209,9 @@ export const remove = mutation({
     for (const track of tracks) {
       // El archivo puede haber sido eliminado previamente de File Storage.
       // Convex lanza un error si se intenta borrar un storageId inexistente.
-      const audioMetadata = await ctx.db.system.get(
-        "_storage",
-        track.audioStorageId,
-      );
+      const audioMetadata = track.audioStorageId
+        ? await ctx.db.system.get("_storage", track.audioStorageId)
+        : null;
 
       if (audioMetadata) {
         await ctx.storage.delete(track.audioStorageId);
@@ -202,9 +246,7 @@ export const listPublished = query({
     const result = await Promise.all(
       albums.map(async (album) => ({
         ...album,
-        coverUrl: album.coverStorageId
-          ? await ctx.storage.getUrl(album.coverStorageId)
-          : null,
+        coverUrl: await resolveCoverUrl(ctx, album),
       })),
     );
 
@@ -236,9 +278,7 @@ export const listMine = query({
         .sort((a, b) => String(a.title).localeCompare(String(b.title)))
         .map(async (album) => ({
           ...album,
-          coverUrl: album.coverStorageId
-            ? await ctx.storage.getUrl(album.coverStorageId)
-            : null,
+          coverUrl: await resolveCoverUrl(ctx, album),
         })),
     );
   },
@@ -256,9 +296,7 @@ export const listForAdmin = query({
         .sort((a, b) => b.updatedAt - a.updatedAt)
         .map(async (album) => ({
           ...album,
-          coverUrl: album.coverStorageId
-            ? await ctx.storage.getUrl(album.coverStorageId)
-            : null,
+          coverUrl: await resolveCoverUrl(ctx, album),
         })),
     );
   },
@@ -283,15 +321,13 @@ export const getPublishedWithTracks = query({
     const tracksWithUrls = await Promise.all(
       tracks.map(async (track) => ({
         ...track,
-        audioUrl: await ctx.storage.getUrl(track.audioStorageId),
+        audioUrl: await resolveAudioUrl(ctx, track),
       })),
     );
 
     return {
       ...album,
-      coverUrl: album.coverStorageId
-        ? await ctx.storage.getUrl(album.coverStorageId)
-        : null,
+      coverUrl: await resolveCoverUrl(ctx, album),
       tracks: tracksWithUrls,
     };
   },
@@ -317,15 +353,11 @@ export const getForAdmin = query({
 
     return {
       ...album,
-      coverUrl: album.coverStorageId
-        ? await ctx.storage.getUrl(album.coverStorageId)
-        : null,
+      coverUrl: await resolveCoverUrl(ctx, album),
       tracks: await Promise.all(
         tracks.map(async (track) => ({
           ...track,
-          audioUrl: track.audioStorageId
-            ? await ctx.storage.getUrl(track.audioStorageId)
-            : null,
+          audioUrl: await resolveAudioUrl(ctx, track),
         })),
       ),
     };

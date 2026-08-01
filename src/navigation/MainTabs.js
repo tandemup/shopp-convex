@@ -122,6 +122,18 @@ export default function MainTabs() {
       <Tab.Screen
         name={ROUTES.MENU_TAB}
         component={MenuStack}
+        listeners={({ navigation }) => ({
+          tabPress: (event) => {
+            event.preventDefault();
+
+            // Al pulsar Menu siempre mostramos la pantalla raíz del stack.
+            // De lo contrario React Navigation conserva la última pantalla
+            // visitada, por ejemplo Music Library o Shared Music.
+            navigation.navigate(ROUTES.MENU_TAB, {
+              screen: ROUTES.MENU,
+            });
+          },
+        })}
         options={{
           title: "Menu",
           tabBarIcon: ({ color, size }) => (

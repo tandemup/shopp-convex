@@ -17,12 +17,6 @@ import StoreMapScreen from "@/src/screens/stores/StoreMapScreen";
 import MenuScreen from "@/src/screens/settings/MenuScreen";
 import CarrefourTestScreen from "@/src/screens/CarrefourTestScreen";
 
-import MusicLibraryScreen from "@/src/screens/music/MusicLibraryScreen";
-import MusicPlayerScreen from "@/src/screens/music/MusicPlayerScreen";
-import SharedMusicScreen from "@/src/screens/music/SharedMusicScreen";
-import PlaylistsScreen from "@/src/screens/music/PlaylistsScreen";
-import PlaylistDetailScreen from "@/src/screens/music/PlaylistDetailScreen";
-
 import AdminAlbumsScreen from "@/src/screens/admin/AdminAlbumsScreen";
 import AdminAlbumUploadScreen from "@/src/screens/admin/AdminAlbumUploadScreen";
 import AdminAlbumEditScreen from "@/src/screens/admin/AdminAlbumEditScreen";
@@ -84,36 +78,6 @@ export default function ShoppingStack() {
         name={ROUTES.ADMIN_ALBUMS}
         component={AdminAlbumsScreen}
         options={{ title: "Edtor de álbumes" }}
-      />
-
-      <Stack.Screen
-        name={ROUTES.MUSIC_LIBRARY}
-        component={MusicLibraryScreen}
-        options={{
-          title: "Música",
-        }}
-      />
-      <Stack.Screen
-        name={ROUTES.MUSIC_PLAYER}
-        component={MusicPlayerScreen}
-        options={{
-          title: "Reproductor",
-        }}
-      />
-      <Stack.Screen
-        name={ROUTES.SHARED_MUSIC}
-        component={SharedMusicScreen}
-        options={{ title: "Música compartida" }}
-      />
-      <Stack.Screen
-        name={ROUTES.MUSIC_PLAYLISTS}
-        component={PlaylistsScreen}
-        options={{ title: "Mis playlists" }}
-      />
-      <Stack.Screen
-        name={ROUTES.MUSIC_PLAYLIST_DETAIL}
-        component={PlaylistDetailScreen}
-        options={{ title: "Playlist" }}
       />
 
       <Stack.Screen

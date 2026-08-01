@@ -22,7 +22,8 @@ export const add = mutation({
     title: v.string(),
     artist: v.optional(v.string()),
     trackNumber: v.number(),
-    audioStorageId: v.id("_storage"),
+    audioStorageId: v.optional(v.id("_storage")),
+    audioUrl: v.optional(v.string()),
     audioFilename: v.string(),
     audioMimeType: v.optional(v.string()),
     audioSizeBytes: v.optional(v.number()),
@@ -47,6 +48,10 @@ export const add = mutation({
       throw new Error("El título de la pista es obligatorio.");
     }
 
+    if (!args.audioStorageId && !args.audioUrl?.trim()) {
+      throw new Error("La pista necesita audioStorageId o audioUrl.");
+    }
+
     const duplicate = await ctx.db
       .query("musicTracks")
       .withIndex("by_album_track", (q) =>
@@ -66,6 +71,7 @@ export const add = mutation({
       artist: args.artist?.trim() || undefined,
       trackNumber,
       audioStorageId: args.audioStorageId,
+      audioUrl: args.audioUrl?.trim() || undefined,
       audioFilename: args.audioFilename,
       audioMimeType: args.audioMimeType,
       audioSizeBytes: args.audioSizeBytes,
@@ -166,6 +172,43 @@ export const replaceAudio = mutation({
   },
 });
 
+export const replaceAudioUrl = mutation({
+  args: {
+    trackId: v.id("musicTracks"),
+    audioUrl: v.string(),
+    audioFilename: v.string(),
+    audioMimeType: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const track = await ctx.db.get(args.trackId);
+    if (!track) throw new Error("Pista no encontrada.");
+    await getEditableAlbum(ctx, track.albumId);
+
+    const audioUrl = args.audioUrl.trim();
+    if (!audioUrl) throw new Error("La URL del audio es obligatoria.");
+
+    if (track.audioStorageId) {
+      const metadata = await ctx.db.system.get(
+        "_storage",
+        track.audioStorageId,
+      );
+      if (metadata) await ctx.storage.delete(track.audioStorageId);
+    }
+
+    await ctx.db.patch(args.trackId, {
+      audioUrl,
+      audioStorageId: undefined,
+      audioFilename: args.audioFilename.trim() || track.audioFilename,
+      audioMimeType: args.audioMimeType,
+      audioSizeBytes: undefined,
+      durationMs: args.durationMs,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const reorder = mutation({
   args: {
     albumId: v.id("musicAlbums"),
@@ -239,10 +282,9 @@ export const remove = mutation({
 
     await getEditableAlbum(ctx, track.albumId);
 
-    const audioMetadata = await ctx.db.system.get(
-      "_storage",
-      track.audioStorageId,
-    );
+    const audioMetadata = track.audioStorageId
+      ? await ctx.db.system.get("_storage", track.audioStorageId)
+      : null;
 
     if (audioMetadata) {
       await ctx.storage.delete(track.audioStorageId);

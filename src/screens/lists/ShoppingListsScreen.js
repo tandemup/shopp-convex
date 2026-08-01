@@ -222,7 +222,10 @@ function QuickActions({
         iconColor: COLORS.orange,
         iconBackground: COLORS.orangeSoft,
         badgeLabel: "NUEVO",
-        onPress: () => navigation.navigate(ROUTES.MUSIC_LIBRARY),
+        onPress: () =>
+          navigation.navigate(ROUTES.MENU_TAB, {
+            screen: ROUTES.MUSIC_LIBRARY,
+          }),
       },
       {
         key: "parking",

@@ -11,6 +11,7 @@ import AdminUsersScreen from "@/src/screens/admin/AdminUsersScreen";
 
 import MusicLibraryScreen from "@/src/screens/music/MusicLibraryScreen";
 import MusicPlayerScreen from "@/src/screens/music/MusicPlayerScreen";
+import SharedMusicScreen from "@/src/screens/music/SharedMusicScreen";
 import PlaylistsScreen from "@/src/screens/music/PlaylistsScreen";
 import PlaylistDetailScreen from "@/src/screens/music/PlaylistDetailScreen";
 
@@ -70,7 +71,12 @@ export default function MenuStack() {
       <Stack.Screen
         name={ROUTES.MUSIC_LIBRARY}
         component={MusicLibraryScreen}
-        options={{ title: "Música" }}
+        options={{ title: "Música", headerShown: false }}
+      />
+      <Stack.Screen
+        name={ROUTES.SHARED_MUSIC}
+        component={SharedMusicScreen}
+        options={{ title: "Música compartida", headerShown: false }}
       />
       <Stack.Screen
         name={ROUTES.MUSIC_PLAYLISTS}
@@ -109,7 +115,7 @@ export default function MenuStack() {
       <Stack.Screen
         name={ROUTES.MUSIC_PLAYER}
         component={MusicPlayerScreen}
-        options={{ title: "Reproductor" }}
+        options={{ title: "Reproductor", headerShown: false }}
       />
     </Stack.Navigator>
   );

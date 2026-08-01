@@ -46,7 +46,8 @@ export const importAlbumFromJson = mutation({
     }),
 
     cover: v.object({
-      storageId: v.id("_storage"),
+      storageId: v.optional(v.id("_storage")),
+      coverUrl: v.optional(v.string()),
       filename: v.string(),
       mimeType: v.optional(v.string()),
       sizeBytes: v.optional(v.number()),
@@ -58,7 +59,8 @@ export const importAlbumFromJson = mutation({
         title: v.string(),
         artist: v.optional(v.string()),
 
-        audioStorageId: v.id("_storage"),
+        audioStorageId: v.optional(v.id("_storage")),
+        audioUrl: v.optional(v.string()),
         audioFilename: v.string(),
         audioMimeType: v.optional(v.string()),
         audioSizeBytes: v.optional(v.number()),
@@ -87,15 +89,19 @@ export const importAlbumFromJson = mutation({
       throw new Error("El álbum debe contener al menos una pista.");
     }
 
-    const coverMetadata = await ctx.db.system.get(
-      "_storage",
-      args.cover.storageId,
-    );
-
-    if (!coverMetadata) {
-      throw new Error(
-        `No existe la carátula ${args.cover.storageId} en File Storage.`,
+    const coverUrl = args.cover.coverUrl?.trim();
+    if (!args.cover.storageId && !coverUrl) {
+      throw new Error("El álbum necesita coverUrl o storageId.");
+    }
+    if (args.cover.storageId) {
+      const coverMetadata = await ctx.db.system.get(
+        "_storage",
+        args.cover.storageId,
       );
+      if (!coverMetadata)
+        throw new Error(
+          `No existe la carátula ${args.cover.storageId} en File Storage.`,
+        );
     }
 
     const orderedTracks = [...args.tracks].sort(
@@ -117,7 +123,16 @@ export const importAlbumFromJson = mutation({
         throw new Error(`La pista ${track.trackNumber} no tiene título.`);
       }
 
-      const id = String(track.audioStorageId);
+      const audioUrl = track.audioUrl?.trim();
+      if (!track.audioStorageId && !audioUrl) {
+        throw new Error(
+          `La pista ${track.trackNumber} necesita audioUrl o audioStorageId.`,
+        );
+      }
+
+      const id = track.audioStorageId
+        ? `storage:${String(track.audioStorageId)}`
+        : `url:${audioUrl}`;
 
       if (storageIds.has(id)) {
         throw new Error(
@@ -127,15 +142,16 @@ export const importAlbumFromJson = mutation({
 
       storageIds.add(id);
 
-      const metadata = await ctx.db.system.get(
-        "_storage",
-        track.audioStorageId,
-      );
-
-      if (!metadata) {
-        throw new Error(
-          `No existe el archivo de la pista ${track.trackNumber} en File Storage.`,
+      if (track.audioStorageId) {
+        const metadata = await ctx.db.system.get(
+          "_storage",
+          track.audioStorageId,
         );
+        if (!metadata) {
+          throw new Error(
+            `No existe el archivo de la pista ${track.trackNumber} en File Storage.`,
+          );
+        }
       }
     }
 
@@ -150,6 +166,7 @@ export const importAlbumFromJson = mutation({
       description: args.album.description?.trim() || undefined,
 
       coverStorageId: args.cover.storageId,
+      coverUrl: coverUrl || undefined,
       coverFilename: args.cover.filename,
       coverMimeType: args.cover.mimeType,
       coverSizeBytes: args.cover.sizeBytes,
@@ -172,6 +189,7 @@ export const importAlbumFromJson = mutation({
         trackNumber: track.trackNumber,
 
         audioStorageId: track.audioStorageId,
+        audioUrl: track.audioUrl?.trim() || undefined,
         audioFilename: track.audioFilename,
         audioMimeType: track.audioMimeType,
         audioSizeBytes: track.audioSizeBytes,
