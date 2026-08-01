@@ -12,7 +12,10 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import { uploadFileToConvex } from "@/src/utils/music/uploadFile";
-import { driveDownloadUrl } from "@/src/services/sharedMusicStorage";
+import {
+  driveDownloadUrl,
+  driveImageUrl,
+} from "@/src/services/sharedMusicStorage";
 
 function readAssetJson(asset) {
   return fetch(asset.uri)
@@ -44,7 +47,7 @@ function normaliseManifest(json) {
       ...cover,
       // Admitimos URLs, IDs de Google Drive y el formato antiguo con storageId.
       coverUrl:
-        driveDownloadUrl(
+        driveImageUrl(
           // Formato recomendado: cover.coverId.
           cover.coverId ||
             cover.coverUrl ||

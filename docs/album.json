@@ -3,18 +3,21 @@
   "artist": "Alan Parsons Project",
   "composer": "Alan Parsons Project",
   "genre": "Rock Progresivo",
+  "coverId": "1PKyLAJs5yhYAdD8-HaSPqbESQcvzqFII",
   "coverUrl": "https://drive.google.com/uc?export=download&id=1PKyLAJs5yhYAdD8-HaSPqbESQcvzqFII",
   "tracks": [
     {
       "title": "May Be a Price to Pay",
       "filename": "5-01.mp3",
       "trackNumber": 1,
+      "audioId": "15VrWYd8TJEIrAc9bh5knzs0y7LfkoPC9",
       "audioUrl": "https://drive.google.com/uc?export=download&id=15VrWYd8TJEIrAc9bh5knzs0y7LfkoPC9"
     },
     {
       "title": "Games people play",
       "filename": "5-02.mp3",
       "trackNumber": 2,
+      "audioId": "1fG5YK8hCaYvA4vnO--KLvERwN7G9Kbth",
       "audioUrl": "https://drive.google.com/uc?export=download&id=1fG5YK8hCaYvA4vnO--KLvERwN7G9Kbth"
     }
   ],

@@ -31,6 +31,15 @@ export function driveDownloadUrl(value) {
   return normalizePublicUrl(value);
 }
 
+// Google Drive sirve `uc?export=download` como descarga (attachment). Para
+// <Image> necesitamos una respuesta de imagen que el navegador pueda pintar.
+export function driveImageUrl(value) {
+  const id = driveFileId(value);
+  return id
+    ? `https://drive.google.com/thumbnail?id=${id}&sz=w1200`
+    : String(value || "").trim();
+}
+
 function validateAlbum(album) {
   if (!album || typeof album !== "object") {
     throw new Error("El enlace no contiene un objeto JSON válido.");
@@ -51,7 +60,7 @@ function validateAlbum(album) {
     ...metadata,
     artist: metadata.artist || "Artista desconocido",
     coverUrl:
-      normalizePublicUrl(
+      driveImageUrl(
         // Admite cover.coverId como formato preferente.
         cover.coverId || cover.coverUrl || cover.url,
       ) || null,
