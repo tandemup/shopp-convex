@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { ROUTES } from "../../navigation/ROUTES";
 
@@ -21,11 +21,7 @@ const normalize = (value) =>
     .toLowerCase();
 
 export default function MusicLibraryScreen({ navigation }) {
-  const albums = useQuery(api.musicAlbums.listPublished);
-  const myAlbums = useQuery(api.userMusicAlbums.listMine);
-  const playlists = useQuery(api.musicPlaylists.listMine);
-  const addAlbum = useMutation(api.userMusicAlbums.add);
-  const removeAlbum = useMutation(api.userMusicAlbums.remove);
+  const albums = useQuery(api.musicAlbums.listMine);
   const [searchText, setSearchText] = useState("");
   const filteredAlbums = useMemo(() => {
     const search = normalize(searchText.trim());
@@ -38,29 +34,7 @@ export default function MusicLibraryScreen({ navigation }) {
       ).includes(search),
     );
   }, [albums, searchText]);
-  const myAlbumIds = useMemo(
-    () => new Set((myAlbums || []).map((album) => String(album._id))),
-    [myAlbums],
-  );
-  const myLibraryAlbums = useMemo(() => {
-    const search = normalize(searchText.trim());
-    return (myAlbums || []).filter((album) => {
-      if (!search) return true;
-      return normalize(
-        [album.title, album.artist, album.composer, album.genre, album.year]
-          .filter(Boolean)
-          .join(" "),
-      ).includes(search);
-    });
-  }, [myAlbums, searchText]);
-  const toggleLibrary = async (album) => {
-    if (myAlbumIds.has(String(album._id))) {
-      await removeAlbum({ albumId: album._id });
-    } else {
-      await addAlbum({ albumId: album._id });
-    }
-  };
-  const renderAlbumCard = (album, showLibraryAction = false) => (
+  const renderAlbumCard = (album) => (
     <Pressable
       key={album._id}
       style={styles.albumCard}
@@ -86,27 +60,7 @@ export default function MusicLibraryScreen({ navigation }) {
           {album.year ? ` · ${album.year}` : ""}
         </Text>
       </View>
-      {showLibraryAction ? (
-        <Pressable
-          hitSlop={10}
-          onPress={(event) => {
-            event.stopPropagation();
-            toggleLibrary(album);
-          }}
-        >
-          <Ionicons
-            name={
-              myAlbumIds.has(String(album._id))
-                ? "checkmark-circle"
-                : "add-circle-outline"
-            }
-            size={25}
-            color="#2563eb"
-          />
-        </Pressable>
-      ) : (
-        <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-      )}
+      <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
     </Pressable>
   );
   return (
@@ -115,7 +69,7 @@ export default function MusicLibraryScreen({ navigation }) {
         <Ionicons name="musical-notes" size={30} color="#1d4ed8" />
         <View style={styles.heroText}>
           <Text style={styles.title}>Música</Text>
-          <Text style={styles.subtitle}>Álbumes y playlists</Text>
+          <Text style={styles.subtitle}>Mis álbumes</Text>
         </View>
       </View>
       <Pressable
@@ -126,76 +80,6 @@ export default function MusicLibraryScreen({ navigation }) {
         <Text style={styles.sharedMusicText}>Descargar música compartida</Text>
         <Ionicons name="chevron-forward" size={18} color="#2563eb" />
       </Pressable>
-
-      <View style={styles.sectionHeader}>
-        <View style={styles.sectionTitleRow}>
-          <Ionicons name="list" size={21} color="#1d4ed8" />
-          <Text style={styles.sectionTitle}>Mis playlists</Text>
-        </View>
-        <Pressable
-          style={styles.seeAll}
-          onPress={() => navigation.navigate(ROUTES.MUSIC_PLAYLISTS)}
-        >
-          <Text style={styles.seeAllText}>Ver todas</Text>
-          <Ionicons name="chevron-forward" size={17} color="#2563eb" />
-        </Pressable>
-      </View>
-      {playlists === undefined ? (
-        <ActivityIndicator style={styles.playlistLoader} />
-      ) : playlists.length === 0 ? (
-        <Pressable
-          style={styles.createPlaylistCard}
-          onPress={() => navigation.navigate(ROUTES.MUSIC_PLAYLISTS)}
-        >
-          <Ionicons name="add-circle-outline" size={28} color="#2563eb" />
-          <View style={styles.playlistInfo}>
-            <Text style={styles.playlistName}>Crear una playlist</Text>
-            <Text style={styles.playlistMeta}>
-              Organiza y comparte tus canciones
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#94a3b8" />
-        </Pressable>
-      ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.playlistsRow}
-        >
-          {playlists.map((playlist) => (
-            <Pressable
-              key={playlist._id}
-              style={styles.playlistCard}
-              onPress={() =>
-                navigation.navigate(ROUTES.MUSIC_PLAYLIST_DETAIL, {
-                  playlistId: playlist._id,
-                })
-              }
-            >
-              <View style={styles.playlistIcon}>
-                <Ionicons
-                  name={playlist.isPublic ? "people" : "musical-notes"}
-                  size={25}
-                  color="#2563eb"
-                />
-              </View>
-              <Text numberOfLines={1} style={styles.playlistName}>
-                {playlist.name}
-              </Text>
-              <Text style={styles.playlistMeta}>
-                {playlist.tracks || 0} canciones
-              </Text>
-            </Pressable>
-          ))}
-          <Pressable
-            style={[styles.playlistCard, styles.newPlaylistCard]}
-            onPress={() => navigation.navigate(ROUTES.MUSIC_PLAYLISTS)}
-          >
-            <Ionicons name="add" size={28} color="#2563eb" />
-            <Text style={styles.playlistName}>Nueva</Text>
-          </Pressable>
-        </ScrollView>
-      )}
 
       <View style={[styles.sectionHeader, styles.albumsHeader]}>
         <View style={styles.sectionTitleRow}>
@@ -214,26 +98,16 @@ export default function MusicLibraryScreen({ navigation }) {
         />
       </View>
       <Text style={styles.libraryHint}>
-        Guarda álbumes en tu biblioteca para encontrarlos rápidamente. Los
-        archivos no se duplican.
+        Aquí aparecen únicamente los álbumes publicados por tu usuario.
       </Text>
-      {myAlbums === undefined ? (
-        <ActivityIndicator style={styles.loader} />
-      ) : myLibraryAlbums.length > 0 ? (
-        <>
-          <Text style={styles.subsectionTitle}>Mi biblioteca</Text>
-          {myLibraryAlbums.map((album) => renderAlbumCard(album, true))}
-          <Text style={styles.subsectionTitle}>Álbumes disponibles</Text>
-        </>
-      ) : null}
       {albums === undefined ? (
         <ActivityIndicator style={styles.loader} />
       ) : filteredAlbums.length === 0 ? (
-        <Text style={styles.emptyText}>No hay álbumes publicados.</Text>
+        <Text style={styles.emptyText}>
+          Todavía no tienes álbumes publicados.
+        </Text>
       ) : (
-        filteredAlbums
-          .filter((album) => !myAlbumIds.has(String(album._id)))
-          .map((album) => renderAlbumCard(album, true))
+        filteredAlbums.map((album) => renderAlbumCard(album))
       )}
     </ScrollView>
   );

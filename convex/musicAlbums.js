@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAdmin } from "./lib/auth";
+import { requireAdmin, requireUser } from "./lib/auth";
 
 const albumStatusValidator = v.union(
   v.literal("draft"),
@@ -217,6 +217,30 @@ export const listPublished = query({
         String(a.title || "").localeCompare(String(b.title || ""))
       );
     });
+  },
+});
+
+export const listMine = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    const albums = await ctx.db
+      .query("musicAlbums")
+      .withIndex("by_createdBy", (q) => q.eq("createdBy", user._id))
+      .collect();
+
+    const published = albums.filter((album) => album.status === "published");
+
+    return await Promise.all(
+      published
+        .sort((a, b) => String(a.title).localeCompare(String(b.title)))
+        .map(async (album) => ({
+          ...album,
+          coverUrl: album.coverStorageId
+            ? await ctx.storage.getUrl(album.coverStorageId)
+            : null,
+        })),
+    );
   },
 });
 

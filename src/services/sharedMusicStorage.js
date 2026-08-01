@@ -20,9 +20,11 @@ export function normalizePublicUrl(value, kind = "file") {
   const text = String(value || "").trim();
   const id = driveFileId(text);
   if (id && /drive\.google\.com/i.test(text)) {
-    return kind === "json"
-      ? `https://drive.google.com/uc?export=download&id=${id}`
-      : `https://drive.google.com/uc?export=download&id=${id}`;
+    return (
+      "https://drive.usercontent.google.com/download?id=" +
+      id +
+      "&export=download&confirm=t"
+    );
   }
   return text;
 }
@@ -31,19 +33,28 @@ function validateAlbum(album) {
   if (!album || typeof album !== "object") {
     throw new Error("El enlace no contiene un objeto JSON válido.");
   }
-  if (!album.title || !Array.isArray(album.tracks)) {
+  // Acepta tanto el formato plano como el formato organizado por secciones:
+  // { album: {...}, cover: {...}, tracks: [...] }.
+  const metadata =
+    album.album && typeof album.album === "object" ? album.album : album;
+  const cover =
+    album.cover && typeof album.cover === "object" ? album.cover : album;
+  const tracks = Array.isArray(album.tracks) ? album.tracks : metadata.tracks;
+
+  if (!metadata.title || !Array.isArray(tracks)) {
     throw new Error("El JSON debe contener title y un array tracks.");
   }
   return {
     ...album,
-    artist: album.artist || "Artista desconocido",
-    tracks: album.tracks.map((track, index) => ({
+    ...metadata,
+    artist: metadata.artist || "Artista desconocido",
+    coverUrl: normalizePublicUrl(cover.coverUrl || cover.url) || null,
+    tracks: tracks.map((track, index) => ({
       ...track,
       title: track.title || `Pista ${index + 1}`,
       trackNumber: track.trackNumber || index + 1,
       audioUrl: normalizePublicUrl(track.audioUrl || track.url),
     })),
-    coverUrl: album.coverUrl ? normalizePublicUrl(album.coverUrl) : null,
   };
 }
 
@@ -82,7 +93,18 @@ export async function readSharedAlbum(input) {
 export async function listSharedAlbums() {
   try {
     const raw = globalThis.localStorage?.getItem(SHARED_ALBUMS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const albums = raw ? JSON.parse(raw) : [];
+    const seen = new Set();
+    return albums.filter((album) => {
+      const identity =
+        album.sourceUrl ||
+        String(album.title || "") +
+          "|" +
+          String(album.artist || "").toLowerCase();
+      if (seen.has(identity)) return false;
+      seen.add(identity);
+      return true;
+    });
   } catch {
     return [];
   }

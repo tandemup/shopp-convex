@@ -226,7 +226,18 @@ export default function MusicPlayerScreen({ navigation, route }) {
 
       if (!mountedRef.current || requestId !== loadRequestRef.current) return;
 
-      const playableUri = await getPlayableTrackUri(track._id, track.audioUrl);
+      const cacheTrackId =
+        track._id ||
+        track.trackId ||
+        track.audioUrl ||
+        `shared-track-${trackIndex}`;
+
+      // Los álbumes compartidos ya contienen una URL pública de audio.
+      // En Web no debemos sustituirla por una URI de caché potencialmente
+      // obsoleta o no reproducible por el elemento HTMLMediaElement.
+      const playableUri = sharedAlbum
+        ? track.audioUrl
+        : await getPlayableTrackUri(cacheTrackId, track.audioUrl);
 
       if (!mountedRef.current || requestId !== loadRequestRef.current) return;
 
@@ -679,7 +690,14 @@ export default function MusicPlayerScreen({ navigation, route }) {
 
                   <FlatList
                     data={tracks}
-                    keyExtractor={(item) => String(item._id)}
+                    keyExtractor={(item, index) =>
+                      String(
+                        item._id ||
+                          item.trackId ||
+                          item.audioUrl ||
+                          `track-${index}`,
+                      )
+                    }
                     style={styles.trackList}
                     contentContainerStyle={styles.trackListContent}
                     showsVerticalScrollIndicator={false}
@@ -693,7 +711,11 @@ export default function MusicPlayerScreen({ navigation, route }) {
       ) : (
         <FlatList
           data={showTrackList ? tracks : []}
-          keyExtractor={(item) => String(item._id)}
+          keyExtractor={(item, index) =>
+            String(
+              item._id || item.trackId || item.audioUrl || `track-${index}`,
+            )
+          }
           style={styles.mobilePlayerList}
           contentContainerStyle={styles.mobilePlayerListContent}
           showsVerticalScrollIndicator={false}

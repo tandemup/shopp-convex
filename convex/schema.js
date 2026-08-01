@@ -839,6 +839,7 @@ export default defineSchema({
     updatedAt: v.float64(),
   })
     .index("by_status", ["status"])
+    .index("by_createdBy", ["createdBy"])
     .index("by_title", ["title"])
     .index("by_updatedAt", ["updatedAt"]),
 
