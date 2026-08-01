@@ -13,8 +13,8 @@ import {
 import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { getPlayableTrackUri } from "../../services/musicCache";
+import { api } from "@/convex/_generated/api";
+import { getPlayableTrackUri } from "@/src/services/musicCache";
 
 function formatMillis(value) {
   const totalSeconds = Math.max(0, Math.floor((value || 0) / 1000));
@@ -372,19 +372,6 @@ export default function MusicPlayerScreen({ navigation, route }) {
               : media?.artist || media?.albumArtist || media?.composer || ""}
           </Text>
         </View>
-
-        <Pressable
-          style={styles.favoriteButton}
-          hitSlop={10}
-          onPress={(event) => {
-            event.stopPropagation();
-            addTrackToPlaylistScreen(item._id);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Añadir canción a una playlist"
-        >
-          <Ionicons name="list-outline" size={21} color="#2563eb" />
-        </Pressable>
 
         {active && status.isPlaying ? (
           <Ionicons name="volume-high" size={19} color="#2563eb" />

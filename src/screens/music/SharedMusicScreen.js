@@ -84,6 +84,7 @@ export default function SharedMusicScreen({ navigation }) {
         autoCapitalize="none"
         autoCorrect={false}
         placeholder="https://drive.google.com/file/d/ID/view"
+        placeholderTextColor="#888"
         style={styles.input}
       />
       <Text style={styles.hint}>
