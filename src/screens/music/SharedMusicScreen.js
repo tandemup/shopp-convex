@@ -18,6 +18,7 @@ import {
   readSharedAlbum,
 } from "../../services/sharedMusicStorage";
 import { ROUTES } from "../../navigation/ROUTES";
+import { safeConfirm } from "../../components/ui/alert/safeAlert";
 
 export default function SharedMusicScreen({ navigation }) {
   const [url, setUrl] = useState("");
@@ -26,7 +27,6 @@ export default function SharedMusicScreen({ navigation }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
-  const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
     listSharedAlbums()
@@ -185,7 +185,18 @@ export default function SharedMusicScreen({ navigation }) {
             <Pressable
               accessibilityLabel={`Borrar descarga de ${item.title}`}
               style={styles.deleteButton}
-              onPress={() => setPendingDelete(item)}
+              onPress={() =>
+                safeConfirm(
+                  "Borrar descarga",
+                  `¿Quieres borrar “${item.title}”?`,
+                  () => remove(item),
+                  {
+                    confirmText: "Borrar",
+                    cancelText: "Cancelar",
+                    destructive: true,
+                  },
+                )
+              }
               disabled={busy}
             >
               <Ionicons name="trash-outline" size={21} color="#dc2626" />
@@ -193,41 +204,6 @@ export default function SharedMusicScreen({ navigation }) {
           </View>
         ))
       )}
-      {pendingDelete ? (
-        <View style={styles.modalBackdrop}>
-          <View
-            style={styles.modalCard}
-            accessibilityViewIsModal
-            accessibilityRole="alert"
-          >
-            <View style={styles.modalIcon}>
-              <Ionicons name="trash-outline" size={24} color="#dc2626" />
-            </View>
-            <Text style={styles.modalTitle}>Borrar descarga</Text>
-            <Text style={styles.modalMessage}>
-              ¿Quieres borrar “{pendingDelete.title}”?
-            </Text>
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.cancelButton}
-                onPress={() => setPendingDelete(null)}
-              >
-                <Text style={styles.cancelText}>Cancelar</Text>
-              </Pressable>
-              <Pressable
-                style={styles.confirmButton}
-                onPress={async () => {
-                  const item = pendingDelete;
-                  setPendingDelete(null);
-                  await remove(item);
-                }}
-              >
-                <Text style={styles.confirmText}>Borrar</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      ) : null}
     </ScrollView>
   );
 }
@@ -337,59 +313,4 @@ const styles = StyleSheet.create({
     marginBottom: 9,
   },
   empty: { color: "#64748b" },
-  modalBackdrop: {
-    position: "fixed",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "rgba(15, 23, 42, 0.48)",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1000,
-    padding: 20,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: "#fff",
-    borderRadius: 18,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  modalIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#fef2f2",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
-  },
-  modalTitle: { fontSize: 20, fontWeight: "800", color: "#0f172a" },
-  modalMessage: { color: "#475569", marginTop: 8, lineHeight: 21 },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 10,
-    marginTop: 24,
-  },
-  cancelButton: {
-    backgroundColor: "#e2e8f0",
-    borderRadius: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-  },
-  cancelText: { color: "#1e293b", fontWeight: "700" },
-  confirmButton: {
-    backgroundColor: "#dc2626",
-    borderRadius: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-  },
-  confirmText: { color: "#fff", fontWeight: "800" },
 });
