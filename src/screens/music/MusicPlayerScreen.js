@@ -14,7 +14,10 @@ import { Audio } from "expo-av";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { getPlayableTrackUri } from "@/src/services/musicCache";
+import {
+  getPlayableSharedTrackUri,
+  getPlayableTrackUri,
+} from "@/src/services/musicCache";
 
 function formatMillis(value) {
   const totalSeconds = Math.max(0, Math.floor((value || 0) / 1000));
@@ -236,13 +239,17 @@ export default function MusicPlayerScreen({ navigation, route }) {
       // En Web no debemos sustituirla por una URI de caché potencialmente
       // obsoleta o no reproducible por el elemento HTMLMediaElement.
       const playableUri = sharedAlbum
-        ? track.audioUrl
+        ? await getPlayableSharedTrackUri(track, trackIndex)
         : await getPlayableTrackUri(cacheTrackId, track.audioUrl);
 
       if (!mountedRef.current || requestId !== loadRequestRef.current) return;
 
+      if (typeof playableUri !== "string" || !playableUri.trim()) {
+        throw new Error("No se encontró una fuente de audio reproducible.");
+      }
+
       const { sound } = await Audio.Sound.createAsync(
-        { uri: playableUri },
+        { uri: playableUri.trim() },
         {
           shouldPlay,
           progressUpdateIntervalMillis: 500,

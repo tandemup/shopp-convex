@@ -1,3 +1,5 @@
+import { deleteOfflineAlbum, saveOfflineTrack } from "./musicIndexedDb";
+import { Platform } from "react-native";
 const SHARED_ALBUMS_KEY = "shopp.sharedMusic.albums.v2";
 
 function driveFileId(value) {
@@ -20,7 +22,10 @@ export function normalizePublicUrl(value, kind = "file") {
   const text = String(value || "").trim();
   const id = driveFileId(text);
   if (id) {
-    return `https://drive.google.com/uc?export=download&id=${id}`;
+    // Este endpoint evita, en la mayoría de los casos, la página HTML de
+    // confirmación que Drive puede devolver a `uc?export=download`. Esa
+    // página provoca "no supported source" en HTMLMediaElement/Expo Web.
+    return `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`;
   }
   return text;
 }
@@ -138,12 +143,36 @@ async function saveAlbums(albums) {
 }
 
 export async function downloadSharedAlbum(album, onProgress) {
+  // Google Drive no permite que una página web lea sus respuestas mediante
+  // fetch() (CORS), aunque el archivo sea público. En web conservamos la URL
+  // remota para que el elemento <audio> la reproduzca directamente. La copia
+  // offline requiere un proxy propio (Netlify/Cloudflare) o un servidor que
+  // añada los encabezados CORS.
+  const canFetchForOffline =
+    Platform.OS !== "web" && typeof indexedDB !== "undefined";
   const tracks = [];
   for (let index = 0; index < album.tracks.length; index += 1) {
     const track = album.tracks[index];
     if (!track.audioUrl)
       throw new Error(`La pista “${track.title}” no tiene audioUrl.`);
-    tracks.push(track);
+    if (canFetchForOffline) {
+      try {
+        const response = await fetch(track.audioUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const blob = await response.blob();
+        if (!blob.size) throw new Error("archivo vacío");
+        await saveOfflineTrack(track, blob, index);
+        tracks.push({ ...track, offline: true, size: blob.size });
+      } catch (error) {
+        throw new Error(
+          `No se pudo descargar “${track.title}”. Comprueba que el archivo de Google Drive sea público. ${error?.message || ""}`.trim(),
+        );
+      }
+    } else {
+      tracks.push({ ...track, offline: false });
+    }
     onProgress?.(index + 1, album.tracks.length);
   }
   const saved = {
@@ -160,4 +189,15 @@ export async function downloadSharedAlbum(album, onProgress) {
     ),
   ]);
   return saved;
+}
+
+export async function deleteSharedAlbum(album) {
+  if (!album) return;
+  await deleteOfflineAlbum(album);
+  const current = await listSharedAlbums();
+  await saveAlbums(
+    current.filter(
+      (item) => item._id !== album._id && item.sourceUrl !== album.sourceUrl,
+    ),
+  );
 }

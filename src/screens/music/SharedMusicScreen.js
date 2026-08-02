@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import {
   downloadSharedAlbum,
+  deleteSharedAlbum,
   listSharedAlbums,
   readSharedAlbum,
 } from "../../services/sharedMusicStorage";
@@ -24,6 +26,7 @@ export default function SharedMusicScreen({ navigation }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
+  const [pendingDelete, setPendingDelete] = useState(null);
 
   useEffect(() => {
     listSharedAlbums()
@@ -66,6 +69,24 @@ export default function SharedMusicScreen({ navigation }) {
   };
   const open = (item) =>
     navigation.navigate(ROUTES.MUSIC_PLAYER, { sharedAlbum: item });
+  const remove = async (item) => {
+    setBusy(true);
+    setError("");
+    try {
+      await deleteSharedAlbum(item);
+      setAlbums((previous) =>
+        previous.filter(
+          (saved) =>
+            saved._id !== item._id && saved.sourceUrl !== item.sourceUrl,
+        ),
+      );
+      if (album?._id === item._id) setAlbum(null);
+    } catch (e) {
+      setError(e.message || "No se pudo borrar la descarga.");
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.heading}>
@@ -73,7 +94,7 @@ export default function SharedMusicScreen({ navigation }) {
         <View>
           <Text style={styles.title}>Música compartida</Text>
           <Text style={styles.subtitle}>
-            Descarga álbumes desde un enlace público
+            Descarga álbumes para escucharlos sin conexión
           </Text>
         </View>
       </View>
@@ -109,8 +130,9 @@ export default function SharedMusicScreen({ navigation }) {
       <View style={styles.infoBox}>
         <Ionicons name="information-circle-outline" size={18} color="#2563eb" />
         <Text style={styles.infoText}>
-          Cada persona conserva sus archivos en su propio Drive. Shopp solo
-          guarda el enlace y los metadatos del álbum en este dispositivo.
+          {Platform.OS === "web"
+            ? "En la web, Google Drive se reproduce mediante su URL pública. Para usar los MP3 sin conexión en el navegador necesitamos un proxy con CORS."
+            : "Shopp descarga una copia local de cada MP3. El primer uso necesita conexión; después puede reproducirse sin ella."}
         </Text>
       </View>
       {album ? (
@@ -139,29 +161,73 @@ export default function SharedMusicScreen({ navigation }) {
         </Text>
       ) : (
         albums.map((item) => (
-          <Pressable
-            key={item._id}
-            style={styles.row}
-            onPress={() => open(item)}
-          >
-            {item.coverUrl ? (
-              <Image source={{ uri: item.coverUrl }} style={styles.thumb} />
-            ) : (
-              <View style={[styles.thumb, styles.placeholder]}>
-                <Ionicons name="musical-notes" size={20} color="#64748b" />
+          <View key={item._id} style={styles.rowContainer}>
+            <Pressable style={styles.row} onPress={() => open(item)}>
+              {item.coverUrl ? (
+                <Image source={{ uri: item.coverUrl }} style={styles.thumb} />
+              ) : (
+                <View style={[styles.thumb, styles.placeholder]}>
+                  <Ionicons name="musical-notes" size={20} color="#64748b" />
+                </View>
+              )}
+              <View style={styles.flex}>
+                <Text style={styles.albumTitle}>{item.title}</Text>
+                <Text style={styles.artist}>{item.artist}</Text>
+                <Text style={styles.meta}>
+                  {item.tracks.length} pistas ·{" "}
+                  {Platform.OS === "web"
+                    ? "Enlaces guardados"
+                    : "Guardadas en este dispositivo"}
+                </Text>
               </View>
-            )}
-            <View style={styles.flex}>
-              <Text style={styles.albumTitle}>{item.title}</Text>
-              <Text style={styles.artist}>{item.artist}</Text>
-              <Text style={styles.meta}>
-                {item.tracks.length} pistas · Disponible sin conexión
-              </Text>
-            </View>
-            <Ionicons name="play-circle-outline" size={27} color="#2563eb" />
-          </Pressable>
+              <Ionicons name="play-circle-outline" size={27} color="#2563eb" />
+            </Pressable>
+            <Pressable
+              accessibilityLabel={`Borrar descarga de ${item.title}`}
+              style={styles.deleteButton}
+              onPress={() => setPendingDelete(item)}
+              disabled={busy}
+            >
+              <Ionicons name="trash-outline" size={21} color="#dc2626" />
+            </Pressable>
+          </View>
         ))
       )}
+      {pendingDelete ? (
+        <View style={styles.modalBackdrop}>
+          <View
+            style={styles.modalCard}
+            accessibilityViewIsModal
+            accessibilityRole="alert"
+          >
+            <View style={styles.modalIcon}>
+              <Ionicons name="trash-outline" size={24} color="#dc2626" />
+            </View>
+            <Text style={styles.modalTitle}>Borrar descarga</Text>
+            <Text style={styles.modalMessage}>
+              ¿Quieres borrar “{pendingDelete.title}”?
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.cancelButton}
+                onPress={() => setPendingDelete(null)}
+              >
+                <Text style={styles.cancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={styles.confirmButton}
+                onPress={async () => {
+                  const item = pendingDelete;
+                  setPendingDelete(null);
+                  await remove(item);
+                }}
+              >
+                <Text style={styles.confirmText}>Borrar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -248,6 +314,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   row: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -258,5 +325,71 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
   },
+  rowContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  deleteButton: {
+    backgroundColor: "#fef2f2",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 9,
+  },
   empty: { color: "#64748b" },
+  modalBackdrop: {
+    position: "fixed",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(15, 23, 42, 0.48)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  modalIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#fef2f2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "800", color: "#0f172a" },
+  modalMessage: { color: "#475569", marginTop: 8, lineHeight: 21 },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 24,
+  },
+  cancelButton: {
+    backgroundColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+  },
+  cancelText: { color: "#1e293b", fontWeight: "700" },
+  confirmButton: {
+    backgroundColor: "#dc2626",
+    borderRadius: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+  },
+  confirmText: { color: "#fff", fontWeight: "800" },
 });
