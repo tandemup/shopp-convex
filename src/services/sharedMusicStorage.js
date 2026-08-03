@@ -25,6 +25,16 @@ export function normalizePublicUrl(value, kind = "file") {
   const text = String(value || "").trim();
   const id = driveFileId(text);
   if (id) {
+    // En producción Netlify puede exponer un proxy con CORS. Se activa
+    // mediante EXPO_PUBLIC_DRIVE_AUDIO_PROXY_URL para no romper Expo Web
+    // durante el desarrollo local, donde la Function no existe.
+    const proxyBase =
+      kind !== "json" &&
+      typeof process !== "undefined" &&
+      process.env?.EXPO_PUBLIC_DRIVE_AUDIO_PROXY_URL;
+    if (proxyBase) {
+      return `${String(proxyBase).replace(/\/$/, "")}?id=${encodeURIComponent(id)}`;
+    }
     // Este endpoint evita, en la mayoría de los casos, la página HTML de
     // confirmación que Drive puede devolver a `uc?export=download`. Esa
     // página provoca "no supported source" en HTMLMediaElement/Expo Web.

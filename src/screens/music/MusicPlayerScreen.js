@@ -147,7 +147,7 @@ export default function MusicPlayerScreen({ navigation, route }) {
     lastScrolledLyricRef.current = -1;
     lyricLineLayoutsRef.current = {};
     lyricsScrollRef.current?.scrollTo({ y: 0, animated: false });
-  }, [currentTrack?.audioStorageId]);
+  }, [currentTrack?.audioStorageId, currentTrack?.audioUrl]);
 
   useEffect(() => {
     if (
@@ -398,9 +398,9 @@ export default function MusicPlayerScreen({ navigation, route }) {
 
   const renderAlbumHeader = () => (
     <View style={[styles.albumHeader, !isDesktop && styles.albumHeaderMobile]}>
-      {media?.coverUrl ? (
+      {activeMedia?.coverUrl ? (
         <Image
-          source={{ uri: media.coverUrl }}
+          source={{ uri: activeMedia.coverUrl }}
           style={[
             styles.largeCover,
             !isDesktop && styles.largeCoverMobile,

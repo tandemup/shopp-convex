@@ -1,6 +1,7 @@
 [build]
   command = "npx expo export -p web"
   publish = "dist"
+  functions = "netlify/functions"
 
 [build.environment]
   NODE_VERSION = "24"

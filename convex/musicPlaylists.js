@@ -73,12 +73,16 @@ async function getDetails(ctx, playlist) {
       position: row.position,
       albumTitle: album?.title || "",
       albumArtist: album?.artist || album?.composer || "",
-      coverUrl: album?.coverStorageId
-        ? await ctx.storage.getUrl(album.coverStorageId)
-        : null,
-      audioUrl: track.audioStorageId
-        ? await ctx.storage.getUrl(track.audioStorageId)
-        : null,
+      coverUrl:
+        album?.coverUrl ||
+        (album?.coverStorageId
+          ? await ctx.storage.getUrl(album.coverStorageId)
+          : null),
+      audioUrl:
+        track.audioUrl ||
+        (track.audioStorageId
+          ? await ctx.storage.getUrl(track.audioStorageId)
+          : null),
     });
   }
   return { ...playlist, tracks };
