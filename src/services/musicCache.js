@@ -1,5 +1,4 @@
-import { Platform } from "react-native";
-import { getOfflineTrack } from "@/src/services/musicIndexedDb";
+import { getCachedMusicUri } from "./musicPlatformStorage";
 
 function usable(value) {
   return typeof value === "string" && value.trim().length > 0;
@@ -20,25 +19,11 @@ function normalizeAudioUrl(value) {
     : text;
 }
 
-function objectUrlFromRecord(record) {
-  if (!record?.blob || typeof URL === "undefined" || !URL.createObjectURL) {
-    return null;
-  }
-  return URL.createObjectURL(record.blob);
-}
-
-// Devuelve siempre una URI; en web no hacemos fetch de Google Drive porque
-// su redirección/descarga suele estar bloqueada por CORS.
 export async function getPlayableSharedTrackUri(track, index = 0) {
-  if (Platform.OS === "web") {
-    try {
-      const record = await getOfflineTrack(track, index);
-      const localUri = objectUrlFromRecord(record);
-      if (localUri) return localUri;
-    } catch {
-      // Se continúa con la URL pública.
-    }
-  }
+  try {
+    const localUri = await getCachedMusicUri(track, index);
+    if (localUri) return localUri;
+  } catch {}
 
   const uri = normalizeAudioUrl(
     track?.audioUrl || track?.audio?.audioUrl || track?.audioId || track?.url,
@@ -50,18 +35,13 @@ export async function getPlayableSharedTrackUri(track, index = 0) {
 }
 
 export async function getPlayableTrackUri(trackId, remoteUri) {
-  if (Platform.OS === "web") {
-    try {
-      const record = await getOfflineTrack(
-        { _id: trackId, trackId, audioUrl: remoteUri },
-        0,
-      );
-      const localUri = objectUrlFromRecord(record);
-      if (localUri) return localUri;
-    } catch {
-      // Se continúa con la URL remota.
-    }
-  }
+  try {
+    const localUri = await getCachedMusicUri(
+      { _id: trackId, trackId, audioUrl: remoteUri },
+      0,
+    );
+    if (localUri) return localUri;
+  } catch {}
 
   if (!usable(remoteUri)) {
     throw new Error("La pista no contiene una URL de audio válida.");

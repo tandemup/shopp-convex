@@ -1,5 +1,8 @@
-import { deleteOfflineAlbum, saveOfflineTrack } from "./musicIndexedDb";
-import { Platform } from "react-native";
+import {
+  deleteMusicAlbumOffline,
+  saveMusicForOffline,
+  musicStoragePlatform,
+} from "./musicPlatformStorage";
 const SHARED_ALBUMS_KEY = "shopp.sharedMusic.albums.v2";
 
 function driveFileId(value) {
@@ -148,30 +151,24 @@ export async function downloadSharedAlbum(album, onProgress) {
   // remota para que el elemento <audio> la reproduzca directamente. La copia
   // offline requiere un proxy propio (Netlify/Cloudflare) o un servidor que
   // añada los encabezados CORS.
-  const canFetchForOffline =
-    Platform.OS !== "web" && typeof indexedDB !== "undefined";
+  const platform = musicStoragePlatform();
   const tracks = [];
   for (let index = 0; index < album.tracks.length; index += 1) {
     const track = album.tracks[index];
     if (!track.audioUrl)
       throw new Error(`La pista “${track.title}” no tiene audioUrl.`);
-    if (canFetchForOffline) {
-      try {
-        const response = await fetch(track.audioUrl);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        const blob = await response.blob();
-        if (!blob.size) throw new Error("archivo vacío");
-        await saveOfflineTrack(track, blob, index);
-        tracks.push({ ...track, offline: true, size: blob.size });
-      } catch (error) {
+    try {
+      const saved = await saveMusicForOffline(track, track.audioUrl, index);
+      tracks.push({ ...track, offline: true, size: saved.size, platform });
+    } catch (error) {
+      if (platform === "web") {
         throw new Error(
-          `No se pudo descargar “${track.title}”. Comprueba que el archivo de Google Drive sea público. ${error?.message || ""}`.trim(),
+          `No se pudo guardar “${track.title}” en IndexedDB. Comprueba CORS y que la URL devuelva audio. ${error?.message || ""}`.trim(),
         );
       }
-    } else {
-      tracks.push({ ...track, offline: false });
+      throw new Error(
+        `No se pudo descargar “${track.title}”. Comprueba que el archivo sea público. ${error?.message || ""}`.trim(),
+      );
     }
     onProgress?.(index + 1, album.tracks.length);
   }
@@ -193,7 +190,7 @@ export async function downloadSharedAlbum(album, onProgress) {
 
 export async function deleteSharedAlbum(album) {
   if (!album) return;
-  await deleteOfflineAlbum(album);
+  await deleteMusicAlbumOffline(album);
   const current = await listSharedAlbums();
   await saveAlbums(
     current.filter(
