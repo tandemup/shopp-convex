@@ -26,7 +26,8 @@ exports.handler = async (event) => {
   }
 
   const headers = {};
-  if (event.headers?.range) headers.Range = event.headers.range;
+  const requestedRange = event.headers?.range || event.headers?.Range;
+  if (requestedRange) headers.Range = requestedRange;
 
   try {
     const upstream = await fetch(
@@ -63,6 +64,7 @@ exports.handler = async (event) => {
       ...response(upstream.status, buffer.toString("base64"), {
         "Content-Type": contentType,
         "Content-Disposition": "inline",
+        "Cache-Control": "public, max-age=86400, s-maxage=604800",
         "Accept-Ranges": "bytes",
         "Content-Transfer-Encoding": "binary",
         ...(contentRange ? { "Content-Range": contentRange } : {}),

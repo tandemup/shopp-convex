@@ -3,23 +3,8 @@ import {
   saveMusicForOffline,
   musicStoragePlatform,
 } from "./musicPlatformStorage";
+import { driveFileId, normalizeDriveAudioUrl } from "./driveAudioUrl";
 const SHARED_ALBUMS_KEY = "shopp.sharedMusic.albums.v2";
-
-function driveFileId(value) {
-  const text = String(value || "").trim();
-  if (!text) return null;
-  if (/^[a-zA-Z0-9_-]{20,}$/.test(text)) return text;
-  const patterns = [
-    /\/file\/d\/([a-zA-Z0-9_-]+)/,
-    /[?&]id=([a-zA-Z0-9_-]+)/,
-    /\/d\/([a-zA-Z0-9_-]+)/,
-  ];
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
-}
 
 export function normalizePublicUrl(value, kind = "file") {
   const text = String(value || "").trim();
@@ -28,13 +13,7 @@ export function normalizePublicUrl(value, kind = "file") {
     // En producción Netlify puede exponer un proxy con CORS. Se activa
     // mediante EXPO_PUBLIC_DRIVE_AUDIO_PROXY_URL para no romper Expo Web
     // durante el desarrollo local, donde la Function no existe.
-    const proxyBase =
-      kind !== "json" &&
-      typeof process !== "undefined" &&
-      process.env?.EXPO_PUBLIC_DRIVE_AUDIO_PROXY_URL;
-    if (proxyBase) {
-      return `${String(proxyBase).replace(/\/$/, "")}?id=${encodeURIComponent(id)}`;
-    }
+    if (kind !== "json") return normalizeDriveAudioUrl(id);
     // Este endpoint evita, en la mayoría de los casos, la página HTML de
     // confirmación que Drive puede devolver a `uc?export=download`. Esa
     // página provoca "no supported source" en HTMLMediaElement/Expo Web.

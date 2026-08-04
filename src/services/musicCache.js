@@ -1,22 +1,8 @@
 import { getCachedMusicUri } from "./musicPlatformStorage";
+import { normalizeDriveAudioUrl } from "./driveAudioUrl";
 
 function usable(value) {
   return typeof value === "string" && value.trim().length > 0;
-}
-
-function driveFileId(value) {
-  const text = String(value || "").trim();
-  if (/^[a-zA-Z0-9_-]{20,}$/.test(text)) return text;
-  const match = text.match(/(?:\/file\/d\/|[?&]id=|\/d\/)([a-zA-Z0-9_-]+)/);
-  return match ? match[1] : null;
-}
-
-function normalizeAudioUrl(value) {
-  const text = String(value || "").trim();
-  const id = driveFileId(text);
-  return id
-    ? `https://drive.usercontent.google.com/download?id=${encodeURIComponent(id)}&export=download&confirm=t`
-    : text;
 }
 
 export async function getPlayableSharedTrackUri(track, index = 0) {
@@ -25,7 +11,7 @@ export async function getPlayableSharedTrackUri(track, index = 0) {
     if (localUri) return localUri;
   } catch {}
 
-  const uri = normalizeAudioUrl(
+  const uri = normalizeDriveAudioUrl(
     track?.audioUrl || track?.audio?.audioUrl || track?.audioId || track?.url,
   );
   if (!usable(uri)) {
@@ -46,5 +32,5 @@ export async function getPlayableTrackUri(trackId, remoteUri) {
   if (!usable(remoteUri)) {
     throw new Error("La pista no contiene una URL de audio válida.");
   }
-  return normalizeAudioUrl(remoteUri);
+  return normalizeDriveAudioUrl(remoteUri);
 }
