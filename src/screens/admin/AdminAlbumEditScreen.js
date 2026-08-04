@@ -16,21 +16,20 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 
-async function uploadAsset(asset, generateUploadUrl, fallbackType) {
+async function uploadAsset(asset, fallbackType) {
   if (!asset?.uri) {
     throw new Error("No se ha seleccionado ningún archivo.");
   }
 
-  const uploadUrl = await generateUploadUrl();
   const source = await fetch(asset.uri);
   const blob = await source.blob();
+  const formData = new FormData();
+  formData.append("file", blob, asset.name || "upload");
+  formData.append("mimeType", asset.mimeType || fallbackType);
 
-  const response = await fetch(uploadUrl, {
+  const response = await fetch("/.netlify/functions/upload-music-file", {
     method: "POST",
-    headers: {
-      "Content-Type": asset.mimeType || fallbackType,
-    },
-    body: blob,
+    body: formData,
   });
 
   if (!response.ok) {
@@ -38,12 +37,8 @@ async function uploadAsset(asset, generateUploadUrl, fallbackType) {
   }
 
   const result = await response.json();
-
-  if (!result?.storageId) {
-    throw new Error("Convex no devolvió el storageId.");
-  }
-
-  return result.storageId;
+  if (!result?.url) throw new Error("Netlify no devolvió la URL del archivo.");
+  return result;
 }
 
 function parseLrc(value) {
@@ -99,7 +94,8 @@ export default function AdminAlbumEditScreen({ route }) {
   const removeTrack = useMutation(api.musicTracks.remove);
   const reorderTracks = useMutation(api.musicTracks.reorder);
 
-  const generateUploadUrl = useMutation(api.musicStorage.generateUploadUrl);
+  const setCoverUrl = useMutation(api.musicAlbums.setCoverUrl);
+  const replaceAudioUrl = useMutation(api.musicTracks.replaceAudioUrl);
 
   const [form, setForm] = useState(null);
   const [message, setMessage] = useState("");
@@ -396,18 +392,11 @@ export default function AdminAlbumEditScreen({ route }) {
       await makeEditable();
 
       const asset = result.assets[0];
-      const storageId = await uploadAsset(
-        asset,
-        generateUploadUrl,
-        "image/jpeg",
-      );
+      const uploaded = await uploadAsset(asset, "image/jpeg");
 
-      await setCover({
+      await setCoverUrl({
         albumId,
-        coverStorageId: storageId,
-        coverFilename: asset.name,
-        coverMimeType: asset.mimeType || "image/jpeg",
-        coverSizeBytes: typeof asset.size === "number" ? asset.size : undefined,
+        coverUrl: uploaded.url,
       });
 
       setMessage("Carátula actualizada. Publica el álbum cuando termines.");
@@ -435,18 +424,13 @@ export default function AdminAlbumEditScreen({ route }) {
       await makeEditable();
 
       const asset = result.assets[0];
-      const storageId = await uploadAsset(
-        asset,
-        generateUploadUrl,
-        "audio/mpeg",
-      );
+      const uploaded = await uploadAsset(asset, "audio/mpeg");
 
-      await replaceAudio({
+      await replaceAudioUrl({
         trackId: track._id,
-        audioStorageId: storageId,
+        audioUrl: uploaded.url,
         audioFilename: asset.name,
         audioMimeType: asset.mimeType || "audio/mpeg",
-        audioSizeBytes: typeof asset.size === "number" ? asset.size : undefined,
       });
 
       setMessage("MP3 sustituido. Publica el álbum cuando termines.");
