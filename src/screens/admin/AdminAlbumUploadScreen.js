@@ -162,16 +162,42 @@ export default function AdminAlbumUploadScreen({ navigation }) {
         title: title.trim(),
         artist: artist.trim() || undefined,
       });
-      await setCoverUrl({ albumId, coverUrl: uploaded.coverUrl });
+      const coverUrl = String(uploaded?.coverUrl || "").trim();
+      if (!coverUrl) {
+        throw new Error(
+          "La función de subida no devolvió la URL de la carátula.",
+        );
+      }
+
+      // Enviar siempre ambos campos exigidos por musicAlbums.setCoverUrl.
+      await setCoverUrl({
+        albumId: albumId,
+        coverUrl: coverUrl,
+      });
+
+      if (
+        !Array.isArray(uploaded?.tracks) ||
+        uploaded.tracks.length !== tracks.length
+      ) {
+        throw new Error(
+          "La función de subida no devolvió todas las pistas del álbum.",
+        );
+      }
       for (let index = 0; index < tracks.length; index += 1) {
         const track = tracks[index];
         const remote = uploaded.tracks[index];
+        const audioUrl = String(remote?.audioUrl || "").trim();
+        if (!audioUrl) {
+          throw new Error(
+            `La pista ${index + 1} no tiene una URL de audio válida.`,
+          );
+        }
         await addTrack({
           albumId,
           title: track.title.trim() || `Pista ${index + 1}`,
           artist: artist.trim() || undefined,
           trackNumber: index + 1,
-          audioUrl: remote.audioUrl,
+          audioUrl,
           audioFilename: track.name,
           audioMimeType: track.mimeType || "audio/mpeg",
           audioSizeBytes:
