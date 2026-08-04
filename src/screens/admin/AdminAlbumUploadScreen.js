@@ -18,17 +18,15 @@ import { safeAlert } from "@/src/components/ui/alert/safeAlert";
 import {
   sortFilesNaturally,
   titleFromFilename,
-  uploadFileToConvex,
 } from "@/src/utils/music/uploadFile";
 
 const MAX_TRACKS = 20;
 
 export default function AdminAlbumUploadScreen({ navigation }) {
-  const generateUploadUrl = useMutation(api.music.generateUploadUrl);
   const createAlbumDraft = useMutation(api.music.createAlbumDraft);
-  const setAlbumCover = useMutation(api.music.setAlbumCover);
-  const saveTrack = useMutation(api.music.saveTrack);
-  const publishAlbum = useMutation(api.music.publishAlbum);
+  const setCoverUrl = useMutation(api.musicAlbums.setCoverUrl);
+  const addTrack = useMutation(api.musicTracks.add);
+  const publishAlbum = useMutation(api.musicAlbums.publish);
 
   const [title, setTitle] = useState("");
   const [composer, setComposer] = useState("");
@@ -104,6 +102,35 @@ export default function AdminAlbumUploadScreen({ navigation }) {
     );
   };
 
+  const uploadToDrive = async (album) => {
+    const form = new FormData();
+    form.append("album", JSON.stringify(album));
+    const appendAsset = async (field, asset) => {
+      if (asset.file) form.append(field, asset.file, asset.name);
+      else if (asset.uri?.startsWith("blob:")) {
+        const blob = await fetch(asset.uri).then((response) => response.blob());
+        form.append(field, blob, asset.name);
+      } else
+        form.append(field, {
+          uri: asset.uri,
+          name: asset.name,
+          type: asset.mimeType,
+        });
+    };
+    await appendAsset("cover", cover);
+    for (const track of tracks) await appendAsset("tracks", track);
+    const response = await fetch("/.netlify/functions/upload-album", {
+      method: "POST",
+      body: form,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok)
+      throw new Error(
+        payload.error || "No se pudo subir el álbum a Google Drive.",
+      );
+    return payload;
+  };
+
   const uploadAlbum = async () => {
     if (!canUpload) {
       return;
@@ -130,42 +157,21 @@ export default function AdminAlbumUploadScreen({ navigation }) {
         expectedTrackCount: tracks.length,
       });
 
-      setProgressText("Subiendo carátula...");
-
-      const coverStorageId = await uploadFileToConvex({
-        asset: cover,
-        generateUploadUrl,
-        fallbackMimeType: "image/jpeg",
+      setProgressText("Subiendo carátula y pistas a Google Drive...");
+      const uploaded = await uploadToDrive({
+        title: title.trim(),
+        artist: artist.trim() || undefined,
       });
-
-      await setAlbumCover({
-        albumId,
-        coverStorageId,
-        coverFilename: cover.name,
-        coverMimeType: cover.mimeType || "image/jpeg",
-        coverSizeBytes: typeof cover.size === "number" ? cover.size : undefined,
-      });
-
+      await setCoverUrl({ albumId, coverUrl: uploaded.coverUrl });
       for (let index = 0; index < tracks.length; index += 1) {
         const track = tracks[index];
-
-        setProgressText(
-          `Subiendo pista ${index + 1} de ${tracks.length}: ${track.name}`,
-        );
-
-        const audioStorageId = await uploadFileToConvex({
-          asset: track,
-          generateUploadUrl,
-          fallbackMimeType: "audio/mpeg",
-        });
-
-        await saveTrack({
+        const remote = uploaded.tracks[index];
+        await addTrack({
           albumId,
           title: track.title.trim() || `Pista ${index + 1}`,
           artist: artist.trim() || undefined,
           trackNumber: index + 1,
-
-          audioStorageId,
+          audioUrl: remote.audioUrl,
           audioFilename: track.name,
           audioMimeType: track.mimeType || "audio/mpeg",
           audioSizeBytes:
@@ -178,7 +184,7 @@ export default function AdminAlbumUploadScreen({ navigation }) {
 
       safeAlert(
         "Álbum publicado",
-        "La carátula y todas las pistas se han guardado en Convex.",
+        "El álbum se ha guardado en Google Drive y Convex solo conserva sus metadatos.",
       );
 
       setTitle("");

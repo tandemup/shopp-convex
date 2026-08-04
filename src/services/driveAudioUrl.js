@@ -8,7 +8,18 @@ function driveFileId(value) {
 
 function proxyUrl(id) {
   if (typeof process === "undefined") return null;
-  const configured = process.env?.EXPO_PUBLIC_DRIVE_AUDIO_PROXY_URL;
+  let configured = process.env?.EXPO_PUBLIC_DRIVE_AUDIO_PROXY_URL;
+
+  // En una aplicación Web publicada en Netlify podemos usar la Function
+  // local del mismo dominio sin obligar a copiar esta variable a .env.
+  // Durante el desarrollo local mantenemos Drive directo, porque la
+  // Function no está disponible cuando se ejecuta solo `expo start --web`.
+  if (!configured && typeof window !== "undefined") {
+    const hostname = window.location?.hostname || "";
+    if (hostname && hostname !== "localhost" && hostname !== "127.0.0.1") {
+      configured = "/.netlify/functions/drive-audio";
+    }
+  }
   if (!configured) return null;
   return `${String(configured).replace(/\/$/, "")}?id=${encodeURIComponent(id)}`;
 }

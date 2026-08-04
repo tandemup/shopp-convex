@@ -1,6 +1,7 @@
 import {
   deleteMusicAlbumOffline,
   saveMusicForOffline,
+  saveCoverForOffline,
   musicStoragePlatform,
 } from "./musicPlatformStorage";
 import { driveFileId, normalizeDriveAudioUrl } from "./driveAudioUrl";
@@ -141,6 +142,16 @@ export async function downloadSharedAlbum(album, onProgress) {
   // offline requiere un proxy propio (Netlify/Cloudflare) o un servidor que
   // añada los encabezados CORS.
   const platform = musicStoragePlatform();
+  let localCoverUrl = null;
+  if (album.coverUrl && platform === "web") {
+    try {
+      localCoverUrl = await saveCoverForOffline(album, album.coverUrl);
+    } catch (error) {
+      throw new Error(
+        `No se pudo guardar la carátula en IndexedDB. Comprueba CORS. ${error?.message || ""}`.trim(),
+      );
+    }
+  }
   const tracks = [];
   for (let index = 0; index < album.tracks.length; index += 1) {
     const track = album.tracks[index];
@@ -163,6 +174,9 @@ export async function downloadSharedAlbum(album, onProgress) {
   }
   const saved = {
     ...album,
+    // La URL del Blob solo es válida durante esta sesión; conservamos
+    // también la URL remota para reconstruirla al abrir la aplicación.
+    localCoverUrl,
     tracks,
     _id: album._id || `shared-${Date.now()}`,
     downloadedAt: Date.now(),

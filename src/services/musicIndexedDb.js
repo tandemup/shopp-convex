@@ -1,6 +1,7 @@
 const DB_NAME = "shopp-music-offline";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const TRACKS_STORE = "tracks";
+const COVERS_STORE = "covers";
 
 function supported() {
   return typeof indexedDB !== "undefined";
@@ -14,6 +15,9 @@ function openDb() {
       const db = request.result;
       if (!db.objectStoreNames.contains(TRACKS_STORE)) {
         db.createObjectStore(TRACKS_STORE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(COVERS_STORE)) {
+        db.createObjectStore(COVERS_STORE, { keyPath: "id" });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -82,12 +86,47 @@ export async function getOfflineTrack(track, index) {
   return record || null;
 }
 
+export async function saveOfflineCover(album, blob) {
+  const db = await openDb();
+  if (!db) throw new Error("IndexedDB no está disponible en este navegador.");
+  const id = `cover:${String(album.sourceUrl || album._id || album.title)}`;
+  const tx = db.transaction(COVERS_STORE, "readwrite");
+  tx.objectStore(COVERS_STORE).put({ id, blob, savedAt: Date.now() });
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => {
+      db.close();
+      resolve(id);
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+    tx.onabort = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+export async function getOfflineCover(album) {
+  const db = await openDb();
+  if (!db) return null;
+  const id = `cover:${String(album?.sourceUrl || album?._id || album?.title)}`;
+  const tx = db.transaction(COVERS_STORE, "readonly");
+  const record = await requestResult(tx.objectStore(COVERS_STORE).get(id));
+  db.close();
+  return record || null;
+}
+
 export async function deleteOfflineAlbum(album) {
   const db = await openDb();
   if (!db) return;
-  const tx = db.transaction(TRACKS_STORE, "readwrite");
+  const tx = db.transaction([TRACKS_STORE, COVERS_STORE], "readwrite");
   album.tracks.forEach((track, index) =>
     tx.objectStore(TRACKS_STORE).delete(trackKey(track, index)),
+  );
+  tx.objectStore(COVERS_STORE).delete(
+    `cover:${String(album.sourceUrl || album._id || album.title)}`,
   );
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => {

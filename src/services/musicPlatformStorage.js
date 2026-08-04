@@ -2,7 +2,9 @@ import { Platform } from "react-native";
 import {
   deleteOfflineAlbum as deleteWebAlbum,
   getOfflineTrack,
+  getOfflineCover,
   isMusicIndexedDbAvailable,
+  saveOfflineCover as saveWebCover,
   saveOfflineTrack as saveWebTrack,
 } from "./musicIndexedDb";
 
@@ -85,6 +87,21 @@ export async function saveMusicForOffline(track, remoteUri, index = 0) {
     size: result.headers?.["Content-Length"] || null,
     offline: true,
   };
+}
+
+export async function saveCoverForOffline(album, remoteUri) {
+  if (!remoteUri || Platform.OS !== "web") return null;
+  const response = await fetch(remoteUri, { credentials: "omit" });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const blob = await response.blob();
+  if (!blob.size) throw new Error("La carátula descargada está vacía.");
+  await saveWebCover(album, blob);
+  return objectUrl({ blob });
+}
+
+export async function getCachedCoverUri(album) {
+  if (Platform.OS !== "web") return null;
+  return objectUrl(await getOfflineCover(album));
 }
 
 export async function deleteMusicAlbumOffline(album) {
