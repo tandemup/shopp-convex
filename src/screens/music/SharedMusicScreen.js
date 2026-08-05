@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import {
   ActivityIndicator,
   Image,
@@ -27,6 +29,8 @@ export default function SharedMusicScreen({ navigation }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
+  const sharedAlbums = useQuery(api.musicAlbumShares.listSharedWithMe) || [];
+  const revoke = useMutation(api.musicAlbumShares.revoke);
 
   useEffect(() => {
     listSharedAlbums()
@@ -67,6 +71,30 @@ export default function SharedMusicScreen({ navigation }) {
       setProgress("");
     }
   };
+  const downloadConvexAlbum = async (item) => {
+    setBusy(true);
+    setError("");
+    setProgress(`Preparando “${item.title}”...`);
+    try {
+      const saved = await downloadSharedAlbum(item, (done, total) =>
+        setProgress(`Descargando ${item.title}: ${done}/${total} pistas...`),
+      );
+      setAlbums((previous) => [
+        saved,
+        ...previous.filter(
+          (savedAlbum) =>
+            savedAlbum._id !== saved._id &&
+            savedAlbum.sourceUrl !== saved.sourceUrl,
+        ),
+      ]);
+      setAlbum(saved);
+    } catch (e) {
+      setError(e.message || "No se pudo descargar el álbum compartido.");
+    } finally {
+      setBusy(false);
+      setProgress("");
+    }
+  };
   const open = (item) =>
     navigation.navigate(ROUTES.MUSIC_PLAYER, { sharedAlbum: item });
   const remove = async (item) => {
@@ -87,6 +115,21 @@ export default function SharedMusicScreen({ navigation }) {
       setBusy(false);
     }
   };
+  const openShared = (item) =>
+    navigation.navigate(ROUTES.MUSIC_PLAYER, { sharedAlbum: item });
+  const removeShare = (item) =>
+    safeConfirm(
+      "Quitar álbum compartido",
+      `¿Quieres quitar “${item.title}” de tu lista?`,
+      async () => {
+        try {
+          await revoke({ shareId: item.shareId });
+        } catch (e) {
+          setError(e.message || "No se pudo quitar el álbum.");
+        }
+      },
+      { confirmText: "Quitar", cancelText: "Cancelar", destructive: true },
+    );
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.heading}>
@@ -154,6 +197,50 @@ export default function SharedMusicScreen({ navigation }) {
           </Pressable>
         </View>
       ) : null}
+      <Text style={styles.section}>Compartidos contigo</Text>
+      {sharedAlbums.length === 0 ? (
+        <Text style={styles.empty}>
+          No tienes álbumes compartidos mediante Convex.
+        </Text>
+      ) : (
+        sharedAlbums.map((item) => (
+          <View key={item.shareId} style={styles.rowContainer}>
+            <Pressable style={styles.row} onPress={() => openShared(item)}>
+              {item.coverUrl ? (
+                <Image source={{ uri: item.coverUrl }} style={styles.thumb} />
+              ) : (
+                <View style={[styles.thumb, styles.placeholder]}>
+                  <Ionicons name="musical-notes" size={20} color="#64748b" />
+                </View>
+              )}
+              <View style={styles.flex}>
+                <Text style={styles.albumTitle}>{item.title}</Text>
+                <Text style={styles.artist}>
+                  {item.artist || "Sin artista"}
+                </Text>
+                <Text style={styles.meta}>
+                  {item.tracks?.length || item.trackCount || 0} pistas · Convex
+                </Text>
+              </View>
+              <Ionicons name="play-circle-outline" size={27} color="#2563eb" />
+            </Pressable>
+            <Pressable
+              accessibilityLabel={`Descargar ${item.title}`}
+              style={styles.downloadSmall}
+              onPress={() => downloadConvexAlbum(item)}
+              disabled={busy}
+            >
+              <Ionicons name="download-outline" size={21} color="#2563eb" />
+            </Pressable>
+            <Pressable
+              style={styles.deleteButton}
+              onPress={() => removeShare(item)}
+            >
+              <Ionicons name="close-circle-outline" size={21} color="#dc2626" />
+            </Pressable>
+          </View>
+        ))
+      )}
       <Text style={styles.section}>Álbumes descargados</Text>
       {albums.length === 0 ? (
         <Text style={styles.empty}>
@@ -282,6 +369,12 @@ const styles = StyleSheet.create({
   artist: { color: "#475569", marginTop: 3 },
   meta: { color: "#94a3b8", fontSize: 12, marginTop: 4 },
   download: { backgroundColor: "#2563eb", borderRadius: 22, padding: 10 },
+  downloadSmall: {
+    backgroundColor: "#eff6ff",
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 9,
+  },
   section: {
     fontSize: 18,
     fontWeight: "800",

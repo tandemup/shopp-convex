@@ -39,6 +39,12 @@ exports.handler = async (event) => {
   if (event.httpMethod !== "POST")
     return { statusCode: 405, body: "Method Not Allowed" };
   try {
+    if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+      throw new Error(
+        "Falta GOOGLE_SERVICE_ACCOUNT_JSON en el entorno de Netlify.",
+      );
+    }
+
     const { fields, files } = await parseMultipart(event);
     const album = JSON.parse(fields.album || "{}");
     const cover = files.find((file) => file.name === "cover");
@@ -46,7 +52,14 @@ exports.handler = async (event) => {
     if (!album.title || !cover || !tracks.length)
       throw new Error("Faltan título, carátula o pistas.");
 
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    let credentials;
+    try {
+      credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    } catch {
+      throw new Error(
+        "GOOGLE_SERVICE_ACCOUNT_JSON no contiene un JSON válido.",
+      );
+    }
     const auth = new google.auth.GoogleAuth({
       credentials,
       scopes: ["https://www.googleapis.com/auth/drive"],
@@ -88,6 +101,11 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         coverId: coverResult.id,
         coverUrl: coverResult.url,
+        cover: {
+          id: coverResult.id,
+          url: coverResult.url,
+          downloadUrl: coverResult.url,
+        },
         tracks: trackResults,
       }),
     };

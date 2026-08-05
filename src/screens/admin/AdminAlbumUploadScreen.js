@@ -123,7 +123,13 @@ export default function AdminAlbumUploadScreen({ navigation }) {
       method: "POST",
       body: form,
     });
-    const payload = await response.json().catch(() => ({}));
+    const responseText = await response.text();
+    let payload = {};
+    try {
+      payload = responseText ? JSON.parse(responseText) : {};
+    } catch {
+      payload = { error: responseText.slice(0, 300) };
+    }
     if (!response.ok)
       throw new Error(
         payload.error || "No se pudo subir el álbum a Google Drive.",
@@ -162,7 +168,16 @@ export default function AdminAlbumUploadScreen({ navigation }) {
         title: title.trim(),
         artist: artist.trim() || undefined,
       });
-      const coverUrl = String(uploaded?.coverUrl || "").trim();
+      // Admitimos tanto la respuesta actual como respuestas de funciones
+      // Netlify antiguas que devolvían la carátula anidada.
+      const coverUrl = String(
+        uploaded?.coverUrl ||
+          uploaded?.cover?.url ||
+          uploaded?.cover?.downloadUrl ||
+          (uploaded?.coverId
+            ? `https://drive.google.com/uc?export=download&id=${encodeURIComponent(uploaded.coverId)}`
+            : ""),
+      ).trim();
       if (!coverUrl) {
         throw new Error(
           "La función de subida no devolvió la URL de la carátula.",

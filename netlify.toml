@@ -17,3 +17,21 @@
   [headers.values]
     Permissions-Policy = "camera=(self), microphone=()"
     X-Content-Type-Options = "nosniff"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/sw.js"
+
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[dev]
+  framework = "expo"
+  targetPort = 8081
+  port = 8888
